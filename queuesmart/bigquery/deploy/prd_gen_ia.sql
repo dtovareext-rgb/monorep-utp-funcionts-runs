@@ -1,13 +1,51 @@
--- Despliegue PRD — Gen IA QueeSmart (hist_queesmart_mp3_catalog → Gemini)
+-- Despliegue PRD — Gen IA QueeSmart (S3→GCS + tickets_hist_raw + 2 etapas)
+--
+-- Datasets:
+--   raw_queue_smart      (US) — catálogo MP3, enriched, tickets_hist_raw, sys_prompts
+--   adf_speech_analytics (US)         — SPs + hist Gen IA
 --
 -- Orden:
---   1. Vista inspección (us-central1)
---   2. Tablas hist (US)
---   3. Stored procedure (US)
 --
--- bq query --use_legacy_sql=false --location=us-central1 \
+-- -- 0) Prompt: crear tabla + cargar canal_counter_prompt (US)
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/tables/sys_prompts.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/sqls/update_sys_prompts_canal_counter.sql
+--
+-- -- 0b) Migración catálogo (si tablas ya existen sin columnas nuevas)
+-- bq query --use_legacy_sql=false --location=US \
+--   "ALTER TABLE \`prd-utpbi-data-operation.raw_queue_smart.hist_queesmart_mp3_catalog\`
+--      ADD COLUMN IF NOT EXISTS source_file_name STRING,
+--      ADD COLUMN IF NOT EXISTS convert_method STRING;"
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   "ALTER TABLE \`prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_catalog\`
+--      ADD COLUMN IF NOT EXISTS source_file_name STRING,
+--      ADD COLUMN IF NOT EXISTS convert_method STRING;"
+--
+-- -- 1) Catálogo / enriched / vistas (US)
+-- --    enriched usa CREATE OR REPLACE (borra datos de esa tabla)
+
+-- bq query --use_legacy_sql=false --location=US \
+--   < qs_s3_to_gcs/bigquery/tables/hist_queesmart_mp3_catalog.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/tables/queuesmart_mp3_catalog.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/tables/queuesmart_mp3_enriched.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_consolidate.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/views/v_queuesmart_mp3_ia_input.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
 --   < queuesmart/bigquery/views/v_hist_queesmart_mp3_catalog_ia_input.sql
 --
+-- -- 2) Hist Gen IA (US) — CREATE OR REPLACE borra datos
 -- bq query --use_legacy_sql=false --location=US \
 --   < queuesmart/bigquery/tables/hist_queuesmart_mp3_gen_ia_raw.sql
 --
@@ -15,9 +53,32 @@
 --   < queuesmart/bigquery/tables/hist_queuesmart_mp3_gen_ia_prd.sql
 --
 -- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/tables/hist_queuesmart_audio_analisis_ia_raw.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/tables/hist_queuesmart_audio_analisis_ia_prd.sql
+--
+-- -- 3) SPs (US) — SP2 antes que SP1
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/procedures/sp_queuesmart_audio_analisis_ia.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
 --   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia.sql
 --
--- Ejecutar:
---   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(
---     DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY)
+-- Orquestación diaria:
+--   1. Cloud Run qs_s3_to_gcs (ffmpeg + loudnorm → hist catálogo)
+--   2. CALL raw_queue_smart.sp_queuesmart_mp3_consolidate(ayer)
+--   3. CALL adf_speech_analytics.sp_queuesmart_mp3_gen_ia(ayer)
+--      (etapa 1 transcribe + CALL etapa 2 análisis)
+--
+-- Solo etapa 2:
+--   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_audio_analisis_ia`(
+--     DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY), NULL
 --   );
+--
+-- Prompt etapa 2 (US):
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/sqls/update_sys_prompts_canal_counter.sql
+--
+-- Prompt default etapa 2: canal_counter_prompt en raw_queue_smart.sys_prompts
+-- Formato JSON: queuesmart/prompts/Canal_Admision_Output.md

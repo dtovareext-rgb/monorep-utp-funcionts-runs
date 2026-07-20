@@ -1,77 +1,74 @@
-# QueeSmart BigQuery — consolidación MP3 (patrón Genesys)
+# QueeSmart BigQuery — audios + tickets + Gen IA
 
-Pipeline analítico sobre audios QueeSmart, alineado al patrón **vaso de agua** de Genesys y al flujo Gen IA de OneMarketer.
+Pipeline analítico sobre audios QueeSmart: S3 → GCS (MP3 + loudnorm) → join con tickets → transcripción → análisis vs `sys_prompts`.
 
 ## Arquitectura
 
 ```
-hist_queesmart_mp3_catalog       (RAW — job qs_s3_to_gcs)
-        │
-        ▼  sp_queuesmart_mp3_gen_ia(v_fecha)  [adf_speech_analytics / US]
-        ▼
-hist_queuesmart_mp3_gen_ia_*     (transcripción, resumen, intención…)
-
-(Opcional — CRM Ticketero, flujo aparte:)
-hist_queuesmart_ticketero_raw → sp_queuesmart_mp3_consolidate → queuesmart_mp3_enriched
+S3 QueeSmart
+    │
+    ▼  qs_s3_to_gcs (ffmpeg → MP3 + loudnorm)
+hist_queesmart_mp3_catalog          (raw_queue_smart)
+    │
+    ▼  sp_queuesmart_mp3_consolidate
+queuesmart_mp3_enriched             (join tickets_hist_raw.audio = source_file_name)
+    │
+    ▼  sp_queuesmart_mp3_gen_ia          [adf_speech_analytics / US]
+hist_queuesmart_mp3_gen_ia_*        (etapa 1: transcripción)
+    │
+    ▼  sp_queuesmart_audio_analisis_ia   (CALL al final de SP1)
+hist_queuesmart_audio_analisis_ia_* (etapa 2: pauta sys_prompts)
 ```
 
-## Comparación con Genesys / OneMarketer
+## Datasets
 
-| Genesys | QueeSmart |
-|---------|-----------|
-| `conversations_raw` → `conversations` | `hist_queesmart_mp3_catalog` → `queuesmart_mp3_catalog` |
-| `evaluations_raw` → `evaluations` | `hist_queuesmart_ticketero_raw` → `queuesmart_ticketero_crm` |
-| — | `queuesmart_mp3_enriched` (cruce GCS + CRM) |
-| SP Gen IA | `sp_onemarketer_whatsapp_gen_ia` | `sp_queuesmart_mp3_gen_ia` |
+| Dataset | Ubicación | Uso |
+|---------|-----------|-----|
+| `raw_queue_smart` | US | Catálogo MP3, enriched, consolidate, `tickets_hist_raw`, `sys_prompts` |
+| `adf_speech_analytics` | US | SPs Gen IA + hist |
 
-## Despliegue PRD — Gen IA
+## Join audio ↔ ticket
 
-Todos los SQL de Gen IA vienen con IDs fijos `prd-utpbi-data-operation`:
+`COALESCE(catalog.source_file_name, catalog.file_name) = tickets_hist_raw.audio`
 
-```bash
-# Vista (us-central1)
-bq query --use_legacy_sql=false --location=us-central1 \
-  < queuesmart/bigquery/views/v_hist_queesmart_mp3_catalog_ia_input.sql
+Tras convertir `.webm` → `.mp3`, `source_file_name` conserva el nombre original del ticket.
 
-# Tablas + SP (US)
-bq query --use_legacy_sql=false --location=US \
-  < queuesmart/bigquery/tables/hist_queuesmart_mp3_gen_ia_raw.sql
-bq query --use_legacy_sql=false --location=US \
-  < queuesmart/bigquery/tables/hist_queuesmart_mp3_gen_ia_prd.sql
-bq query --use_legacy_sql=false --location=US \
-  < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia.sql
+## Volumen (loudnorm)
+
+En la conversión:
+
+```
+highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11
 ```
 
-## Ejecutar Gen IA
+Normaliza loudness de voz sin clipping (mejor que un gain fijo).
+
+## Despliegue
+
+Ver [`deploy/prd_gen_ia.sql`](deploy/prd_gen_ia.sql).
+
+## Ejecutar
 
 ```sql
+-- 1) Consolidar catálogo + tickets
+CALL `prd-utpbi-data-operation.raw_queue_smart.sp_queuesmart_mp3_consolidate`(
+  DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY)
+);
+
+-- 2) Transcripción + análisis (SP1 llama SP2)
 CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(
   DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY)
 );
 ```
 
-Ver `examples/call_sp_gen_ia_prd.sql` y `deploy/prd_gen_ia.sql`.
+Prompt etapa 2 (default): `canal_counter_prompt` en `raw_queue_smart.sys_prompts`.
 
-## Orquestación diaria sugerida (PRD — Gen IA)
+Fuentes del prompt:
 
-1. Cloud Run `qs_s3_to_gcs` (ayer) → `hist_queesmart_mp3_catalog`
-2. `CALL adf_speech_analytics.sp_queuesmart_mp3_gen_ia(ayer)` — **US**
+- [`prompts/Prompt_Calidad_Canal_Counter_v1.md`](../prompts/Prompt_Calidad_Canal_Counter_v1.md)
+- [`prompts/Canal_Admision_Output.md`](../prompts/Canal_Admision_Output.md) (JSON de salida)
+- UPDATE: `bigquery/sqls/update_sys_prompts_canal_counter.sql`
 
-Ver `examples/call_sp_gen_ia_prd.sql` y vista `v_hist_queesmart_mp3_catalog_ia_input`.
+## Deprecated
 
-### Gen IA — prerequisitos
-
-- Dataset `adf_speech_analytics` en **US** (no us-central1)
-- Modelo `gemini-2-5-flash` en ese dataset
-- Conexión `utp_gen_ia_process` con acceso al bucket GCS QueeSmart
-- Tablas: `hist_queuesmart_mp3_gen_ia_process_data_raw` / `_prd`
-
-Desplegar tablas + SP con `--location=US`.
-
-## match_status en enriched
-
-| Valor | Significado |
-|-------|-------------|
-| `BOTH` | Audio en GCS y fila CRM |
-| `GCS_ONLY` | MP3 en GCS sin CRM |
-| `CRM_ONLY` | CRM sin archivo en GCS (aún no sincronizado) |
+`queuesmart_ticketero_crm` / hist ticketero propio — reemplazados por `raw_queue_smart.tickets_hist_raw`.

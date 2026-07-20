@@ -5,8 +5,8 @@
 --   PROJECT_ID = prd-utpbi-data-operation
 --   LOCATION   = us-central1  (GCS bucket + BigQuery)
 
-CREATE SCHEMA IF NOT EXISTS `${PROJECT_ID}.raw_queuesmart`
+CREATE SCHEMA IF NOT EXISTS `${PROJECT_ID}.raw_queue_smart`
 OPTIONS (
-  location = 'us-central1',
-  description = 'Capa raw QueeSmart — catálogo de MP3 importados desde S3'
+  location = 'US',
+  description = 'Capa raw QueeSmart — catálogo MP3, tickets, sys_prompts, enriched'
 );

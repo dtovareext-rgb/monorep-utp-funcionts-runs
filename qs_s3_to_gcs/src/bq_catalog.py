@@ -31,7 +31,7 @@ def ensure_table(
     schema: list[dict[str, Any]],
     *,
     partition_field: str = "fecha_audio",
-    location: str = "us-central1",
+    location: str = "US",
 ) -> str:
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
     try:
@@ -67,6 +67,7 @@ def build_catalog_row(
     file_size_bytes: int,
     sync_mode: str,
     processed_at: datetime | None = None,
+    convert_method: str | None = None,
 ) -> dict[str, Any]:
     ts = processed_at or datetime.now(timezone.utc)
     file_date = parsed["file_date"]
@@ -74,6 +75,7 @@ def build_catalog_row(
         "fecha_audio": file_date.isoformat(),
         "fecha_procesamiento": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "file_name": parsed["file_name"],
+        "source_file_name": parsed.get("source_file_name") or parsed["file_name"],
         "gcs_uri": f"gs://{gcs_bucket}/{gcs_key}",
         "gcs_path": gcs_key,
         "campus_code": parsed["campus"],
@@ -83,6 +85,7 @@ def build_catalog_row(
         "s3_key": s3_key,
         "file_size_bytes": file_size_bytes,
         "sync_mode": sync_mode,
+        "convert_method": convert_method,
     }
 
 
@@ -153,7 +156,7 @@ def catalog_files(
     dataset_id: str,
     table_id: str,
     rows: list[dict[str, Any]],
-    location: str = "us-central1",
+    location: str = "US",
 ) -> int:
     if not rows:
         return 0

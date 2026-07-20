@@ -1,41 +1,63 @@
 -- =============================================================================
--- Stored Procedure: Gen IA sobre MP3 WhatsApp/OneMarketer
--- Patrón equivalente a Genesys (external table + AI.GENERATE_TABLE + hist)
+-- SP: Gen IA MP3 WhatsApp/OneMarketer — PRODUCCIÓN
 --
--- IMPORTANTE — ubicación del dataset:
---   DATASET_ANALYTICS (adf_speech_analytics) debe estar en US (misma región que
---   la conexión utp_gen_ia_process y el modelo Gemini). NO en us-central1.
---   Fuentes raw_onemarketer pueden estar en us-central1; el SP vive en US.
+-- Propósito:
+--   Procesar audios MP3 de conversaciones WhatsApp (OneMarketer) con Gemini y
+--   persistir transcripción + metadatos de análisis en tablas históricas.
 --
--- Desplegar (sustituir placeholders — ver deploy/prd_substitutions.sql):
+-- Proyecto:  prd-utpbi-data-operation
+-- Fuente:    raw_onemarketer.reporte_whatsapp_mp3 + reporte_chats (us-central1)
+-- SP + hist: adf_speech_analytics (US) — misma región que conexión y modelo
+-- Modelo:    adf_speech_analytics.gemini-2-5-flash
+-- Conexión:  US.utp_gen_ia_process (lectura GCS del bucket OneMarketer)
+--
+-- Prerrequisitos (ejecutar ANTES del SP):
+--   1. Cloud Function onemarketer del día → reporte_whatsapp_mp3 con MP3 en GCS
+--   2. Tablas hist creadas: hist_onemarketer_whatsapp_gen_ia_process_data_raw/prd
+--   3. Modelo gemini-2-5-flash y conexión utp_gen_ia_process desplegados en US
+--
+-- Desplegar (--location=US):
 --   bq query --use_legacy_sql=false --location=US < procedures/sp_onemarketer_whatsapp_gen_ia.sql
 --
 -- Ejecutar:
---   CALL `${PROJECT_ID}.${DATASET_ANALYTICS}.sp_onemarketer_whatsapp_gen_ia`(DATE '2026-06-09');
+--   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia`(
+--     DATE '2026-06-22'
+--   );
+--
+-- Flujo (2 etapas, un solo CALL externo):
+--   Etapa 1 (pasos 1–6): transcripción/análisis por audio → hist_gen_ia_*
+--   Etapa 2 (CALL):      conversación completa por idcase → hist_caso_conversacion_ia_*
+--                        prompt: raw_onemarketer.sys_prompts.canal_escrito_prompt
 -- =============================================================================
 
-CREATE OR REPLACE PROCEDURE `${PROJECT_ID}.${DATASET_ANALYTICS}.sp_onemarketer_whatsapp_gen_ia`(
+CREATE OR REPLACE PROCEDURE `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia`(
   v_fecha_proceso DATE
 )
 BEGIN
-  DECLARE v_fecha_proceso_str STRING;
-  DECLARE external_table STRING;
-  DECLARE conexion STRING;
-  DECLARE v_uris STRING;
-  DECLARE v_sql STRING;
-  DECLARE min_duration_seconds FLOAT64 DEFAULT 0.0;
+  -- Variables de control del SP
+  DECLARE v_fecha_proceso_str STRING;       -- Fecha como 'YYYY-MM-DD' para SQL dinámico
+  DECLARE external_table STRING;            -- Nombre fully-qualified de la external table tmp
+  DECLARE conexion STRING;                  -- Conexión BQ → GCS (utp_gen_ia_process)
+  DECLARE v_uris STRING;                    -- Array JSON de URIs gs://... para OPTIONS(uris=...)
+  DECLARE v_sql STRING;                     -- SQL dinámico armado con FORMAT + EXECUTE IMMEDIATE
+  DECLARE min_duration_seconds FLOAT64 DEFAULT 0.0;  -- Filtro mínimo de duración de audio
 
   SET v_fecha_proceso_str = FORMAT_DATE('%Y-%m-%d', v_fecha_proceso);
-  SET external_table = '${EXTERNAL_TABLE_TMP}';
-  SET conexion = '${BQ_CONNECTION}';
+  SET external_table = '`prd-utpbi-data-operation.adf_speech_analytics.tmp_utp_external_table_onemarketer_whatsapp`';
+  SET conexion = '`prd-utpbi-data-operation.US.utp_gen_ia_process`';
 
   -- ---------------------------------------------------------------------------
-  -- 1. Armar URIs desde reporte_whatsapp_mp3 (MP3 OK del día)
+  -- PASO 1: Armar URIs desde reporte_whatsapp_mp3 (MP3 OK del día)
+  --
+  -- Lee el catálogo de audios ya convertidos por la Cloud Function (ffmpeg).
+  -- Solo incluye filas con conversión exitosa y gcs_uri válido.
+  -- Si no hay audios, se omite la etapa 1 pero igual se ejecuta la etapa 2
+  -- (conversaciones solo texto vía sys_prompts).
   -- ---------------------------------------------------------------------------
   SET v_uris = (
     WITH base AS (
       SELECT mp3.gcs_uri AS uri
-      FROM `${PROJECT_ID}.${DATASET_RAW}.reporte_whatsapp_mp3` AS mp3
+      FROM `prd-utpbi-data-operation.raw_onemarketer.reporte_whatsapp_mp3` AS mp3
       WHERE mp3.fecha_evento = v_fecha_proceso
         AND mp3.conversion_status IN ('OK', 'SKIPPED_EXISTS', 'SKIPPED_ALREADY_MP3')
         AND mp3.gcs_uri IS NOT NULL
@@ -50,12 +72,19 @@ BEGIN
   );
 
   IF v_uris IS NULL OR v_uris = '[]' THEN
-    SELECT FORMAT('Sin URIs MP3 para fecha %s — SP finaliza sin procesar.', v_fecha_proceso_str);
-    RETURN;
-  END IF;
+    SELECT FORMAT(
+      'Sin URIs MP3 para fecha %s — se omite etapa 1 (audios).',
+      v_fecha_proceso_str
+    );
+  ELSE
 
   -- ---------------------------------------------------------------------------
-  -- 2. External table con las URIs (conexión GCS)
+  -- PASO 2: External table con las URIs (conexión GCS)
+  --
+  -- BigQuery no lee gs:// directamente en AI.GENERATE_TABLE; necesita una
+  -- external table con object_metadata=SIMPLE para exponer cada archivo como fila.
+  -- La conexión utp_gen_ia_process autoriza el acceso al bucket de staging.
+  -- La tabla se recrea cada ejecución (REPLACE) con solo los MP3 del día.
   -- ---------------------------------------------------------------------------
   SET v_sql = FORMAT("""
     CREATE OR REPLACE EXTERNAL TABLE %s
@@ -70,7 +99,18 @@ BEGIN
   EXECUTE IMMEDIATE v_sql;
 
   -- ---------------------------------------------------------------------------
-  -- 3. Metadata MP3 + chat + objeto audio del external table
+  -- PASO 3: Metadata MP3 + chat + referencia al objeto audio
+  --
+  -- Une tres fuentes:
+  --   - reporte_whatsapp_mp3  → metadata del audio (idcase, idmessage, gcs_uri…)
+  --   - external table (ext)   → objeto BQ ref al archivo (ext.ref → paso 4)
+  --   - reporte_chats          → contexto escrito del hilo (texto del mensaje)
+  --
+  -- prompt: instrucción enviada a Gemini. Hoy está hardcodeada en el CONCAT.
+  --   Pide transcripción + resumen + intención + tono + entidades en un JSON.
+  --
+  -- NOTA: el análisis de conversación completa (sys_prompts) va en la etapa 2,
+  --   vía sp_onemarketer_caso_conversacion_ia (al final de este SP).
   -- ---------------------------------------------------------------------------
   EXECUTE IMMEDIATE FORMAT("""
     CREATE OR REPLACE TEMP TABLE tmp_onemarketer_whatsapp_audios AS
@@ -97,10 +137,10 @@ BEGIN
         'Contexto del hilo (puede estar vacío): ',
         IFNULL(chats.text, '(sin texto en reporte_chats)')
       ) AS prompt
-    FROM `${PROJECT_ID}.${DATASET_RAW}.reporte_whatsapp_mp3` AS mp3
+    FROM `prd-utpbi-data-operation.raw_onemarketer.reporte_whatsapp_mp3` AS mp3
     INNER JOIN %s AS ext
       ON ext.uri = mp3.gcs_uri
-    LEFT JOIN `${PROJECT_ID}.${DATASET_RAW}.reporte_chats` AS chats
+    LEFT JOIN `prd-utpbi-data-operation.raw_onemarketer.reporte_chats` AS chats
       ON chats.fecha_evento = mp3.fecha_evento
      AND chats.idcase = mp3.idcase
      AND chats.idmessage = mp3.idmessage
@@ -110,12 +150,22 @@ BEGIN
   """, external_table, v_fecha_proceso_str, min_duration_seconds);
 
   -- ---------------------------------------------------------------------------
-  -- 4. Gen IA (Gemini) — un batch; ampliar con INSERTs por segmento si negocio lo pide
+  -- PASO 4: Gen IA con Gemini (multimodal)
+  --
+  -- AI.GENERATE_TABLE procesa cada fila de tmp_onemarketer_whatsapp_audios:
+  --   - instruction: texto del prompt (paso 3)
+  --   - audio_url:   URL firmada temporal vía OBJ.GET_ACCESS_URL(ext.ref)
+  --
+  -- Gemini devuelve ml_generate_text_llm_result (texto con JSON embebido),
+  -- full_response (JSON nativo de la API) y status por fila.
+  --
+  -- temperature=0 para respuestas más determinísticas en extracción estructurada.
+  -- Este paso es el más costoso en tiempo y cómputo del SP.
   -- ---------------------------------------------------------------------------
   CREATE OR REPLACE TEMP TABLE tmp_onemarketer_whatsapp_gen_ia_results AS
   SELECT ia.*
   FROM AI.GENERATE_TABLE(
-    MODEL ${GEMINI_MODEL},
+    MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`,
     (
       SELECT
         STRUCT(
@@ -133,12 +183,20 @@ BEGIN
   ) AS ia;
 
   -- ---------------------------------------------------------------------------
-  -- 5. Parseo JSON → hist RAW
+  -- PASO 5: Parseo JSON → hist RAW
+  --
+  -- Gemini a veces envuelve el JSON en markdown o backticks; se limpia con
+  -- REGEXP_REPLACE + REGEXP_EXTRACT antes de JSON_VALUE.
+  --
+  -- full_response viene como tipo JSON desde AI.GENERATE_TABLE; la tabla hist
+  -- espera STRING → TO_JSON_STRING para compatibilidad de tipos.
+  --
+  -- Se hace DELETE + INSERT por process_date (idempotencia por día).
   -- ---------------------------------------------------------------------------
-  DELETE FROM `${PROJECT_ID}.${DATASET_ANALYTICS}.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
   WHERE process_date = v_fecha_proceso;
 
-  INSERT INTO `${PROJECT_ID}.${DATASET_ANALYTICS}.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
+  INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
   WITH cte_cleaned_json AS (
     SELECT
       ia.*,
@@ -164,7 +222,7 @@ BEGIN
       chat_origin,
       chat_user,
       json_text,
-      full_response,
+      TO_JSON_STRING(full_response) AS full_response,
       status,
       JSON_VALUE(json_text, '$[0].transcripcion') AS transcripcion,
       JSON_VALUE(json_text, '$[0].resumen') AS resumen,
@@ -179,12 +237,16 @@ BEGIN
   SELECT * FROM cte_parsed;
 
   -- ---------------------------------------------------------------------------
-  -- 6. Capa PRD (consumo)
+  -- PASO 6: Capa PRD (consumo)
+  --
+  -- Proyección simplificada para dashboards, vistas CRM y reportes.
+  -- Omite campos técnicos (json_text, full_response, status, chat_user).
+  -- Misma lógica idempotente: DELETE + INSERT por process_date.
   -- ---------------------------------------------------------------------------
-  DELETE FROM `${PROJECT_ID}.${DATASET_ANALYTICS}.hist_onemarketer_whatsapp_gen_ia_process_data_prd`
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_prd`
   WHERE process_date = v_fecha_proceso;
 
-  INSERT INTO `${PROJECT_ID}.${DATASET_ANALYTICS}.hist_onemarketer_whatsapp_gen_ia_process_data_prd`
+  INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_prd`
   SELECT
     process_date,
     gcs_uri,
@@ -202,7 +264,20 @@ BEGIN
     chat_text,
     chat_origin,
     load_date
-  FROM `${PROJECT_ID}.${DATASET_ANALYTICS}.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
+  FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
   WHERE process_date = v_fecha_proceso;
+
+  END IF;
+
+  -- ---------------------------------------------------------------------------
+  -- ETAPA 2: Análisis de conversación completa por idcase (sys_prompts)
+  --
+  -- Invoca sp_onemarketer_caso_conversacion_ia siempre (con o sin audios).
+  -- Re-ejecutable solo: CALL sp_onemarketer_caso_conversacion_ia(fecha);
+  -- ---------------------------------------------------------------------------
+  CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_caso_conversacion_ia`(
+    v_fecha_proceso,
+    NULL
+  );
 
 END;

@@ -3,7 +3,7 @@
 -- =============================================================================
 --
 -- PROJECT_ID        = prd-utpbi-data-operation
--- DATASET_RAW       = raw_queuesmart          (us-central1)
+-- DATASET_RAW       = raw_queue_smart          (US)
 -- DATASET_ANALYTICS = adf_speech_analytics    (US — Gen IA)
 -- BQ_CONNECTION     = `prd-utpbi-data-operation.US.utp_gen_ia_process`
 -- GEMINI_MODEL      = `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`

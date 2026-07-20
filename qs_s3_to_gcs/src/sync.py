@@ -1,17 +1,20 @@
 """
-Micro-batch: copia audios S3 → GCS con carpetas por fecha del nombre de archivo.
+Micro-batch: descarga audios S3 → convierte a MP3 (loudnorm) → sube a GCS.
 
-Patrón esperado: AAABBB-YYYYMMDD-correlativo.mp3 (ej. 015AD1-20260217-123728.mp3)
+Patrón: AAABBB-YYYYMMDD-correlativo.(mp3|webm|...)
+Ejemplo: 015AD1-20260217-123728.mp3 | 095IX1-20260318-155702.webm
 
 Modos (config sync.mode):
-  - backfill_all:       todos los MP3 históricos
-  - daily_last_n_days:  últimos N días (fecha en nombre), default N=15 — prueba
+  - backfill_all:       todos los audios históricos
+  - daily_last_n_days:  últimos N días (fecha en nombre), default N=15
   - daily_yesterday:    solo ayer (scheduler producción)
 """
 
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
@@ -31,6 +34,7 @@ from audio_paths import (
     resolve_sync_mode,
 )
 from bq_catalog import build_catalog_row, catalog_files
+from converter import DEFAULT_LOUDNORM, convert_audio_to_mp3
 from secrets_loader import load_aws_credentials
 
 
@@ -45,6 +49,7 @@ class SyncResult:
     watermark_after: str | None
     mode: str = ""
     target_date: str | None = None
+    process_date: date | None = None
     already_in_gcs: int = 0
     bq_inserted: int = 0
     bq_cataloged: int = 0
@@ -133,25 +138,45 @@ def gcs_blob_exists(gcs_client: storage.Client, bucket: str, gcs_key: str) -> bo
     return gcs_client.bucket(bucket).blob(gcs_key).exists()
 
 
-def copy_s3_object_to_gcs(
+def convert_s3_object_to_gcs_mp3(
     s3_client,
     gcs_client: storage.Client,
     s3_bucket: str,
     s3_key: str,
+    source_file_name: str,
     gcs_bucket: str,
     gcs_key: str,
-) -> int:
-    """Copia un archivo: descarga desde S3 y súbelo a GCS."""
+    audio_cfg: dict[str, Any],
+) -> tuple[int, str]:
+    """Descarga S3 → ffmpeg loudnorm → MP3 en GCS. Retorna (bytes, convert_method)."""
     response = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)
     data = response["Body"].read()
-    size = len(data) if data else int(response.get("ContentLength") or 0)
-    if size == 0:
+    if not data:
         raise ValueError("archivo vacío en S3")
 
-    blob = gcs_client.bucket(gcs_bucket).blob(gcs_key)
-    content_type = response.get("ContentType") or "audio/mpeg"
-    blob.upload_from_string(data, content_type=content_type)
-    return size
+    bitrate = str(audio_cfg.get("default_bitrate", "128k"))
+    loudnorm = str(audio_cfg.get("loudnorm_filter", DEFAULT_LOUDNORM))
+    timeout = int(audio_cfg.get("ffmpeg_timeout_seconds", 300))
+
+    with tempfile.TemporaryDirectory(prefix="qs_audio_") as tmpdir:
+        _, src_ext = os.path.splitext(source_file_name)
+        input_path = os.path.join(tmpdir, f"source{src_ext or '.bin'}")
+        output_path = os.path.join(tmpdir, "normalized.mp3")
+        with open(input_path, "wb") as handle:
+            handle.write(data)
+
+        meta = convert_audio_to_mp3(
+            input_path,
+            output_path,
+            bitrate=bitrate,
+            loudnorm_filter=loudnorm,
+            timeout=timeout,
+        )
+        size = os.path.getsize(output_path)
+        blob = gcs_client.bucket(gcs_bucket).blob(gcs_key)
+        blob.upload_from_filename(output_path, content_type="audio/mpeg")
+
+    return size, str(meta.get("method") or "ffmpeg_loudnorm")
 
 
 def run_micro_batch(config: dict[str, Any]) -> SyncResult:
@@ -159,6 +184,7 @@ def run_micro_batch(config: dict[str, Any]) -> SyncResult:
     gcp_cfg = config["gcp"]
     batch_cfg = config["batch"]
     sync_cfg = config.get("sync", {})
+    audio_cfg = config.get("audio", {})
     secrets_cfg = config.get("secrets", {})
 
     mode = resolve_sync_mode(sync_cfg)
@@ -233,10 +259,11 @@ def run_micro_batch(config: dict[str, Any]) -> SyncResult:
 
         parsed = item["parsed"]
         s3_key = item["key"]
-        file_name = parsed["file_name"]
+        mp3_name = parsed["file_name"]
+        source_name = parsed["source_file_name"]
         file_date: date = parsed["file_date"]
         gcs_key = gcs_key_for_audio(
-            file_name,
+            mp3_name,
             file_date,
             gcs_prefix,
             date_folder_format=date_folder_format,
@@ -255,18 +282,21 @@ def run_micro_batch(config: dict[str, Any]) -> SyncResult:
                         file_size_bytes=int(item["size"]),
                         sync_mode=mode,
                         processed_at=processed_at,
+                        convert_method="already_in_gcs",
                     )
                 )
             continue
 
         try:
-            size = copy_s3_object_to_gcs(
+            size, convert_method = convert_s3_object_to_gcs_mp3(
                 s3_client,
                 gcs_client,
                 s3_bucket,
                 s3_key,
+                source_name,
                 gcs_bucket,
                 gcs_key,
+                audio_cfg,
             )
             copied += 1
             bytes_copied += size
@@ -281,11 +311,12 @@ def run_micro_batch(config: dict[str, Any]) -> SyncResult:
                         file_size_bytes=size,
                         sync_mode=mode,
                         processed_at=processed_at,
+                        convert_method=convert_method,
                     )
                 )
             print(
                 f"OK s3://{s3_bucket}/{s3_key} -> gs://{gcs_bucket}/{gcs_key} "
-                f"({size} bytes, campus={parsed['campus']}, type={parsed['type_code']})"
+                f"({size} bytes, src={source_name}, method={convert_method})"
             )
         except Exception as exc:  # noqa: BLE001
             msg = f"{s3_key}: {type(exc).__name__}: {exc}"
@@ -297,10 +328,10 @@ def run_micro_batch(config: dict[str, Any]) -> SyncResult:
         try:
             bq_inserted = catalog_files(
                 project_id=gcp_cfg["project_id"],
-                dataset_id=bq_cfg.get("dataset_id", "raw_queuesmart"),
+                dataset_id=bq_cfg.get("dataset_id", "raw_queue_smart"),
                 table_id=bq_cfg.get("table_id", "hist_queesmart_mp3_catalog"),
                 rows=catalog_rows,
-                location=bq_cfg.get("location", "us-central1"),
+                location=bq_cfg.get("location", "US"),
             )
             print(f"[bq] cataloged={len(catalog_rows)} inserted={bq_inserted}")
         except Exception as exc:  # noqa: BLE001
@@ -335,6 +366,7 @@ def run_micro_batch(config: dict[str, Any]) -> SyncResult:
         watermark_after=watermark_after,
         mode=mode,
         target_date=target_date_str,
+        process_date=date_end,
         already_in_gcs=already_in_gcs,
         bq_inserted=bq_inserted,
         bq_cataloged=len(catalog_rows),

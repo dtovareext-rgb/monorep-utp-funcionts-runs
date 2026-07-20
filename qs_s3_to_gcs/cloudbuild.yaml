@@ -12,7 +12,7 @@
 #   _JOB_NAME=prd-utpbi-s3-to-gcs-micro-batch
 #   _SERVICE_ACCOUNT=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
 #   _BUCKET_NAME=dev-utp-stg-queuesmart
-#   _DATASET_ID=raw_queuesmart
+#   _DATASET_ID=raw_queue_smart
 #   _SCHEDULER_NAME=prd-utpbi-s3-to-gcs-daily
 #   _AWS_S3_BUCKET=utp-a106-s3-prd-02-ticketero-counter
 #   _AWS_ACCESS_KEY_ID=AKIA...        (solo en activador, no en repo)

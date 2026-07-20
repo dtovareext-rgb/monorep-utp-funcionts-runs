@@ -1,32 +1,39 @@
--- MP3 + CRM enriquecido (join audio file_name ↔ ticketero.audio). Input para Gen IA / analytics.
+-- MP3 + ticket QueueSmart (join source_file_name/file_name ↔ tickets_hist_raw.audio).
 
-CREATE TABLE IF NOT EXISTS `${PROJECT_ID}.${DATASET_RAW}.queuesmart_mp3_enriched` (
+CREATE OR REPLACE TABLE `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_enriched` (
   process_day DATE NOT NULL,
   match_status STRING NOT NULL,
   gcs_uri STRING,
   file_name STRING,
+  source_file_name STRING,
   audio STRING,
-  record_id STRING,
+  recordid STRING,
+  rowid INT64,
+  codagencia STRING,
   campus_code STRING,
   type_code STRING,
   correlative STRING,
   file_size_bytes INT64,
-  cliente_tipo STRING,
-  cliente_estado STRING,
-  cliente_url STRING,
-  asesor_nombre STRING,
-  asesor_usuario STRING,
-  asesor_codigo STRING,
-  num_celular STRING,
-  enviado_sms STRING,
-  transferido INT64,
-  apellido_paterno STRING,
-  audio_fecha DATE,
+  convert_method STRING,
+  asesornombre STRING,
+  asesorusuario STRING,
+  asesorcodigo STRING,
+  ndoc STRING,
+  nombresusuario STRING,
+  numcelular STRING,
+  clienteprimernombre STRING,
+  clienteapellidopaterno STRING,
+  clientetipo STRING,
+  clienteestado STRING,
+  creationtimestamp TIMESTAMP,
+  starttimestamp TIMESTAMP,
+  endtimestamp TIMESTAMP,
+  `database` STRING,
   catalog_fecha_procesamiento TIMESTAMP,
-  crm_fecha_procesamiento TIMESTAMP,
+  ticket_process_datatime TIMESTAMP,
   load_date DATETIME
 )
 PARTITION BY process_day
 OPTIONS (
-  description = 'QueeSmart MP3 + CRM Ticketero — cruce GCS ↔ SQL por nombre de audio'
+  description = 'QueeSmart MP3 + tickets_hist_raw — cruce GCS ↔ ticket por nombre de audio'
 );

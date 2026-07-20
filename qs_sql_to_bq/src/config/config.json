@@ -27,7 +27,7 @@
   "gcp": {
     "project_id": "dev-utpbi-data-operation",
     "region": "us-central1",
-    "dataset_id": "raw_queuesmart",
+    "dataset_id": "raw_queue_smart",
     "cloud_run_job_name": "dev-utpbi-sql-to-bq-queuesmart",
     "service_account_email": "dev-utp-eduflow-sa@dev-utpbi-data-operation.iam.gserviceaccount.com",
     "scheduler_name": "dev-utpbi-sql-to-bq-daily",
@@ -45,9 +45,9 @@
   },
   "bigquery": {
     "enabled": true,
-    "dataset_id": "raw_queuesmart",
+    "dataset_id": "raw_queue_smart",
     "table_id": "hist_queuesmart_ticketero_raw",
-    "location": "us-central1",
+    "location": "US",
     "partition_field": "fecha_extraccion",
     "dedupe_by_record_id": true
   },

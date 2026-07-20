@@ -1,4 +1,4 @@
-# Pipeline: Cloud Run Job SQL Server → BigQuery (raw_queuesmart).
+# Pipeline: Cloud Run Job SQL Server → BigQuery (raw_queue_smart).
 #
 # Variables obligatorias en el activador:
 #   _PROJECT_ID, _JOB_NAME, _SERVICE_ACCOUNT, _DATASET_ID

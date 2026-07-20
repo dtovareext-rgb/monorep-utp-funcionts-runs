@@ -1,0 +1,85 @@
+##################################################
+FORMATO DE SALIDA OBLIGATORIO
+##################################################
+
+Devuelve UNICO objeto JSON valido (sin markdown, sin backticks, sin texto fuera del JSON).
+Usa comillas dobles en las claves y valores del JSON (esta regla aplica solo al JSON de salida; en las descripciones de atributos sigue usando comillas simples para citar mensajes).
+
+Estructura exacta:
+
+{
+  "precondicion": "OK | NO_ELEGIBLE | MAESTRIA | ALUMNO_UTP",
+  "atributos": {
+    "saludo": {"score": "1|0|NA", "descripcion": "..."},
+    "despedida": {"score": "1|0|NA", "descripcion": "..."},
+    "aclara_duda_del_cliente": {"score": "1|0|NA", "descripcion": "..."},
+    "primera_respuesta": {"score": "1|0|NA", "descripcion": "..."},
+    "segunda_respuesta": {"score": "1|0|NA", "descripcion": "..."},
+    "vacios_injustificados": {"score": "1|0|NA", "descripcion": "..."},
+    "corte_intencional": {"score": "1|0|NA", "descripcion": "..."},
+    "abandono_del_chat": {"score": "1|0|NA", "descripcion": "..."},
+    "tono_despectivo_o_sarcastico": {"score": "1|0|NA", "descripcion": "..."},
+    "confronta_al_prospecto": {"score": "1|0|NA", "descripcion": "..."},
+    "lenguaje_grosero": {"score": "1|0|NA", "descripcion": "..."},
+    "claridad_y_coherencia": {"score": "1|0|NA", "descripcion": "..."},
+    "informacion_complementaria": {"score": "1|0|NA", "descripcion": "..."},
+    "motivacion": {"score": "1|0|NA", "descripcion": "..."},
+    "identifica_campus": {"score": "1|0|NA", "descripcion": "..."},
+    "sondeo_por_interes": {"score": "1|0|NA", "descripcion": "..."},
+    "argumentario_de_venta": {"score": "1|0|NA", "descripcion": "..."},
+    "validacion_informacion_argumentario": {"score": "1|0|NA", "descripcion": "..."},
+    "rebate": {"score": "1|0|NA", "descripcion": "..."},
+    "rebate_efectivo": {"score": "1|0|NA", "descripcion": "..."},
+    "cierre": {"score": "1|0|NA", "descripcion": "..."},
+    "resumen_de_venta": {"score": "1|0|NA", "descripcion": "..."},
+    "sentido_de_urgencia": {"score": "1|0|NA", "descripcion": "..."},
+    "ortografia_y_signos_de_puntuacion": {"score": "1|0|NA", "descripcion": "..."},
+    "plantillas_whatsapp": {"score": "1|0|NA", "descripcion": "..."},
+    "uso_de_flyers_videos_y_artes": {"score": "1|0|NA", "descripcion": "..."},
+    "comunicacion_ordenada_y_coherente": {"score": "1|0|NA", "descripcion": "..."},
+    "informacion_falsa": {"score": "1|0|NA", "descripcion": "..."},
+    "actitud_comercial": {"score": "1|0|NA", "descripcion": "..."},
+    "afecta_imagen_negocio": {"score": "1|0|NA", "descripcion": "..."}
+  },
+  "clasificaciones": {
+    "informacion_complementaria_clasificacion": ["..."] ,
+    "sondeo_clasificacion": ["..."],
+    "argumentario_de_venta_clasificacion": ["..."],
+    "cierre_clasificacion": ["..."],
+    "informacion_falsa_clasificacion": ["..."],
+    "actitud_comercial_clasificacion": ["..."]
+  },
+  "clasificadores": {
+    "motivacion_del_cliente": "trabajo|prestigio|status|autorrealizacion_desarrollo_personal|contribucion_a_la_sociedad|null",
+    "tipificacion": "RA|DS|SI|CDE",
+    "atributo": "Educacion actualizada|Educacion de calidad|Empleabilidad|Flexibilidad y acompanamiento|Vida universitaria|null",
+    "estilo_del_asesor": "Profesional y comercial|Dinamico y entusiasta|Persuasivo vendedor|Neutral / rutinario|Apatico / desmotivado",
+    "segundo_numero_contacto": "1|0|NA"
+  },
+  "motivo_no_venta": {
+    "motivo": "AGENTE|CLIENTE|PROCESO|NA",
+    "submotivo": "...|NA",
+    "detalle": "...|NA",
+    "observaciones": "...|NA"
+  },
+  "carreras": {
+    "carreras_de_interes": ["ingenieria_industrial"],
+    "flag_varias_carreras": "0|1",
+    "carrera_interes_utp": "ingenieria_industrial|NA",
+    "carrera_de_interes_no_encontrada": "...|NA",
+    "modalidad_deseada": "presencial|semiPresencial|virtual|NA",
+    "sede_deseada": "...|NA"
+  },
+  "resumen_evaluacion": "texto breve con hallazgos y oportunidades de mejora"
+}
+
+Reglas de salida:
+1. score solo puede ser "1", "0" o "NA".
+2. Si precondicion es NO_ELEGIBLE: no penalizar; deja atributos en "NA" cuando corresponda.
+3. Si precondicion es MAESTRIA o ALUMNO_UTP: marca todos los atributos con score "NA".
+4. Arrays de clasificacion: incluir SOLO incumplimientos; si no hay, usar [].
+5. No inventes atributos fuera del esquema.
+6. resumen_evaluacion debe seguir las reglas de <<<RESUMEN_EVALUACION>>>.
+
+--- CONVERSACION A EVALUAR ---
+{{conversacion}}

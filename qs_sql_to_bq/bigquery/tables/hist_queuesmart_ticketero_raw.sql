@@ -1,7 +1,7 @@
--- Tabla CRM Ticketero / QueeSmart → raw_queuesmart
+-- Tabla CRM Ticketero / QueeSmart → raw_queue_smart
 -- Reemplazar ${PROJECT_ID} y ${DATASET_RAW} al desplegar.
 
-CREATE TABLE IF NOT EXISTS `${PROJECT_ID}.${DATASET_RAW}.hist_queuesmart_ticketero_raw` (
+CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.raw_queue_smart.hist_queuesmart_ticketero_raw` (
   fecha_extraccion DATE NOT NULL,
   fecha_procesamiento TIMESTAMP NOT NULL,
   apellido_paterno STRING,

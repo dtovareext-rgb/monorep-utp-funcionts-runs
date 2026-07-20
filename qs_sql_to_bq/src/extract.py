@@ -1,4 +1,4 @@
-"""ETL SQL Server → BigQuery (raw_queuesmart)."""
+"""ETL SQL Server → BigQuery (raw_queue_smart)."""
 
 from __future__ import annotations
 
@@ -141,9 +141,9 @@ def run_extract(config: dict[str, Any]) -> ExtractResult:
         )
 
     project_id = gcp_cfg["project_id"]
-    dataset_id = bq_cfg.get("dataset_id", gcp_cfg.get("dataset_id", "raw_queuesmart"))
+    dataset_id = bq_cfg.get("dataset_id", gcp_cfg.get("dataset_id", "raw_queue_smart"))
     table_id = bq_cfg.get("table_id", "hist_queuesmart_ticketero_raw")
-    location = bq_cfg.get("location", "us-central1")
+    location = bq_cfg.get("location", "US")
     partition_field = bq_cfg.get("partition_field", "fecha_extraccion")
 
     client = bigquery.Client(project=project_id)

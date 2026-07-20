@@ -1,4 +1,7 @@
--- Capa consolidada: CRM Ticketero (dedup por record_id). Vaso de agua desde hist_queuesmart_ticketero_raw.
+-- DEPRECATED: reemplazado por raw_queue_smart.tickets_hist_raw
+-- No usar en el pipeline Gen IA. Conservado solo por compatibilidad histórica.
+--
+-- Fuente actual: sp_queuesmart_mp3_consolidate → tickets_hist_raw
 
 CREATE TABLE IF NOT EXISTS `${PROJECT_ID}.${DATASET_RAW}.queuesmart_ticketero_crm` (
   process_day DATE NOT NULL,
@@ -21,5 +24,5 @@ CREATE TABLE IF NOT EXISTS `${PROJECT_ID}.${DATASET_RAW}.queuesmart_ticketero_cr
 )
 PARTITION BY process_day
 OPTIONS (
-  description = 'CRM Ticketero QueeSmart — capa consolidada (dedup por record_id)'
+  description = 'DEPRECATED — usar raw_queue_smart.tickets_hist_raw'
 );

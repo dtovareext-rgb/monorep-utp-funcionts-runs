@@ -1,17 +1,34 @@
 -- Gen IA QueeSmart MP3 — capa RAW — PRODUCCIÓN
--- prd-utpbi-data-operation.adf_speech_analytics (US) | fuente: hist_queesmart_mp3_catalog
+-- Grano: process_date + gcs_uri
+-- Fuente: queuesmart_mp3_enriched + tickets_hist_raw
+-- prd-utpbi-data-operation.adf_speech_analytics (US)
 
-CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw` (
+CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw` (
   process_date DATE,
   gcs_uri STRING,
   file_name STRING,
+  source_file_name STRING,
+  audio STRING,
+  recordid STRING,
+  rowid INT64,
+  codagencia STRING,
   gcs_path STRING,
   campus_code STRING,
   type_code STRING,
   correlative STRING,
   file_size_bytes INT64,
   sync_mode STRING,
+  convert_method STRING,
   s3_uri STRING,
+  match_status STRING,
+  asesornombre STRING,
+  asesorusuario STRING,
+  asesorcodigo STRING,
+  ndoc STRING,
+  nombresusuario STRING,
+  numcelular STRING,
+  clientetipo STRING,
+  `database` STRING,
   json_text STRING,
   full_response STRING,
   status STRING,
@@ -26,5 +43,5 @@ CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.adf_speech_analytics.hist_q
 )
 PARTITION BY process_date
 OPTIONS (
-  description = 'Gen IA sobre audios MP3 QueeSmart — fuente hist_queesmart_mp3_catalog'
+  description = 'Gen IA transcripción audios QueeSmart — etapa 1 (con contexto ticket)'
 );

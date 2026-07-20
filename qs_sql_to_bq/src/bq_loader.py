@@ -1,4 +1,4 @@
-"""Carga filas en BigQuery (raw_queuesmart)."""
+"""Carga filas en BigQuery (raw_queue_smart)."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def ensure_table(
     schema: list[dict[str, Any]],
     *,
     partition_field: str = "fecha_extraccion",
-    location: str = "us-central1",
+    location: str = "US",
 ) -> str:
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
     try:

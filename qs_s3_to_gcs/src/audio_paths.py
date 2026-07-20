@@ -1,4 +1,4 @@
-"""Parseo de nombres AAABBB-YYYYMMDD-correlativo.mp3 y rutas GCS por fecha."""
+"""Parseo de nombres AAABBB-YYYYMMDD-correlativo.(mp3|webm|...) y rutas GCS por fecha."""
 
 from __future__ import annotations
 
@@ -8,14 +8,13 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-# Ejemplo: 015AD1-20260217-123728.mp3
-#   015     = campus (AAA)
-#   AD1     = tipo/código (BBB) — metadata opcional
-#   20260217 = fecha en el nombre
-#   123728  = correlativo
+from converter import mp3_file_name
+
+# Ejemplo: 015AD1-20260217-123728.mp3 | 095IX1-20260318-155702.webm
 DEFAULT_FILENAME_REGEX = (
     r"^(?P<campus>[A-Za-z0-9]{3})(?P<type_code>[A-Za-z0-9]{3})-"
-    r"(?P<file_date>\d{8})-(?P<correlative>\d+)\.mp3$"
+    r"(?P<file_date>\d{8})-(?P<correlative>\d+)\."
+    r"(?P<ext>mp3|webm|ogg|opus|wav|flac|m4a|aac|wma|amr|3gp|mp4)$"
 )
 
 
@@ -28,13 +27,16 @@ def parse_audio_filename(file_name: str, pattern: str) -> dict[str, Any] | None:
         file_date = datetime.strptime(file_date_raw, "%Y%m%d").date()
     except ValueError:
         return None
+    source_file_name = file_name
     return {
         "campus": match.group("campus"),
         "type_code": match.group("type_code"),
         "file_date": file_date,
         "file_date_raw": file_date_raw,
         "correlative": match.group("correlative"),
-        "file_name": file_name,
+        "ext": match.group("ext").lower(),
+        "source_file_name": source_file_name,
+        "file_name": mp3_file_name(source_file_name),
     }
 
 

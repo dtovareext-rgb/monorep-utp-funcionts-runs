@@ -1,7 +1,7 @@
--- Tabla histórica: respuesta cruda + JSON parseado (capa RAW)
--- Reemplazar ${PROJECT_ID} y ${DATASET_ANALYTICS} al desplegar.
+-- Gen IA OneMarketer WhatsApp MP3 — capa RAW — PRODUCCIÓN
+-- prd-utpbi-data-operation.adf_speech_analytics (US)
 
-CREATE TABLE IF NOT EXISTS `${PROJECT_ID}.${DATASET_ANALYTICS}.hist_onemarketer_whatsapp_gen_ia_process_data_raw` (
+CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw` (
   process_date DATE,
   gcs_uri STRING,
   idcase INT64,

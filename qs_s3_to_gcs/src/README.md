@@ -1,14 +1,14 @@
 # s3_to_gcs
 
-Micro-batch para copiar audios **MP3** desde un bucket **AWS S3** (QueeSmart) a **GCS**, organizados por **fecha en el nombre del archivo**.
+Micro-batch: descarga audios desde **AWS S3** (QueeSmart), los convierte a **MP3 con loudnorm**, y los sube a **GCS** organizados por fecha en el nombre.
 
 ## Convención de archivos S3
 
 ```
-AAABBB-YYYYMMDD-correlativo.mp3
+AAABBB-YYYYMMDD-correlativo.(mp3|webm|ogg|...)
 ```
 
-Ejemplo: `015AD1-20260217-123728.mp3`
+Ejemplo: `015AD1-20260217-123728.mp3` | `095IX1-20260318-155702.webm`
 
 | Parte | Significado |
 |-------|-------------|
@@ -17,17 +17,23 @@ Ejemplo: `015AD1-20260217-123728.mp3`
 | `YYYYMMDD` | Fecha del audio |
 | `correlativo` | ID secuencial / hora de grabación |
 
-En GCS quedan bajo:
+En GCS siempre queda como **MP3 normalizado**:
 
 ```
-gs://{bucket}/{destination_prefix}/{YYYY-MM-DD}/{nombre_original}.mp3
+gs://{bucket}/{destination_prefix}/{YYYY-MM-DD}/{stem}.mp3
 ```
 
-Ejemplo:
+Catálogo BQ guarda `source_file_name` (nombre original, ej. `.webm`) para join con `tickets_hist_raw.audio`, y `file_name` = MP3 en GCS.
+
+## Audio / volumen
+
+ffmpeg aplica:
 
 ```
-gs://dev-utp-stg-queuesmart/data/input/queuesmart_mp3/imported_from_s3/2026-02-17/015AD1-20260217-123728.mp3
+highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11
 ```
+
+Config en `config.json` → `audio.loudnorm_filter`.
 
 ## Modos de sincronización
 
@@ -153,7 +159,7 @@ Igual que onemarketer: en Cloud Build / Cloud Run Job defines `GCP_*` y `AWS_*` 
 |----------|---------|-------------|
 | `GCP_PROJECT_ID` | `gcp.project_id` | Proyecto GCP |
 | `GCP_BUCKET_NAME` | `gcp.bucket_name` | Bucket GCS destino |
-| `GCP_DATASET_ID` | `gcp.dataset_id` / `bigquery.dataset_id` | Dataset BQ (`raw_queuesmart`) |
+| `GCP_DATASET_ID` | `gcp.dataset_id` / `bigquery.dataset_id` | Dataset BQ (`raw_queue_smart`) |
 | `GCP_REGION` | `gcp.region` | Región Cloud Run / GCS (`us-central1`) |
 | `GCP_JOB_NAME` | `gcp.cloud_run_job_name` | Nombre del Cloud Run Job |
 | `GCP_SERVICE_ACCOUNT_EMAIL` | `gcp.service_account_email` | SA del job (email completo) |
@@ -260,7 +266,7 @@ Desplegar dataset y tabla (orden):
 
 ```bash
 # 1. Dataset
-bq query --use_legacy_sql=false < bigquery/datasets/raw_queuesmart.sql
+bq query --use_legacy_sql=false < bigquery/datasets/raw_queue_smart.sql
 
 # 2. Tabla catálogo (sustituir ${PROJECT_ID} y ${DATASET_RAW})
 bq query --use_legacy_sql=false < bigquery/tables/hist_queesmart_mp3_catalog.sql
@@ -271,7 +277,7 @@ O dejar que el Cloud Run Job cree dataset/tabla en la primera corrida (`bq_catal
 Tras cada sync, el job registra metadatos en:
 
 ```
-prd-utpbi-data-operation.raw_queuesmart.hist_queesmart_mp3_catalog
+prd-utpbi-data-operation.raw_queue_smart.hist_queesmart_mp3_catalog
 ```
 
 | Campo | Descripción |
@@ -296,7 +302,7 @@ DDL manual (opcional):
 # qs_s3_to_gcs/bigquery/tables/hist_queesmart_mp3_catalog.sql
 ```
 
-IAM del Cloud Run Job: `roles/bigquery.dataEditor` en el dataset `raw_queuesmart`.
+IAM del Cloud Run Job: `roles/bigquery.dataEditor` en el dataset `raw_queue_smart`.
 
 Consulta de ejemplo:
 
@@ -309,7 +315,7 @@ SELECT
   gcs_uri,
   file_size_bytes,
   fecha_procesamiento
-FROM `prd-utpbi-data-operation.raw_queuesmart.hist_queesmart_mp3_catalog`
+FROM `prd-utpbi-data-operation.raw_queue_smart.hist_queesmart_mp3_catalog`
 WHERE fecha_audio = DATE '2026-03-12'
 ORDER BY file_name;
 ```

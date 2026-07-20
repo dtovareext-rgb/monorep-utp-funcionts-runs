@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point Cloud Run Job: SQL Server → BigQuery raw_queuesmart."""
+"""Entry point Cloud Run Job: SQL Server → BigQuery raw_queue_smart."""
 
 from __future__ import annotations
 

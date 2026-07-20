@@ -1,6 +1,6 @@
 # qs_sql_to_bq
 
-ETL **SQL Server (on-prem)** → **BigQuery** `raw_queuesmart`.
+ETL **SQL Server (on-prem)** → **BigQuery** `raw_queue_smart`.
 
 Tabla destino: `hist_queuesmart_ticketero_raw` — CRM Ticketero con columna `Audio` (MP3 QueeSmart).
 
@@ -13,7 +13,7 @@ SQL Server (dbo.TablaPendiente)
 Cloud Run Job (extract.py)
         │  filtra por fecha en Audio (daily_yesterday / backfill)
         ▼
-BigQuery raw_queuesmart.hist_queuesmart_ticketero_raw
+BigQuery raw_queue_smart.hist_queuesmart_ticketero_raw
 ```
 
 ## Columnas origen (según estructura conocida)
@@ -49,7 +49,7 @@ Ver: [docs/sql-connection-pending.md](../docs/sql-connection-pending.md)
 _PROJECT_ID=dev-utpbi-data-operation
 _JOB_NAME=dev-utpbi-sql-to-bq-queuesmart
 _SERVICE_ACCOUNT=dev-utp-eduflow-sa@dev-utpbi-data-operation.iam.gserviceaccount.com
-_DATASET_ID=raw_queuesmart
+_DATASET_ID=raw_queue_smart
 _SQL_SERVER_HOST=...
 _SQL_SERVER_DATABASE=...
 _SQL_SOURCE_TABLE=...
@@ -87,7 +87,7 @@ qs_sql_to_bq/
 
 ## IAM
 
-SA del Job: `roles/bigquery.dataEditor` en `raw_queuesmart`.
+SA del Job: `roles/bigquery.dataEditor` en `raw_queue_smart`.
 
 ## Prueba local (cuando tengan SQL)
 

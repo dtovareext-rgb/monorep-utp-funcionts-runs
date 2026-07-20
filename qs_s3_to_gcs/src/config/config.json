@@ -11,7 +11,7 @@
     "destination_prefix": "data/input/queuesmart_mp3/imported_from_s3/",
     "state_object": "state/s3_to_gcs_last_sync.json",
     "region": "us-central1",
-    "dataset_id": "raw_queuesmart",
+    "dataset_id": "raw_queue_smart",
     "cloud_run_job_name": "dev-utpbi-s3-to-gcs-micro-batch",
     "service_account_email": "dev-utp-eduflow-sa@dev-utpbi-data-operation.iam.gserviceaccount.com",
     "scheduler_name": "dev-utpbi-s3-to-gcs-daily",
@@ -21,9 +21,14 @@
   "sync": {
     "mode": "daily_yesterday",
     "timezone": "America/Lima",
-    "filename_regex": "^(?P<campus>[A-Za-z0-9]{3})(?P<type_code>[A-Za-z0-9]{3})-(?P<file_date>\\d{8})-(?P<correlative>\\d+)\\.mp3$",
+    "filename_regex": "^(?P<campus>[A-Za-z0-9]{3})(?P<type_code>[A-Za-z0-9]{3})-(?P<file_date>\\d{8})-(?P<correlative>\\d+)\\.(?P<ext>mp3|webm|ogg|opus|wav|flac|m4a|aac|wma|amr|3gp|mp4)$",
     "gcs_date_folder_format": "%Y-%m-%d",
     "skip_if_exists_in_gcs": true
+  },
+  "audio": {
+    "default_bitrate": "128k",
+    "loudnorm_filter": "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11",
+    "ffmpeg_timeout_seconds": 300
   },
   "batch": {
     "max_files": 500,
@@ -32,10 +37,16 @@
   },
   "bigquery": {
     "enabled": true,
-    "dataset_id": "raw_queuesmart",
+    "dataset_id": "raw_queue_smart",
     "table_id": "hist_queesmart_mp3_catalog",
-    "location": "us-central1",
+    "location": "US",
     "catalog_existing_in_gcs": true
+  },
+  "orchestration": {
+    "call_consolidate_after_sync": true,
+    "consolidate_procedure": "raw_queue_smart.sp_queuesmart_mp3_consolidate",
+    "bq_location": "US",
+    "skip_consolidate_on_sync_errors": true
   },
   "secrets": {
     "source": "env",
