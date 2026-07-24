@@ -1,18 +1,25 @@
 -- =============================================================================
--- SP: Gen IA MP3 QueeSmart — Etapa 1 (transcripción) — PRODUCCIÓN
+-- SP: QueeSmart MP3 — Etapa 1 (transcripción STT) — PRODUCCIÓN
 --
 -- Proyecto:  prd-utpbi-data-operation
 -- Input:     raw_queue_smart.queuesmart_mp3_enriched (BOTH / GCS_ONLY)
 -- SP + hist: adf_speech_analytics (US)
--- Modelo:    adf_speech_analytics.gemini-2-5-flash
+-- STT:       adf_speech_analytics.speech-to-text-v2  (ML.TRANSCRIBE / Chirp)
 -- Conexión:  US.utp_gen_ia_process
 --
--- Al final llama etapa 2 (análisis vs sys_prompts en raw_queue_smart).
+-- Flujo (incremental por gcs_uri):
+--   1) Candidatos del día SIN transcripción OK en hist_*_mp3_gen_ia_*
+--   2) External table + ML.TRANSCRIBE solo pendientes
+--   3) DELETE/INSERT solo esos gcs_uri (no borra el día completo)
+--   4) CALL etapa 2: sp_queuesmart_audio_analisis_ia
 --
 -- Ejecutar (diario, después de sp_queuesmart_mp3_consolidate):
 --   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(
 --     DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY)
 --   );
+--
+-- Nota: si speech-to-text-v2 NO tiene SPEECH_RECOGNIZER, agregar recognition_config:
+--   recognition_config => (JSON '{"language_codes":["es-US"],"model":"chirp","auto_decoding_config":{}}')
 -- =============================================================================
 
 CREATE OR REPLACE PROCEDURE `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(
@@ -31,7 +38,7 @@ BEGIN
   SET conexion = '`prd-utpbi-data-operation.US.utp_gen_ia_process`';
 
   -- ---------------------------------------------------------------------------
-  -- 1. URIs desde enriched (preferir BOTH; incluir GCS_ONLY)
+  -- 1. URIs pendientes: día + sin transcripción no vacía en hist PRD
   -- ---------------------------------------------------------------------------
   SET v_uris = (
     WITH base_ranked AS (
@@ -45,18 +52,25 @@ BEGIN
       WHERE process_day = v_fecha_proceso
         AND match_status IN ('BOTH', 'GCS_ONLY')
         AND gcs_uri IS NOT NULL
+    ),
+    already_ok AS (
+      SELECT DISTINCT gcs_uri
+      FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd`
+      WHERE NULLIF(TRIM(transcripcion), '') IS NOT NULL
     )
     SELECT CONCAT(
       '[',
-      STRING_AGG(CONCAT('"', gcs_uri, '"'), ', '),
+      STRING_AGG(CONCAT('"', b.gcs_uri, '"'), ', '),
       ']'
     )
-    FROM base_ranked
-    WHERE rn = 1
+    FROM base_ranked AS b
+    LEFT JOIN already_ok AS a
+      ON a.gcs_uri = b.gcs_uri
+    WHERE b.rn = 1
+      AND a.gcs_uri IS NULL
   );
 
   IF v_uris IS NULL OR v_uris = '[]' THEN
-    -- Fallback: catálogo hist si aún no corrió consolidate
     SET v_uris = (
       WITH base_ranked AS (
         SELECT
@@ -68,22 +82,33 @@ BEGIN
         FROM `prd-utpbi-data-operation.raw_queue_smart.hist_queesmart_mp3_catalog`
         WHERE fecha_audio = v_fecha_proceso
           AND gcs_uri IS NOT NULL
+      ),
+      already_ok AS (
+        SELECT DISTINCT gcs_uri
+        FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd`
+        WHERE NULLIF(TRIM(transcripcion), '') IS NOT NULL
       )
       SELECT CONCAT(
         '[',
-        STRING_AGG(CONCAT('"', gcs_uri, '"'), ', '),
+        STRING_AGG(CONCAT('"', b.gcs_uri, '"'), ', '),
         ']'
       )
-      FROM base_ranked
-      WHERE rn = 1
+      FROM base_ranked AS b
+      LEFT JOIN already_ok AS a
+        ON a.gcs_uri = b.gcs_uri
+      WHERE b.rn = 1
+        AND a.gcs_uri IS NULL
     );
   END IF;
 
   IF v_uris IS NULL OR v_uris = '[]' THEN
-    SELECT FORMAT('Sin URIs QueeSmart para fecha %s — etapa 1 omite; se llama etapa 2.', v_fecha_proceso_str);
+    SELECT FORMAT(
+      'Sin URIs QueeSmart pendientes de STT para fecha %s — etapa 1 omite; se llama etapa 2.',
+      v_fecha_proceso_str
+    );
   ELSE
     -- ---------------------------------------------------------------------------
-    -- 2. External table (conexión GCS)
+    -- 2. External table (solo pendientes)
     -- ---------------------------------------------------------------------------
     SET v_sql = FORMAT("""
       CREATE OR REPLACE EXTERNAL TABLE %s
@@ -98,7 +123,7 @@ BEGIN
     EXECUTE IMMEDIATE v_sql;
 
     -- ---------------------------------------------------------------------------
-    -- 3. Metadata enriched/catalog + objeto audio
+    -- 3. Metadata enriched/catalog (solo pendientes de STT)
     -- ---------------------------------------------------------------------------
     EXECUTE IMMEDIATE FORMAT("""
       CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_audios AS
@@ -135,6 +160,7 @@ BEGIN
             c.type_code,
             c.correlative,
             c.file_size_bytes,
+            c.duration_seconds,
             c.sync_mode,
             c.convert_method,
             c.s3_uri,
@@ -173,6 +199,7 @@ BEGIN
           type_code,
           correlative,
           file_size_bytes,
+          duration_seconds,
           CAST(NULL AS STRING) AS sync_mode,
           convert_method,
           CAST(NULL AS STRING) AS s3_uri,
@@ -201,6 +228,7 @@ BEGIN
           type_code,
           correlative,
           file_size_bytes,
+          duration_seconds,
           sync_mode,
           convert_method,
           s3_uri,
@@ -214,6 +242,11 @@ BEGIN
           clientetipo,
           `database`
         FROM catalog_fallback
+      ),
+      already_ok AS (
+        SELECT DISTINCT gcs_uri
+        FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd`
+        WHERE NULLIF(TRIM(transcripcion), '') IS NOT NULL
       )
       SELECT
         b.process_day AS process_date,
@@ -229,6 +262,7 @@ BEGIN
         b.type_code,
         b.correlative,
         b.file_size_bytes,
+        b.duration_seconds,
         b.sync_mode,
         b.convert_method,
         b.s3_uri,
@@ -240,120 +274,157 @@ BEGIN
         b.nombresusuario,
         b.numcelular,
         b.clientetipo,
-        b.`database`,
-        ext.ref AS audio_obj,
-        CONCAT(
-          'Analiza el audio de atención QueeSmart UTP (grabación en campus/ventanilla). ',
-          'Devuelve UN objeto JSON con las claves: ',
-          'transcripcion (texto literal del audio en español si aplica), ',
-          'resumen (máx 3 oraciones), ',
-          'intencion (consulta admisión, información carrera, trámite, reclamo, seguimiento, otro), ',
-          'idioma, tono (neutral, positivo, negativo, urgente), ',
-          'entidades (carreras, campus, nombres mencionados; string), ',
-          'observaciones (string). ',
-          'Metadatos — archivo: ', IFNULL(b.file_name, 'N/D'),
-          ', source: ', IFNULL(b.source_file_name, 'N/D'),
-          ', campus_code: ', IFNULL(b.campus_code, 'N/D'),
-          ', asesor: ', IFNULL(b.asesornombre, 'N/D'),
-          ', recordid: ', IFNULL(b.recordid, 'N/D')
-        ) AS prompt
+        b.`database`
       FROM base AS b
-      INNER JOIN %s AS ext
-        ON ext.uri = b.gcs_uri
-    """, v_fecha_proceso_str, v_fecha_proceso_str, external_table);
+      LEFT JOIN already_ok AS a
+        ON a.gcs_uri = b.gcs_uri
+      WHERE a.gcs_uri IS NULL
+    """, v_fecha_proceso_str, v_fecha_proceso_str);
 
     SET v_audio_count = (SELECT COUNT(*) FROM tmp_queuesmart_mp3_audios);
 
     IF v_audio_count > 0 THEN
       -- ---------------------------------------------------------------------------
-      -- 4. Gen IA (Gemini)
+      -- 4. Speech-to-Text v2 (Chirp) — solo pendientes
       -- ---------------------------------------------------------------------------
-      CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_gen_ia_results AS
-      SELECT ia.*
-      FROM AI.GENERATE_TABLE(
-        MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`,
-        (
-          SELECT
-            STRUCT(
-              prompt AS instruction,
-              OBJ.GET_ACCESS_URL(audio_obj, 'r') AS audio_url
-            ) AS prompt,
-            * EXCEPT(prompt, audio_obj)
-          FROM tmp_queuesmart_mp3_audios
-        ),
-        STRUCT(
-          'ml_generate_text_llm_result STRING' AS output_schema,
-          32768 AS max_output_tokens,
-          0 AS temperature
+      EXECUTE IMMEDIATE FORMAT("""
+        CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_stt_results AS
+        SELECT
+          uri,
+          transcripts,
+          ml_transcribe_result,
+          ml_transcribe_status
+        FROM ML.TRANSCRIBE(
+          MODEL `prd-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`,
+          TABLE %s,
+          recognition_config => (
+            JSON '{"language_codes":["es-US"],"model":"chirp","auto_decoding_config":{}}'
+          )
         )
-      ) AS ia;
+      """, external_table);
 
       -- ---------------------------------------------------------------------------
-      -- 5. Parseo JSON → hist RAW
+      -- 5. Persistencia incremental: DELETE/INSERT solo gcs_uri procesados
       -- ---------------------------------------------------------------------------
       DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw`
-      WHERE process_date = v_fecha_proceso;
+      WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios);
 
-      INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw`
-      WITH cte_cleaned_json AS (
-        SELECT
-          ia.*,
-          CONCAT(
-            '[',
-            REGEXP_EXTRACT(
-              REGEXP_REPLACE(ml_generate_text_llm_result, r'`', '"'),
-              r'(?s)\{.*\}'
-            ),
-            ']'
-          ) AS json_text
-        FROM tmp_queuesmart_mp3_gen_ia_results AS ia
-      ),
-      cte_parsed AS (
-        SELECT
-          process_date,
-          gcs_uri,
-          file_name,
-          source_file_name,
-          audio,
-          recordid,
-          rowid,
-          codagencia,
-          gcs_path,
-          campus_code,
-          type_code,
-          correlative,
-          file_size_bytes,
-          sync_mode,
-          convert_method,
-          s3_uri,
-          match_status,
-          asesornombre,
-          asesorusuario,
-          asesorcodigo,
-          ndoc,
-          nombresusuario,
-          numcelular,
-          clientetipo,
-          `database`,
-          json_text,
-          TO_JSON_STRING(full_response) AS full_response,
-          status,
-          JSON_VALUE(json_text, '$[0].transcripcion') AS transcripcion,
-          JSON_VALUE(json_text, '$[0].resumen') AS resumen,
-          JSON_VALUE(json_text, '$[0].intencion') AS intencion,
-          JSON_VALUE(json_text, '$[0].idioma') AS idioma,
-          JSON_VALUE(json_text, '$[0].tono') AS tono,
-          JSON_VALUE(json_text, '$[0].entidades') AS entidades,
-          JSON_VALUE(json_text, '$[0].observaciones') AS observaciones,
-          DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
-        FROM cte_cleaned_json
+      INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw` (
+        process_date,
+        gcs_uri,
+        file_name,
+        source_file_name,
+        audio,
+        recordid,
+        rowid,
+        codagencia,
+        gcs_path,
+        campus_code,
+        type_code,
+        correlative,
+        file_size_bytes,
+        duration_seconds,
+        sync_mode,
+        convert_method,
+        s3_uri,
+        match_status,
+        asesornombre,
+        asesorusuario,
+        asesorcodigo,
+        ndoc,
+        nombresusuario,
+        numcelular,
+        clientetipo,
+        `database`,
+        json_text,
+        full_response,
+        status,
+        transcripcion,
+        resumen,
+        intencion,
+        idioma,
+        tono,
+        entidades,
+        observaciones,
+        load_date
       )
-      SELECT * FROM cte_parsed;
+      SELECT
+        m.process_date,
+        m.gcs_uri,
+        m.file_name,
+        m.source_file_name,
+        m.audio,
+        m.recordid,
+        m.rowid,
+        m.codagencia,
+        m.gcs_path,
+        m.campus_code,
+        m.type_code,
+        m.correlative,
+        m.file_size_bytes,
+        m.duration_seconds,
+        m.sync_mode,
+        m.convert_method,
+        m.s3_uri,
+        m.match_status,
+        m.asesornombre,
+        m.asesorusuario,
+        m.asesorcodigo,
+        m.ndoc,
+        m.nombresusuario,
+        m.numcelular,
+        m.clientetipo,
+        m.`database`,
+        TO_JSON_STRING(s.ml_transcribe_result) AS json_text,
+        TO_JSON_STRING(s.ml_transcribe_result) AS full_response,
+        IFNULL(NULLIF(TRIM(s.ml_transcribe_status), ''), 'OK') AS status,
+        s.transcripts AS transcripcion,
+        CAST(NULL AS STRING) AS resumen,
+        CAST(NULL AS STRING) AS intencion,
+        CAST(NULL AS STRING) AS idioma,
+        CAST(NULL AS STRING) AS tono,
+        CAST(NULL AS STRING) AS entidades,
+        CAST(NULL AS STRING) AS observaciones,
+        DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
+      FROM tmp_queuesmart_mp3_audios AS m
+      INNER JOIN tmp_queuesmart_mp3_stt_results AS s
+        ON s.uri = m.gcs_uri;
 
       DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd`
-      WHERE process_date = v_fecha_proceso;
+      WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios);
 
-      INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd`
+      INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd` (
+        process_date,
+        gcs_uri,
+        file_name,
+        source_file_name,
+        audio,
+        recordid,
+        rowid,
+        codagencia,
+        campus_code,
+        type_code,
+        correlative,
+        file_size_bytes,
+        duration_seconds,
+        match_status,
+        asesornombre,
+        asesorusuario,
+        asesorcodigo,
+        ndoc,
+        nombresusuario,
+        numcelular,
+        clientetipo,
+        `database`,
+        transcripcion,
+        resumen,
+        intencion,
+        idioma,
+        tono,
+        entidades,
+        observaciones,
+        load_date
+      )
       SELECT
         process_date,
         gcs_uri,
@@ -367,6 +438,7 @@ BEGIN
         type_code,
         correlative,
         file_size_bytes,
+        duration_seconds,
         match_status,
         asesornombre,
         asesorusuario,
@@ -385,12 +457,12 @@ BEGIN
         observaciones,
         load_date
       FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw`
-      WHERE process_date = v_fecha_proceso;
+      WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios);
     END IF;
   END IF;
 
   -- ---------------------------------------------------------------------------
-  -- Etapa 2: análisis vs sys_prompts (raw_queue_smart)
+  -- Etapa 2: análisis vs sys_prompts con Gemini (raw_queue_smart)
   -- ---------------------------------------------------------------------------
   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_audio_analisis_ia`(
     v_fecha_proceso,

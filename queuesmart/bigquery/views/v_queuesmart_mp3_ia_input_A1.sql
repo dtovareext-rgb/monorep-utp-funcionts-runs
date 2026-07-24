@@ -28,6 +28,7 @@ SELECT
   e.endtimestamp,
   e.`database`,
   e.file_size_bytes,
+  e.duration_seconds,
   e.convert_method
 FROM `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_enriched` AS e
 WHERE e.match_status IN ('BOTH', 'GCS_ONLY')

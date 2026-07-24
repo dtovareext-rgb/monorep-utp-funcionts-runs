@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.raw_queue_smart.queuesmart_
   s3_uri STRING,
   s3_key STRING,
   file_size_bytes INT64,
+  duration_seconds FLOAT64,
   sync_mode STRING,
   convert_method STRING,
   load_date DATETIME

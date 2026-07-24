@@ -3,23 +3,15 @@
 -- IMPORTANTE: SP y tablas hist van en adf_speech_analytics (US), NO en raw_onemarketer.
 -- Vista hilo completo en raw_onemarketer (us-central1).
 --
--- Orden:
+-- Orden (tablas con data → usar ALTER, no CREATE OR REPLACE):
 --
+-- -- Schema caso conversación (idempotente, no borra data):
 -- bq query --use_legacy_sql=false --location=US \
---   < onemarketer/bigquery/tables/hist_onemarketer_whatsapp_gen_ia_raw.sql
+--   < onemarketer/bigquery/sqls/alter_hist_onemarketer_caso_conversacion_ia.sql
 --
--- bq query --use_legacy_sql=false --location=US \
---   < onemarketer/bigquery/tables/hist_onemarketer_whatsapp_gen_ia_prd.sql
---
--- -- Anexar formato JSON a canal_escrito_prompt (us-central1):
+-- -- Prompt canal_escrito (us-central1):
 -- bq query --use_legacy_sql=false --location=us-central1 \
 --   < onemarketer/bigquery/sqls/update_sys_prompts_canal_escrito.sql
---
--- bq query --use_legacy_sql=false --location=US \
---   < onemarketer/bigquery/tables/hist_onemarketer_caso_conversacion_ia_raw.sql
---
--- bq query --use_legacy_sql=false --location=US \
---   < onemarketer/bigquery/tables/hist_onemarketer_caso_conversacion_ia_prd.sql
 --
 -- bq query --use_legacy_sql=false --location=us-central1 \
 --   < onemarketer/bigquery/views/v_onemarketer_caso_hilo_completo.sql
@@ -35,3 +27,5 @@
 --
 -- Re-solo etapa 2 (sin re-transcribir audios):
 --   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_caso_conversacion_ia`(DATE '2026-06-22', NULL);
+--
+-- Nota: hist_onemarketer_whatsapp_gen_ia_* no requieren ALTER (STT reusa las columnas).

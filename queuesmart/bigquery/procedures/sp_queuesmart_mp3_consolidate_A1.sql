@@ -45,6 +45,7 @@ BEGIN
       s3_uri,
       s3_key,
       file_size_bytes,
+      duration_seconds,
       sync_mode,
       convert_method,
       ROW_NUMBER() OVER (
@@ -67,6 +68,7 @@ BEGIN
     s3_uri,
     s3_key,
     file_size_bytes,
+    duration_seconds,
     sync_mode,
     convert_method,
     v_load_date AS load_date
@@ -89,6 +91,7 @@ BEGIN
     s3_uri,
     s3_key,
     file_size_bytes,
+    duration_seconds,
     sync_mode,
     convert_method,
     load_date
@@ -106,6 +109,7 @@ BEGIN
     s3_uri,
     s3_key,
     file_size_bytes,
+    duration_seconds,
     sync_mode,
     convert_method,
     load_date
@@ -161,6 +165,7 @@ BEGIN
       c.type_code,
       c.correlative,
       c.file_size_bytes,
+      c.duration_seconds,
       c.convert_method,
       r.asesornombre,
       r.asesorusuario,
@@ -213,6 +218,7 @@ BEGIN
     type_code,
     correlative,
     file_size_bytes,
+    duration_seconds,
     convert_method,
     asesornombre,
     asesorusuario,
@@ -246,6 +252,7 @@ BEGIN
     type_code,
     correlative,
     file_size_bytes,
+    duration_seconds,
     convert_method,
     asesornombre,
     asesorusuario,

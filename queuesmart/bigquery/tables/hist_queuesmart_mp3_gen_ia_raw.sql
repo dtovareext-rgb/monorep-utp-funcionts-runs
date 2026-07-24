@@ -17,6 +17,7 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_queu
   type_code STRING,
   correlative STRING,
   file_size_bytes INT64,
+  duration_seconds FLOAT64,
   sync_mode STRING,
   convert_method STRING,
   s3_uri STRING,

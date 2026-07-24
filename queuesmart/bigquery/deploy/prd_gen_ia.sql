@@ -15,6 +15,9 @@
 --
 -- -- 0b) Migración catálogo (si tablas ya existen sin columnas nuevas)
 -- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/sqls/alter_duration_seconds.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
 --   "ALTER TABLE \`prd-utpbi-data-operation.raw_queue_smart.hist_queesmart_mp3_catalog\`
 --      ADD COLUMN IF NOT EXISTS source_file_name STRING,
 --      ADD COLUMN IF NOT EXISTS convert_method STRING;"

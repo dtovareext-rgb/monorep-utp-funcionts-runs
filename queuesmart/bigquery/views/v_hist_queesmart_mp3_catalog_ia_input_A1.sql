@@ -12,6 +12,7 @@ SELECT
   c.type_code,
   c.correlative,
   c.file_size_bytes,
+  c.duration_seconds,
   c.sync_mode,
   c.convert_method,
   c.s3_uri,

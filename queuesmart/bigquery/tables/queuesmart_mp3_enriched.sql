@@ -14,6 +14,7 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3
   type_code STRING,
   correlative STRING,
   file_size_bytes INT64,
+  duration_seconds FLOAT64,
   convert_method STRING,
   asesornombre STRING,
   asesorusuario STRING,

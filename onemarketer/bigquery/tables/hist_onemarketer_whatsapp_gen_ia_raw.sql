@@ -25,5 +25,5 @@ CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.adf_speech_analytics.hist_o
 )
 PARTITION BY process_date
 OPTIONS (
-  description = 'Gen IA sobre audios MP3 WhatsApp/OneMarketer — capa raw (JSON + campos extraídos)'
+  description = 'STT (speech-to-text-v2) sobre audios MP3 WhatsApp/OneMarketer — capa raw'
 );

@@ -4,6 +4,9 @@
 -- Evalúa cada transcripción (etapa 1) con prompt de
 --   raw_queue_smart.sys_prompts
 --
+-- Incremental: solo gcs_uri del día SIN evaluacion_json en hist análisis PRD.
+-- DELETE/INSERT solo esos URIs (no borra el día completo).
+--
 -- Formato salida: queuesmart/prompts/Canal_Admision_Output.md
 --   arreglo JSON [{ ... }] con *_marcacion / *_descripcion
 --
@@ -82,14 +85,21 @@ BEGIN
         )
     END AS prompt
   FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd` AS h
+  LEFT JOIN (
+    SELECT DISTINCT gcs_uri
+    FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
+    WHERE NULLIF(TRIM(evaluacion_json), '') IS NOT NULL
+  ) AS done
+    ON done.gcs_uri = h.gcs_uri
   WHERE h.process_date = v_fecha_proceso
-    AND NULLIF(TRIM(h.transcripcion), '') IS NOT NULL;
+    AND NULLIF(TRIM(h.transcripcion), '') IS NOT NULL
+    AND done.gcs_uri IS NULL;
 
   SET v_audio_count = (SELECT COUNT(*) FROM tmp_queuesmart_audio_analisis_input);
 
   IF v_audio_count = 0 THEN
     SELECT FORMAT(
-      'Sin transcripciones para fecha %s — etapa 2 finaliza.',
+      'Sin transcripciones pendientes de análisis para fecha %s — etapa 2 finaliza.',
       FORMAT_DATE('%Y-%m-%d', v_fecha_proceso)
     );
     RETURN;
@@ -113,7 +123,7 @@ BEGIN
   ) AS ia;
 
   DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
-  WHERE process_date = v_fecha_proceso;
+  WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
   INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
   WITH cte_cleaned AS (
@@ -234,7 +244,7 @@ BEGIN
   FROM cte_cleaned;
 
   DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
-  WHERE process_date = v_fecha_proceso;
+  WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
   INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
   SELECT
@@ -328,6 +338,6 @@ BEGIN
     mayor_rebate,
     load_date
   FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
-  WHERE process_date = v_fecha_proceso;
+  WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
 END;

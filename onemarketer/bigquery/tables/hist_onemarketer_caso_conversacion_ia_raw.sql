@@ -1,5 +1,11 @@
 -- Gen IA conversación completa OneMarketer — capa RAW — PRODUCCIÓN
 -- Grano: process_date + idcase
+--
+-- Si la tabla YA tiene data en PRD: NO uses este archivo.
+-- Usa en su lugar:
+--   sqls/alter_hist_onemarketer_caso_conversacion_ia.sql
+--
+-- Este DDL es solo para ambientes nuevos (CREATE OR REPLACE borra data).
 -- Esquema alineado a docs/prompt_canal_escrito_formato_salida.txt
 -- prd-utpbi-data-operation.adf_speech_analytics (US)
 

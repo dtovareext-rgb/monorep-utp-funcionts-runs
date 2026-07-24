@@ -123,16 +123,16 @@ El pipeline OneMarketer en GCP procesa conversaciones de WhatsApp desde la API d
 
 | Modelo BQ ML | Función SQL | Qué hace | Uso |
 |--------------|-------------|----------|-----|
-| **gemini-2-5-flash** | `AI.GENERATE_TABLE` | LLM multimodal: recibe audio + prompt → JSON estructurado | OneMarketer, QueeSmart |
-| **speech-to-text-v2** (Chirp) | `ML.TRANSCRIBE` | STT puro: audio → texto literal | Genesys (patrón `adf_speech_analytics`) |
+| **gemini-2-5-flash** | `AI.GENERATE_TABLE` | LLM: análisis de texto / prompt estructurado | Etapa 2 OneMarketer, QueeSmart |
+| **speech-to-text-v2** (Chirp) | `ML.TRANSCRIBE` | STT puro: audio → texto literal | Etapa 1 OneMarketer, QueeSmart, Genesys |
 
-### 3.2 Diferencia clave en OneMarketer vs Genesys
+### 3.2 Flujo unificado (audios)
 
-**OneMarketer (hoy):** un solo paso con Gemini. El prompt pide `transcripcion`, `resumen`, `intencion`, `tono`, `entidades`, `observaciones` en un JSON. Gemini “oye” el audio directamente.
+**OneMarketer / QueeSmart / Genesys (mismo patrón):**
+1. `ML.TRANSCRIBE` → transcripción literal con Chirp (`speech-to-text-v2`)
+2. `AI.GENERATE_TABLE` → análisis con Gemini sobre el texto / prompt de negocio
 
-**Genesys (patrón de referencia):** dos pasos separados:
-1. `ML.TRANSCRIBE` → transcripción literal con Chirp
-2. `AI.GENERATE_TABLE` → análisis con Gemini sobre el texto
+**Antes (obsoleto):** OneMarketer hacía un solo paso con Gemini multimodal (oía el audio y devolvía JSON con `transcripcion` + metadatos).
 
 ### 3.3 Salida estructurada de Gen IA (campos actuales)
 

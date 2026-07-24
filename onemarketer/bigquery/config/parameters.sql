@@ -7,6 +7,7 @@
 --   DATASET_RAW         = raw_onemarketer
 --   DATASET_ANALYTICS   = adf_speech_analytics   -- o dataset dedicado en dev
 --   BQ_CONNECTION         = `dev-utpbi-data-operation.US.utp_gen_ia_process`
+--   STT_MODEL           = `dev-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`
 --   GEMINI_MODEL        = `dev-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`
 --   EXTERNAL_TABLE_TMP  = `dev-utpbi-data-operation.adf_speech_analytics.tmp_utp_external_table_onemarketer_whatsapp`
 --   CRM_PROJECT         = prd-utpbi-data-storage-pv   -- SIEMPRE prod CRM (no hay leads en dev)
@@ -17,8 +18,13 @@
 --   DATASET_RAW         = raw_onemarketer          (us-central1 — ETL)
 --   DATASET_ANALYTICS   = adf_speech_analytics     (US — Gen IA, igual que Genesys)
 --   BQ_CONNECTION         = `prd-utpbi-data-operation.US.utp_gen_ia_process`
+--   STT_MODEL           = `prd-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`
 --   GEMINI_MODEL        = `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`
 --   EXTERNAL_TABLE_TMP  = `prd-utpbi-data-operation.adf_speech_analytics.tmp_utp_external_table_onemarketer_whatsapp`
+--
+-- Flujo Gen IA:
+--   Etapa 1 (audios): ML.TRANSCRIBE / speech-to-text-v2 → hist_whatsapp_gen_ia_*
+--   Etapa 2 (hilo):   Gemini + canal_escrito_prompt → hist_caso_conversacion_ia_*
 --
 -- ERROR COMÚN: crear el SP en raw_onemarketer (us-central1) y referenciar adf_speech_analytics.
 --   → "Dataset adf_speech_analytics was not found in location us-central1"
@@ -46,5 +52,5 @@
 --   Ejecutar DESPUÉS del job onemarketer-etl del mismo día (job en us-central1, SP en US).
 --
 -- IAM:
---   SA del job BQ: cloudvision no aplica; necesita AI/Gemini + lectura GCS vía CONNECTION
+--   SA del job BQ: speech-to-text + Gemini; lectura GCS vía CONNECTION
 --   La conexión utp_gen_ia_process debe incluir el bucket onemarketer.

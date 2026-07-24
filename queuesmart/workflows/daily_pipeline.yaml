@@ -1,0 +1,479 @@
+# =============================================================================
+# Cloud Workflows — Pipeline diario QueeSmart (S3→GCS → consolidate → STT → Gemini)
+# =============================================================================
+#
+# Sustituye la cadena "cada SP llama al siguiente" y el CALL consolidate desde
+# el Cloud Run Job. El Job solo ingesta; este workflow orquesta y valida.
+#
+# IMPORTANTE sobre SPs:
+#   Hoy `sp_queuesmart_mp3_consolidate` aún puede hacer CALL a gen_ia, y gen_ia
+#   a analisis. Este YAML invoca los 3 por separado (como pediste). Cuando puedas,
+#   quita esos CALL anidados en los SPs para evitar doble ejecución. Mientras
+#   existan, puedes poner `invoke_downstream_sps: false` y dejar solo consolidate.
+#
+# Despliegue (ejemplo PRD):
+#   gcloud workflows deploy queuesmart-daily-pipeline \
+#     --source=queuesmart/workflows/daily_pipeline.yaml \
+#     --location=us-central1 \
+#     --service-account=SA@PROJECT.iam.gserviceaccount.com
+#
+# Scheduler: ejecutar este workflow a las 03:00 America/Lima (no el Job directo).
+# =============================================================================
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
+          - location: ${default(map.get(args, "location"), "us-central1")}
+          - bq_location: ${default(map.get(args, "bq_location"), "US")}
+          - job_name: ${default(map.get(args, "job_name"), "prd-utpbi-s3-to-gcs-micro-batch")}
+          - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-queuesmart")}
+          - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests")}
+          # Umbral: si failed_tasks > max_failed_tasks → ERROR y no corre SPs
+          - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
+          # false = solo consolidate (recomendado mientras consolidate→gen_ia→analisis sigan encadenados)
+          - invoke_downstream_sps: ${default(map.get(args, "invoke_downstream_sps"), false)}
+          - process_date: ${default(map.get(args, "process_date"), null)}
+          - started_at: ${sys.now()}
+          - pipeline_ok: true
+          - ingest_summary: {}
+          - sp_results: {}
+
+    # process_date = ayer America/Lima si no viene en args
+    - resolve_process_date:
+        switch:
+          - condition: ${process_date != null}
+            next: log_start
+          - condition: true
+            steps:
+              - compute_yesterday:
+                  assign:
+                    # Aprox: UTC-5 (Lima sin DST). Para precisión fina, pasar process_date desde Scheduler.
+                    - process_date: ${text.substring(time.format(sys.now() - 18000), 0, 10)}
+
+    - log_start:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"queuesmart pipeline START process_date=" + process_date + " job=" + job_name}'
+
+    # -------------------------------------------------------------------------
+    # 1) PREPARE: 1 task genera manifiesto del día en GCS
+    # El conector jobs.run espera a que termine la ejecución y devuelve el Execution.
+    # No hace falta poll aparte (metadata.name es ID corto y el get fallaba con 404).
+    # -------------------------------------------------------------------------
+    - run_prepare_job:
+        call: googleapis.run.v1.namespaces.jobs.run
+        args:
+          name: '${"namespaces/" + project_id + "/jobs/" + job_name}'
+          location: ${location}
+          body:
+            overrides:
+              taskCount: 1
+              containerOverrides:
+                - env:
+                    - name: QS_JOB_ROLE
+                      value: prepare
+                    - name: SYNC_PROCESS_DATE
+                      value: ${process_date}
+                    - name: SYNC_TARGET_DATE
+                      value: ${process_date}
+        result: prepare_status
+        connector_params:
+          timeout: 3600
+
+    # Si el conector devolvió un Operation LRO, el Execution viene en .response
+    - normalize_prepare:
+        assign:
+          - prepare_exec: ${default(map.get(prepare_status, "response"), prepare_status)}
+          - prepare_st: ${default(map.get(prepare_exec, "status"), json.decode("{}"))}
+          - prepare_failed: ${int(default(map.get(prepare_st, "failedCount"), 0))}
+          - prepare_succeeded: ${int(default(map.get(prepare_st, "succeededCount"), 0))}
+          - prepare_name: ${default(map.get(default(map.get(prepare_exec, "metadata"), json.decode("{}")), "name"), "n/a")}
+
+    - log_prepare_done:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"PREPARE done name=" + string(prepare_name) + " failed=" + string(prepare_failed) + " succeeded=" + string(prepare_succeeded)}'
+
+    - validate_prepare:
+        switch:
+          - condition: ${prepare_failed > 0}
+            steps:
+              - prepare_failed_log:
+                  call: sys.log
+                  args:
+                    severity: ERROR
+                    text: '${"PREPARE falló failedCount=" + string(prepare_failed)}'
+              - raise_prepare:
+                  raise:
+                    message: "Cloud Run Job prepare falló"
+                    failedCount: ${prepare_failed}
+          - condition: true
+            next: read_manifest_meta
+
+    # -------------------------------------------------------------------------
+    # 2) Leer meta del manifiesto (count) desde GCS
+    # -------------------------------------------------------------------------
+    - read_manifest_meta:
+        call: http.get
+        args:
+          url: '${"https://storage.googleapis.com/storage/v1/b/" + gcs_bucket + "/o/" + text.url_encode(manifest_prefix + "/" + process_date + ".meta.json") + "?alt=media"}'
+          auth:
+            type: OAuth2
+        result: meta_http
+
+    - parse_manifest_meta:
+        assign:
+          # http.get ya parsea JSON → body es dict (no string)
+          - manifest_meta: ${meta_http.body}
+          - manifest_count: ${int(default(map.get(manifest_meta, "count"), 0))}
+
+    - log_manifest:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"Manifiesto count=" + string(manifest_count) + " process_date=" + string(process_date)}'
+
+    - maybe_skip_worker:
+        switch:
+          - condition: ${manifest_count == 0}
+            steps:
+              - log_empty:
+                  call: sys.log
+                  args:
+                    severity: WARNING
+                    text: "Manifiesto vacío — no hay archivos; se omite worker e igual se intenta SPs (idempotentes)"
+              - assign_empty_ingest:
+                  assign:
+                    - ingest_summary:
+                        manifest_count: 0
+                        succeededCount: 0
+                        failedCount: 0
+                        completionCount: 0
+                    - worker_skipped: true
+              - after_ingest:
+                  next: maybe_run_sps
+          - condition: true
+            assign:
+              - worker_skipped: false
+            next: run_worker_job
+
+    # -------------------------------------------------------------------------
+    # 3) WORKER: N tasks en paralelo (1 archivo por task)
+    # Igual que prepare: jobs.run espera el fin de TODAS las tasks.
+    # -------------------------------------------------------------------------
+    - run_worker_job:
+        call: googleapis.run.v1.namespaces.jobs.run
+        args:
+          name: '${"namespaces/" + project_id + "/jobs/" + job_name}'
+          location: ${location}
+          body:
+            overrides:
+              taskCount: ${manifest_count}
+              containerOverrides:
+                - env:
+                    - name: QS_JOB_ROLE
+                      value: worker
+                    - name: SYNC_PROCESS_DATE
+                      value: ${process_date}
+                    - name: SYNC_TARGET_DATE
+                      value: ${process_date}
+        result: worker_status
+        # Por defecto el conector corta a 1800s; un día con muchos audios puede pasar de 30 min
+        connector_params:
+          timeout: 14400
+
+    - normalize_worker:
+        assign:
+          - worker_exec: ${default(map.get(worker_status, "response"), worker_status)}
+          - worker_st: ${default(map.get(worker_exec, "status"), json.decode("{}"))}
+          - succeeded_count: ${int(default(map.get(worker_st, "succeededCount"), 0))}
+          - failed_count: ${int(default(map.get(worker_st, "failedCount"), 0))}
+          - completion_count: ${int(default(map.get(worker_st, "completionCount"), succeeded_count + failed_count))}
+          - worker_name: ${default(map.get(default(map.get(worker_exec, "metadata"), json.decode("{}")), "name"), "")}
+          - ingest_summary:
+              manifest_count: ${manifest_count}
+              succeededCount: ${succeeded_count}
+              failedCount: ${failed_count}
+              completionCount: ${completion_count}
+              execution: ${worker_name}
+
+    - log_worker_raw:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"WORKER done name=" + string(default(worker_name, "n/a")) + " failed=" + string(failed_count) + " succeeded=" + string(succeeded_count)}'
+
+    - log_worker_result:
+        switch:
+          - condition: ${failed_count > max_failed_tasks}
+            steps:
+              - log_worker_err:
+                  call: sys.log
+                  args:
+                    severity: ERROR
+                    text: '${"WORKER done succeeded=" + string(succeeded_count) + " failed=" + string(failed_count) + " of " + string(manifest_count)}'
+          - condition: true
+            steps:
+              - log_worker_ok:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: '${"WORKER done succeeded=" + string(succeeded_count) + " failed=" + string(failed_count) + " of " + string(manifest_count)}'
+
+    - gate_on_failures:
+        switch:
+          - condition: ${failed_count > max_failed_tasks}
+            steps:
+              - block_sps:
+                  call: sys.log
+                  args:
+                    severity: ERROR
+                    text: '${"Ingesta incompleta — NO se ejecutan SPs. failed=" + string(failed_count) + " max_allowed=" + string(max_failed_tasks)}'
+              - raise_ingest:
+                  raise:
+                    message: "Ingesta parcial: SPs bloqueados"
+                    ingest: ${ingest_summary}
+          - condition: true
+            next: maybe_run_sps
+
+    # -------------------------------------------------------------------------
+    # 4) SPs en secuencia (cada uno espera al anterior; error detiene el flujo)
+    # -------------------------------------------------------------------------
+    - maybe_run_sps:
+        next: sp_consolidate
+
+    - sp_consolidate:
+        steps:
+          - log_sp1_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_queuesmart_mp3_consolidate(" + process_date + ")"}'
+          - call_sp1:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_queue_smart.sp_queuesmart_mp3_consolidate`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+              result: sp1_job
+          - wait_sp1:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp1:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp1_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp1_status
+          - check_sp1:
+              switch:
+                - condition: ${sp1_status.status.state == "DONE"}
+                  next: sp1_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp1:
+                        call: sys.sleep
+                        args:
+                          seconds: 10
+                    - loop_sp1:
+                        next: poll_sp1
+          - sp1_done_check:
+              switch:
+                - condition: ${"errorResult" in sp1_status.status}
+                  steps:
+                    - log_sp1_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP consolidate FAILED: " + string(default(map.get(map.get(sp1_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp1:
+                        raise:
+                          message: "sp_queuesmart_mp3_consolidate falló"
+                          error: ${sp1_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp1_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP consolidate OK"
+                    - mark_sp1:
+                        assign:
+                          - sp_results["consolidate"]: "ok"
+
+    - maybe_downstream:
+        switch:
+          - condition: ${invoke_downstream_sps == false}
+            next: finalize
+          - condition: true
+            next: sp_transcribe
+
+    - sp_transcribe:
+        steps:
+          - log_sp2_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_queuesmart_mp3_gen_ia(" + process_date + ")"}'
+          - call_sp2:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+              result: sp2_job
+          - wait_sp2:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp2:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp2_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp2_status
+          - check_sp2:
+              switch:
+                - condition: ${sp2_status.status.state == "DONE"}
+                  next: sp2_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp2:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp2:
+                        next: poll_sp2
+          - sp2_done_check:
+              switch:
+                - condition: ${"errorResult" in sp2_status.status}
+                  steps:
+                    - log_sp2_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP gen_ia FAILED: " + string(default(map.get(map.get(sp2_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp2:
+                        raise:
+                          message: "sp_queuesmart_mp3_gen_ia falló"
+                          error: ${sp2_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp2_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP gen_ia (STT) OK"
+                    - mark_sp2:
+                        assign:
+                          - sp_results["gen_ia"]: "ok"
+
+    - sp_gemini:
+        steps:
+          - log_sp3_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_queuesmart_audio_analisis_ia(" + process_date + ")"}'
+          - call_sp3:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_audio_analisis_ia`(DATE ''" + process_date + "'', NULL);"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+              result: sp3_job
+          - wait_sp3:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp3:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp3_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp3_status
+          - check_sp3:
+              switch:
+                - condition: ${sp3_status.status.state == "DONE"}
+                  next: sp3_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp3:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp3:
+                        next: poll_sp3
+          - sp3_done_check:
+              switch:
+                - condition: ${"errorResult" in sp3_status.status}
+                  steps:
+                    - log_sp3_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP analisis FAILED: " + string(default(map.get(map.get(sp3_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp3:
+                        raise:
+                          message: "sp_queuesmart_audio_analisis_ia falló"
+                          error: ${sp3_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp3_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP analisis (Gemini) OK"
+                    - mark_sp3:
+                        assign:
+                          - sp_results["analisis"]: "ok"
+
+    # -------------------------------------------------------------------------
+    # 5) Resumen final
+    # -------------------------------------------------------------------------
+    - finalize:
+        assign:
+          - ended_at: ${sys.now()}
+          - elapsed_seconds: ${ended_at - started_at}
+          - summary:
+              process_date: ${process_date}
+              ingest: ${ingest_summary}
+              sps: ${sp_results}
+              invoke_downstream_sps: ${invoke_downstream_sps}
+              elapsed_seconds: ${elapsed_seconds}
+
+    - log_summary:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"queuesmart pipeline OK process_date=" + string(process_date) + " elapsed_s=" + string(elapsed_seconds)}'
+
+    - return_summary:
+        return: ${summary}

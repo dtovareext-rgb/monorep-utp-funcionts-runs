@@ -14,10 +14,10 @@ hist_queesmart_mp3_catalog          (raw_queue_smart)
 queuesmart_mp3_enriched             (join tickets_hist_raw.audio = source_file_name)
     │
     ▼  sp_queuesmart_mp3_gen_ia          [adf_speech_analytics / US]
-hist_queuesmart_mp3_gen_ia_*        (etapa 1: transcripción)
+hist_queuesmart_mp3_gen_ia_*        (etapa 1: ML.TRANSCRIBE / speech-to-text-v2)
     │
     ▼  sp_queuesmart_audio_analisis_ia   (CALL al final de SP1)
-hist_queuesmart_audio_analisis_ia_* (etapa 2: pauta sys_prompts)
+hist_queuesmart_audio_analisis_ia_* (etapa 2: Gemini + pauta sys_prompts)
 ```
 
 ## Datasets
