@@ -70,9 +70,9 @@ main:
                       value: ${process_date}
                     - name: SYNC_TARGET_DATE
                       value: ${process_date}
+          connector_params:
+            timeout: 3600
         result: prepare_status
-        connector_params:
-          timeout: 3600
 
     # Si el conector devolvió un Operation LRO, el Execution viene en .response
     - normalize_prepare:
@@ -172,10 +172,10 @@ main:
                       value: ${process_date}
                     - name: SYNC_TARGET_DATE
                       value: ${process_date}
+          # Por defecto el conector corta a 1800s; un día con muchos audios puede pasar de 30 min
+          connector_params:
+            timeout: 14400
         result: worker_status
-        # Por defecto el conector corta a 1800s; un día con muchos audios puede pasar de 30 min
-        connector_params:
-          timeout: 14400
 
     - normalize_worker:
         assign:

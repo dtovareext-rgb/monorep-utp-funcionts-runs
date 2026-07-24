@@ -56,16 +56,16 @@ En Cloud Shell o consola BQ (location US):
 
   bq query --use_legacy_sql=false --location=US \
     --project_id=prd-utpbi-data-operation \
-    < queuesmart/bigquery/procedures/sp_queuesmart_mp3_consolidate_A1.sql
+    < sp_queuesmart_mp3_consolidate_A1.sql
 
   bq query --use_legacy_sql=false --location=US \
     --project_id=prd-utpbi-data-operation \
-    < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_A2.sql
+    < sp_queuesmart_mp3_gen_ia_A2.sql
 
   # analisis no necesita cambio de CALL, pero si actualizaste el archivo:
   bq query --use_legacy_sql=false --location=US \
     --project_id=prd-utpbi-data-operation \
-    < queuesmart/bigquery/procedures/sp_queuesmart_audio_analisis_ia_A2.sql
+    < sp_queuesmart_audio_analisis_ia_A2.sql
 
 Con impersonate (si aplica):
 
@@ -89,7 +89,7 @@ Subir daily_pipeline.yaml a Cloud Shell (o clonar repo) y:
   gcloud workflows deploy queuesmart-daily-pipeline \
     --project=prd-utpbi-data-operation \
     --location=us-central1 \
-    --source=queuesmart/workflows/daily_pipeline.yaml \
+    --source=daily_pipeline.yaml \
     --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
     --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
 
@@ -196,6 +196,7 @@ Tu usuario necesita TokenCreator sobre genesys para impersonate.
 ================================================================================
 
   - Timeout 1800 s en run_worker_job → YAML viejo; redeploy con connector_params 14400
+  - parse error unexpected entry 'connector_params' → debe ir DENTRO de args (no al nivel de result)
   - Doble Gen IA → SPs viejos aún con CALL; redeploy consolidate + gen_ia
   - revisionId no sube → no subiste el YAML nuevo a Cloud Shell (rm + upload)
   - sys.log text+json → ya corregido (solo text)
