@@ -11,9 +11,9 @@
 --   1) Candidatos del día SIN transcripción OK en hist_*_mp3_gen_ia_*
 --   2) External table + ML.TRANSCRIBE solo pendientes
 --   3) DELETE/INSERT solo esos gcs_uri (no borra el día completo)
---   4) CALL etapa 2: sp_queuesmart_audio_analisis_ia
+-- Etapa 2 (Gemini) la orquesta Cloud Workflows → sp_queuesmart_audio_analisis_ia
 --
--- Ejecutar (diario, después de sp_queuesmart_mp3_consolidate):
+-- Ejecutar (Cloud Workflows o manual, después de consolidate):
 --   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(
 --     DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY)
 --   );
@@ -460,13 +460,5 @@ BEGIN
       WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios);
     END IF;
   END IF;
-
-  -- ---------------------------------------------------------------------------
-  -- Etapa 2: análisis vs sys_prompts con Gemini (raw_queue_smart)
-  -- ---------------------------------------------------------------------------
-  CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_audio_analisis_ia`(
-    v_fecha_proceso,
-    NULL
-  );
 
 END;

@@ -10,11 +10,11 @@
 --  1.2 Enriquecido GCS + tickets (→ queuesmart_mp3_enriched)
 --      join: COALESCE(source_file_name, file_name) = tickets.audio
 --
--- Ejecutar (diario, después de qs_s3_to_gcs; el Cloud Run lo invoca al terminar):
+-- Ejecutar (diario, después de qs_s3_to_gcs; Cloud Workflows lo invoca):
 --   CALL `prd-utpbi-data-operation.raw_queue_smart.sp_queuesmart_mp3_consolidate`(
 --     DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY)
 --   );
--- Al final llama sp_queuesmart_mp3_gen_ia (misma location US).
+-- Gen IA / análisis los orquesta Cloud Workflows (NO hay CALL anidados aquí).
 -- =============================================================================
 
 CREATE OR REPLACE PROCEDURE `prd-utpbi-data-operation.raw_queue_smart.sp_queuesmart_mp3_consolidate`(
@@ -274,12 +274,5 @@ BEGIN
   FROM temp_mp3_enriched;
 
   DROP TABLE temp_mp3_enriched;
-
-  -- ==========================================
-  -- 1.3 Gen IA (transcribe + análisis) — misma location US
-  -- ==========================================
-  CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(
-    p_fecha_proceso
-  );
 
 END;

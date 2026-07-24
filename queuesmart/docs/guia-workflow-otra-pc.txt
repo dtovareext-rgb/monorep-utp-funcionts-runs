@@ -1,0 +1,207 @@
+================================================================================
+QueeSmart — Guía para otra PC (Workflow + SPs desacoplados + timeout worker)
+Fecha ref: 2026-07-24
+Proyecto: prd-utpbi-data-operation
+================================================================================
+
+Archivos clave en el monorepo
+-----------------------------
+  queuesmart/workflows/daily_pipeline.yaml
+  queuesmart/bigquery/procedures/sp_queuesmart_mp3_consolidate_A1.sql
+  queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_A2.sql
+  queuesmart/bigquery/procedures/sp_queuesmart_audio_analisis_ia_A2.sql
+  qs_s3_to_gcs/src/   (Cloud Run Job prepare/worker)
+
+SA: genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+Job: prd-utpbi-s3-to-gcs-micro-batch
+Bucket: prd-utp-stg-queuesmart
+Workflow: queuesmart-daily-pipeline
+Region workflow/job: us-central1
+BQ location (SPs): US
+
+
+================================================================================
+1) QUÉ CAMBIÓ (resumen)
+================================================================================
+
+A) Workflow
+   - Timeout del conector del WORKER: 14400 s (4 horas). Antes cortaba a 1800 s.
+   - Orquesta: prepare → worker → consolidate → gen_ia → analisis
+   - invoke_downstream_sps default = true
+
+B) SPs desacoplados (IMPORTANTE — correr CREATE OR REPLACE en BQ)
+   - sp_queuesmart_mp3_consolidate: YA NO hace CALL a gen_ia
+   - sp_queuesmart_mp3_gen_ia: YA NO hace CALL a analisis
+   - El Workflow llama los 3 en secuencia y valida errores
+
+C) Job (ya en imagen): prepare/worker, pass-through/FLAC, extensión real, etc.
+
+
+================================================================================
+2) ORDEN EN LA OTRA PC
+================================================================================
+
+  1. Clonar / copiar monorepo (o subir YAMLs/SQLs a Cloud Shell)
+  2. Redeploy SPs en BigQuery (quitar CALL anidados)
+  3. Redeploy Cloud Workflow (YAML con timeout 4h + invoke_downstream_sps true)
+  4. Probar con gcloud workflows run
+  5. (Opcional) Scheduler diario apuntando al Workflow, NO al Job
+
+
+================================================================================
+3) REDEPLOY SPs EN BIGQUERY (quitar CALL entre SPs)
+================================================================================
+
+En Cloud Shell o consola BQ (location US):
+
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    < queuesmart/bigquery/procedures/sp_queuesmart_mp3_consolidate_A1.sql
+
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_A2.sql
+
+  # analisis no necesita cambio de CALL, pero si actualizaste el archivo:
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    < queuesmart/bigquery/procedures/sp_queuesmart_audio_analisis_ia_A2.sql
+
+Con impersonate (si aplica):
+
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    --impersonate_service_account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    < queuesmart/bigquery/procedures/sp_queuesmart_mp3_consolidate_A1.sql
+
+Verificar que ya no hay CALL anidados:
+
+  # En consolidate: NO debe aparecer sp_queuesmart_mp3_gen_ia
+  # En gen_ia: NO debe aparecer sp_queuesmart_audio_analisis_ia
+
+
+================================================================================
+4) DEPLOY DEL WORKFLOW
+================================================================================
+
+Subir daily_pipeline.yaml a Cloud Shell (o clonar repo) y:
+
+  gcloud workflows deploy queuesmart-daily-pipeline \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --source=queuesmart/workflows/daily_pipeline.yaml \
+    --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+
+Si el YAML está en el home de Cloud Shell:
+
+  --source=daily_pipeline.yaml
+
+Tras el deploy, la revisión debe subir (000007, 000008, …).
+
+
+================================================================================
+5) CORRER EL WORKFLOW (manual, sin Scheduler)
+================================================================================
+
+Ejemplo día completo (ingesta + 3 SPs):
+
+  gcloud workflows run queuesmart-daily-pipeline \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    --data='{
+      "process_date": "2026-07-20",
+      "project_id": "prd-utpbi-data-operation",
+      "job_name": "prd-utpbi-s3-to-gcs-micro-batch",
+      "gcs_bucket": "prd-utp-stg-queuesmart",
+      "max_failed_tasks": 0,
+      "invoke_downstream_sps": true
+    }'
+
+Notas:
+  - process_date = fecha de los audios (nombre archivo), no “hoy”.
+  - invoke_downstream_sps true → corre consolidate + gen_ia + analisis.
+  - Worker puede tardar >30 min; el YAML tiene timeout 14400 s (4 h).
+  - Si ya hay muchos archivos en GCS, worker irá más rápido (already_in_gcs).
+
+Ver ejecución:
+
+  gcloud workflows executions list queuesmart-daily-pipeline \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --limit=5 \
+    --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+
+
+================================================================================
+6) SCHEDULER (una vez al día)
+================================================================================
+
+  gcloud scheduler jobs create http queuesmart-daily-pipeline-sched \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --schedule="0 3 * * *" \
+    --time-zone="America/Lima" \
+    --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/queuesmart-daily-pipeline/executions" \
+    --http-method=POST \
+    --oauth-service-account-email=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    --message-body='{}' \
+    --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+
+Body vacío → el workflow calcula “ayer” Lima.
+
+IMPORTANTE: desactivar / no usar el Scheduler viejo que disparaba el Job directo.
+
+
+================================================================================
+7) FLUJO QUE EJECUTA EL WORKFLOW
+================================================================================
+
+  1. Cloud Run Job role=prepare  (1 task) → manifiesto GCS
+       gs://prd-utp-stg-queuesmart/state/manifests/{fecha}.jsonl
+       gs://prd-utp-stg-queuesmart/state/manifests/{fecha}.meta.json
+
+  2. Lee meta.count
+
+  3. Cloud Run Job role=worker (tasks=count, parallelism del Job)
+       timeout conector Workflow: 14400 s
+
+  4. Si failedCount > max_failed_tasks → PARA (no SPs)
+
+  5. CALL sp_queuesmart_mp3_consolidate(fecha)
+
+  6. CALL sp_queuesmart_mp3_gen_ia(fecha)          # STT
+
+  7. CALL sp_queuesmart_audio_analisis_ia(fecha)   # Gemini
+
+
+================================================================================
+8) PERMISOS SA genesys (si falta algo)
+================================================================================
+
+  roles/workflows.admin          (deploy/run workflow)
+  roles/cloudscheduler.admin     (crear scheduler)
+  roles/run.developer            (ejecutar Job)
+  roles/bigquery.jobUser         (CALL SPs)
+  roles/storage.objectAdmin      (manifiestos + audios; o Viewer+escritor Job)
+  Acceso dataEditor a raw_queue_smart y adf_speech_analytics
+  roles/iam.serviceAccountUser   (asignarse como SA del workflow)
+
+Tu usuario necesita TokenCreator sobre genesys para impersonate.
+
+
+================================================================================
+9) TROUBLESHOOTING RÁPIDO
+================================================================================
+
+  - Timeout 1800 s en run_worker_job → YAML viejo; redeploy con connector_params 14400
+  - Doble Gen IA → SPs viejos aún con CALL; redeploy consolidate + gen_ia
+  - revisionId no sube → no subiste el YAML nuevo a Cloud Shell (rm + upload)
+  - sys.log text+json → ya corregido (solo text)
+  - poll_prepare 404 → ya no se usa poll; jobs.run espera el fin
+
+
+================================================================================
+FIN
+================================================================================

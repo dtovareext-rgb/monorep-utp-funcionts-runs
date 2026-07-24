@@ -2,22 +2,12 @@
 # Cloud Workflows — Pipeline diario QueeSmart (S3→GCS → consolidate → STT → Gemini)
 # =============================================================================
 #
-# Sustituye la cadena "cada SP llama al siguiente" y el CALL consolidate desde
-# el Cloud Run Job. El Job solo ingesta; este workflow orquesta y valida.
+# Orquesta: Job prepare → Job worker → 3 SPs en secuencia (sin CALL anidados).
+# Los SPs ya NO se llaman entre sí; este workflow valida cada paso.
 #
-# IMPORTANTE sobre SPs:
-#   Hoy `sp_queuesmart_mp3_consolidate` aún puede hacer CALL a gen_ia, y gen_ia
-#   a analisis. Este YAML invoca los 3 por separado (como pediste). Cuando puedas,
-#   quita esos CALL anidados en los SPs para evitar doble ejecución. Mientras
-#   existan, puedes poner `invoke_downstream_sps: false` y dejar solo consolidate.
+# invoke_downstream_sps: true (default) → corre consolidate + gen_ia + analisis
 #
-# Despliegue (ejemplo PRD):
-#   gcloud workflows deploy queuesmart-daily-pipeline \
-#     --source=queuesmart/workflows/daily_pipeline.yaml \
-#     --location=us-central1 \
-#     --service-account=SA@PROJECT.iam.gserviceaccount.com
-#
-# Scheduler: ejecutar este workflow a las 03:00 America/Lima (no el Job directo).
+# Despliegue / run / scheduler: ver queuesmart/docs/guia-workflow-otra-pc.txt
 # =============================================================================
 
 main:
@@ -33,8 +23,8 @@ main:
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests")}
           # Umbral: si failed_tasks > max_failed_tasks → ERROR y no corre SPs
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
-          # false = solo consolidate (recomendado mientras consolidate→gen_ia→analisis sigan encadenados)
-          - invoke_downstream_sps: ${default(map.get(args, "invoke_downstream_sps"), false)}
+          # true = consolidate + gen_ia + analisis (SPs desacoplados)
+          - invoke_downstream_sps: ${default(map.get(args, "invoke_downstream_sps"), true)}
           - process_date: ${default(map.get(args, "process_date"), null)}
           - started_at: ${sys.now()}
           - pipeline_ok: true
