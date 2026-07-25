@@ -286,6 +286,7 @@ BEGIN
     IF v_audio_count > 0 THEN
       -- ---------------------------------------------------------------------------
       -- 4. Speech-to-Text v2 (Chirp) — solo pendientes
+      --    Con diarization para separar hablantes (speaker_tag por palabra)
       -- ---------------------------------------------------------------------------
       EXECUTE IMMEDIATE FORMAT("""
         CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_stt_results AS
@@ -297,9 +298,18 @@ BEGIN
         FROM ML.TRANSCRIBE(
           MODEL `prd-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`,
           TABLE %s,
-          recognition_config => (
-            JSON '{"language_codes":["es-US"],"model":"chirp","auto_decoding_config":{}}'
-          )
+recognition_config => (
+            JSON "{
+              \"language_codes\":[\"es-US\"],
+              \"model\":\"chirp\",
+              \"auto_decoding_config\":{},
+              \"diarization_config\":{
+                \"enable_speaker_diarization\":true,
+                \"min_speaker_count\":2,
+                \"max_speaker_count\":6
+              }
+            }"
+        )
         )
       """, external_table);
 
@@ -340,6 +350,7 @@ BEGIN
         full_response,
         status,
         transcripcion,
+        transcripcion_con_hablantes,
         resumen,
         intencion,
         idioma,
@@ -379,6 +390,7 @@ BEGIN
         TO_JSON_STRING(s.ml_transcribe_result) AS full_response,
         IFNULL(NULLIF(TRIM(s.ml_transcribe_status), ''), 'OK') AS status,
         s.transcripts AS transcripcion,
+        CAST(NULL AS STRING) AS transcripcion_con_hablantes,
         CAST(NULL AS STRING) AS resumen,
         CAST(NULL AS STRING) AS intencion,
         CAST(NULL AS STRING) AS idioma,
@@ -389,6 +401,32 @@ BEGIN
       FROM tmp_queuesmart_mp3_audios AS m
       INNER JOIN tmp_queuesmart_mp3_stt_results AS s
         ON s.uri = m.gcs_uri;
+
+      -- ---------------------------------------------------------------------------
+      -- 6. Reconstruir transcripción con etiquetas de hablante (Persona 1, Persona 2, ...)
+      --    A partir de ml_transcribe_result.results[].alternatives[].words[].speaker_tag
+      -- ---------------------------------------------------------------------------
+      UPDATE `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw` AS r
+      SET transcripcion_con_hablantes = (
+        WITH words AS (
+          SELECT
+            JSON_EXTRACT_SCALAR(w, '$.word') AS word,
+            CAST(JSON_EXTRACT_SCALAR(w, '$.speaker_tag') AS INT64) AS speaker_tag
+          FROM UNNEST(JSON_EXTRACT_ARRAY(JSON_EXTRACT(r.json_text, '$.results[0].alternatives[0].words'), '$')) AS w
+        ),
+        grouped AS (
+          SELECT
+            speaker_tag,
+            STRING_AGG(word, ' ' ORDER BY speaker_tag) AS text
+          FROM words
+          GROUP BY speaker_tag
+        )
+        SELECT STRING_AGG(CONCAT('Persona ', speaker_tag, ': ', text), ' \n' ORDER BY speaker_tag)
+        FROM grouped
+      )
+      WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios)
+        AND r.json_text IS NOT NULL
+        AND JSON_EXTRACT(r.json_text, '$.results[0].alternatives[0].words') IS NOT NULL;
 
       DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd`
       WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios);
@@ -417,6 +455,7 @@ BEGIN
         clientetipo,
         `database`,
         transcripcion,
+        transcripcion_con_hablantes,
         resumen,
         intencion,
         idioma,
@@ -449,6 +488,7 @@ BEGIN
         clientetipo,
         `database`,
         transcripcion,
+        transcripcion_con_hablantes,
         resumen,
         intencion,
         idioma,
