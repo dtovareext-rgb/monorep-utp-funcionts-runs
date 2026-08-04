@@ -1,11 +1,14 @@
 # =============================================================================
-# Cloud Workflows — Pipeline diario QueeSmart (S3→GCS → consolidate → STT → Gemini)
+# Cloud Workflows — Pipeline diario QueeSmart
 # =============================================================================
 #
-# Orquesta: Job prepare → Job worker → 3 SPs en secuencia (sin CALL anidados).
-# Los SPs ya NO se llaman entre sí; este workflow valida cada paso.
+# Orquesta:
+#   1) Job S3→GCS (prepare + worker)
+#   2) SP consolidate
+#   3) SP gen_ia (ML.TRANSCRIBE por lotes de 25 — anti-timeout)
+#   4) SP analisis Gemini
 #
-# invoke_downstream_sps: true (default) → corre consolidate + gen_ia + analisis
+# invoke_downstream_sps: true (default) → consolidate + gen_ia + analisis
 #
 # Despliegue / run / scheduler: ver queuesmart/docs/guia-workflow-otra-pc.txt
 # =============================================================================
@@ -23,7 +26,7 @@ main:
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests")}
           # Umbral: si failed_tasks > max_failed_tasks → ERROR y no corre SPs
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
-          # true = consolidate + gen_ia + analisis (SPs desacoplados)
+          # true = consolidate + gen_ia + analisis
           - invoke_downstream_sps: ${default(map.get(args, "invoke_downstream_sps"), true)}
           - process_date: ${default(map.get(args, "process_date"), null)}
           - started_at: ${sys.now()}
@@ -232,7 +235,7 @@ main:
             next: maybe_run_sps
 
     # -------------------------------------------------------------------------
-    # 4) SPs en secuencia (cada uno espera al anterior; error detiene el flujo)
+    # 4) SP consolidate (siempre, si llegó aquí)
     # -------------------------------------------------------------------------
     - maybe_run_sps:
         next: sp_consolidate
@@ -311,6 +314,9 @@ main:
           - condition: true
             next: sp_transcribe
 
+    # -------------------------------------------------------------------------
+    # 5) SP gen_ia — STT (ML.TRANSCRIBE por lotes de 25)
+    # -------------------------------------------------------------------------
     - sp_transcribe:
         steps:
           - log_sp2_start:
@@ -373,11 +379,14 @@ main:
                         call: sys.log
                         args:
                           severity: INFO
-                          text: "SP gen_ia (STT) OK"
+                          text: "SP gen_ia (STT por lotes) OK"
                     - mark_sp2:
                         assign:
                           - sp_results["gen_ia"]: "ok"
 
+    # -------------------------------------------------------------------------
+    # 6) SP analisis Gemini
+    # -------------------------------------------------------------------------
     - sp_gemini:
         steps:
           - log_sp3_start:
@@ -446,7 +455,7 @@ main:
                           - sp_results["analisis"]: "ok"
 
     # -------------------------------------------------------------------------
-    # 5) Resumen final
+    # 7) Resumen final
     # -------------------------------------------------------------------------
     - finalize:
         assign:

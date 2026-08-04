@@ -1,6 +1,6 @@
 -- Vista de inspección: audios/videos MP3 candidatos + contexto de chat (sin Gen IA).
--- Mismo filtro que sp_onemarketer_whatsapp_gen_ia:
---   audio/voz → todos; video → solo origin operador/asesor.
+-- Mismo criterio que sp_onemarketer_whatsapp_gen_ia:
+--   se transcriben audios y videos (asesor o cliente) convertidos a MP3.
 
 CREATE OR REPLACE VIEW `prd-utpbi-data-operation.raw_onemarketer.v_onemarketer_whatsapp_mp3_ia_input` AS
 WITH elegibles AS (
@@ -61,6 +61,5 @@ SELECT
   chat_time,
   es_video,
   es_origen_asesor,
-  (NOT es_video OR es_origen_asesor) AS stt_elegible
-FROM elegibles
-WHERE NOT es_video OR es_origen_asesor;
+  TRUE AS stt_elegible
+FROM elegibles;

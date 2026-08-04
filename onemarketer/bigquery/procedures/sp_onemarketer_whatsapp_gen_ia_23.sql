@@ -29,10 +29,7 @@
 --   Etapa 1: ML.TRANSCRIBE → hist_gen_ia_*
 --   Etapa 2: CALL sp_onemarketer_caso_conversacion_ia (Gemini + sys_prompts)
 --
--- Filtro STT (videos):
---   - Notas de voz / audio puro → se transcriben siempre (asesor o cliente).
---   - Contenedores VIDEO (mime video/* o ext .mp4/.mpeg/...) → SOLO si origin
---     es operador/asesor (promos). Videos de cliente se omiten (spam / tokens).
+-- STT: se transcriben audios y videos convertidos a MP3 de asesor y de cliente.
 --
 -- Nota: si speech-to-text-v2 NO tiene SPEECH_RECOGNIZER, agregar recognition_config:
 --   recognition_config => (JSON '{"language_codes":["es-US"],"model":"chirp","auto_decoding_config":{}}')
@@ -55,37 +52,16 @@ BEGIN
   SET conexion = '`prd-utpbi-data-operation.US.utp_gen_ia_process`';
 
   -- ---------------------------------------------------------------------------
-  -- PASO 1: URIs elegibles (MP3 OK + filtro video solo asesor/operador)
+  -- PASO 1: URIs elegibles (MP3 OK — audio y video, asesor o cliente)
   -- ---------------------------------------------------------------------------
   SET v_uris = (
     WITH base AS (
       SELECT mp3.gcs_uri AS uri
       FROM `prd-utpbi-data-operation.raw_onemarketer.reporte_whatsapp_mp3` AS mp3
-      LEFT JOIN `prd-utpbi-data-operation.raw_onemarketer.reporte_chats` AS chats
-        ON chats.fecha_evento = mp3.fecha_evento
-       AND chats.idcase = mp3.idcase
-       AND chats.idmessage = mp3.idmessage
       WHERE mp3.fecha_evento = v_fecha_proceso
         AND mp3.conversion_status IN ('OK', 'SKIPPED_EXISTS', 'SKIPPED_ALREADY_MP3')
         AND mp3.gcs_uri IS NOT NULL
         AND IFNULL(mp3.duration_seconds, 0) >= min_duration_seconds
-        AND (
-          -- Audio / nota de voz: siempre
-          NOT (
-            STARTS_WITH(LOWER(IFNULL(mp3.mime, '')), 'video/')
-            OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.mime, '')), r'(^|/)video(/|$)')
-            OR REGEXP_CONTAINS(
-              LOWER(IFNULL(mp3.source_file_name, IFNULL(mp3.file_name, ''))),
-              r'\.(mp4|m4v|mpeg|mpg|mpe|m2v|mov|qt|avi|mkv|webm|wmv|flv|3gp)(\.|$)'
-            )
-            OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.source_file_name, '')), r'(^|_)video(_|\.|$)')
-          )
-          -- Video: solo operador / asesor
-          OR REGEXP_CONTAINS(
-            LOWER(TRIM(IFNULL(chats.origin, ''))),
-            r'^(operador|asesor)$'
-          )
-        )
     )
     SELECT CONCAT(
       '[',
@@ -142,21 +118,6 @@ BEGIN
       AND mp3.conversion_status IN ('OK', 'SKIPPED_EXISTS', 'SKIPPED_ALREADY_MP3')
       AND mp3.gcs_uri IS NOT NULL
       AND IFNULL(mp3.duration_seconds, 0) >= %f
-      AND (
-        NOT (
-          STARTS_WITH(LOWER(IFNULL(mp3.mime, '')), 'video/')
-          OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.mime, '')), r'(^|/)video(/|$)')
-          OR REGEXP_CONTAINS(
-            LOWER(IFNULL(mp3.source_file_name, IFNULL(mp3.file_name, ''))),
-            r'\\.(mp4|m4v|mpeg|mpg|mpe|m2v|mov|qt|avi|mkv|webm|wmv|flv|3gp)(\\.|$)'
-          )
-          OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.source_file_name, '')), r'(^|_)video(_|\\.|$)')
-        )
-        OR REGEXP_CONTAINS(
-          LOWER(TRIM(IFNULL(chats.origin, ''))),
-          r'^(operador|asesor)$'
-        )
-      )
   """, v_fecha_proceso_str, min_duration_seconds);
 
   SET v_audio_count = (SELECT COUNT(*) FROM tmp_onemarketer_whatsapp_audios);

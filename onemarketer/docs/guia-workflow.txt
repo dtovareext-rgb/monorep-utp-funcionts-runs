@@ -1,0 +1,144 @@
+================================================================================
+OneMarketer — Guía Workflow diario (ETL CF → STT lotes → Gemini)
+Proyecto: prd-utpbi-data-operation
+Fecha ref: 2026-08-04
+================================================================================
+
+Archivos clave
+--------------
+  onemarketer/workflows/daily_pipeline.yaml
+  onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia_24.sql
+  onemarketer/bigquery/procedures/sp_onemarketer_caso_conversacion_ia_23.sql
+  onemarketer/src/   (Cloud Function ETL)
+
+SA Workflow: genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+Workflow: onemarketer-daily-pipeline
+Region workflow / CF: us-central1
+BQ location (SPs Gen IA): US
+
+
+================================================================================
+1) QUÉ CAMBIÓ
+================================================================================
+
+A) Cloud Workflow orquesta el día completo:
+   ETL (Cloud Function) → sp_onemarketer_whatsapp_gen_ia → sp_onemarketer_caso_conversacion_ia
+
+B) SP gen_ia:
+   - ML.TRANSCRIBE por LOTES de 25 (anti-timeout)
+   - YA NO hace CALL a caso_conversacion_ia (desacoplado; lo llama el Workflow)
+
+C) Fase 2 (Job paralelo de media) NO implementada: solo si el tope 500 / timeout CF
+   se vuelve el cuello real.
+
+
+================================================================================
+2) IAM (SA del Workflow)
+================================================================================
+
+La SA del Workflow necesita:
+  - roles/cloudfunctions.invoker  (o run.invoker Gen2) sobre la CF ETL
+  - roles/bigquery.jobUser + dataEditor en adf_speech_analytics / lectura raw_onemarketer
+  - roles/workflows.invoker (para Scheduler → Workflow)
+
+Obtener URL de la CF:
+
+  gcloud functions describe prd-utpbi-onemarketer-reporte-chats \
+    --project=prd-utpbi-data-operation \
+    --region=us-central1 \
+    --gen2 \
+    --format='value(serviceConfig.uri)'
+
+
+================================================================================
+3) REDEPLOY SP STT (lotes + sin CALL etapa 2)
+================================================================================
+
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    < onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia_24.sql
+
+Verificar: el SP NO debe terminar con CALL sp_onemarketer_caso_conversacion_ia.
+
+
+================================================================================
+4) DEPLOY DEL WORKFLOW
+================================================================================
+
+  gcloud workflows deploy onemarketer-daily-pipeline \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --source=onemarketer/workflows/daily_pipeline.yaml \
+    --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+
+
+================================================================================
+5) CORRER MANUAL
+================================================================================
+
+Día completo (ETL + STT + Gemini). Sustituye ETL_URL:
+
+  gcloud workflows run onemarketer-daily-pipeline \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --data='{
+      "process_date": "2026-06-22",
+      "project_id": "prd-utpbi-data-operation",
+      "etl_function_url": "ETL_URL",
+      "invoke_downstream_sps": true,
+      "skip_etl": false
+    }'
+
+Solo Gen IA (ETL ya corrido):
+
+  gcloud workflows run onemarketer-daily-pipeline \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --data='{
+      "process_date": "2026-06-22",
+      "etl_function_url": "ETL_URL",
+      "skip_etl": true,
+      "invoke_downstream_sps": true
+    }'
+
+Notas:
+  - process_date = día de los chats/medios (no “hoy” del job).
+  - Timeout HTTP del ETL en el Workflow: 1800 s. Si la CF tarda >30 min,
+    el Workflow puede cortar aunque la CF siga; en ese caso usar skip_etl
+    o revisar el tope de medios (candidato a Fase 2 Job paralelo).
+  - Timeout SPs (STT / Gemini) en el conector BQ: 14400 s (4 h).
+
+
+================================================================================
+6) SCHEDULER → WORKFLOW (reemplaza Scheduler → CF directa)
+================================================================================
+
+Crear (o actualizar) Scheduler apuntando al Workflow, NO a la CF:
+
+  gcloud scheduler jobs create http onemarketer-daily-pipeline-sched \
+    --project=prd-utpbi-data-operation \
+    --location=us-central1 \
+    --schedule="0 4 * * *" \
+    --time-zone="America/Lima" \
+    --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/onemarketer-daily-pipeline/executions" \
+    --http-method=POST \
+    --oauth-service-account-email=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    --message-body='{
+      "argument": "{\"etl_function_url\":\"ETL_URL\",\"invoke_downstream_sps\":true}"
+    }' \
+    --headers="Content-Type=application/json"
+
+Si ya existe un Scheduler solo a la CF (scheduler-setup.sh), desactívalo o
+bórralo para no duplicar el ETL.
+
+Sin process_date en el body, el Workflow usa “ayer” UTC-5.
+
+
+================================================================================
+7) CRITERIO FASE 2 (Job media paralelo)
+================================================================================
+
+Medir 1–2 semanas:
+  - ¿Quedan medios pendientes por max_files_per_run=500?
+  - ¿Timeout / errores frecuentes en la CF?
+Si sí → diseñar Job prepare/worker (como qs_s3_to_gcs). Si no → quedarse así.

@@ -6,9 +6,11 @@
 -- Tickets:  raw_queue_smart.tickets_hist_raw
 --
 -- Ventana: [p_fecha_proceso - 3 días, p_fecha_proceso]
---  1.1 Catálogo MP3 (hist → queuesmart_mp3_catalog), dedup por gcs_uri
---  1.2 Enriquecido GCS + tickets (→ queuesmart_mp3_enriched)
---      join: COALESCE(source_file_name, file_name) = tickets.audio
+-- Flujo (reproceso por fecha/ventana):
+--   0) DELETE catalog + enriched de la ventana
+--   1.1 Catálogo MP3 (hist → queuesmart_mp3_catalog), dedup por gcs_uri
+--   1.2 Enriquecido GCS + tickets (→ queuesmart_mp3_enriched)
+--       join: COALESCE(source_file_name, file_name) = tickets.audio
 --
 -- Ejecutar (diario, después de qs_s3_to_gcs; Cloud Workflows lo invoca):
 --   CALL `prd-utpbi-data-operation.raw_queue_smart.sp_queuesmart_mp3_consolidate`(
@@ -26,6 +28,15 @@ BEGIN
 
   SET start_date = DATE_SUB(p_fecha_proceso, INTERVAL 3 DAY);
   SET v_load_date = DATETIME(CURRENT_TIMESTAMP(), 'America/Lima');
+
+  -- ==========================================
+  -- 0. Reproceso: limpia catalog + enriched de la ventana
+  -- ==========================================
+  DELETE FROM `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_catalog`
+  WHERE process_day BETWEEN start_date AND p_fecha_proceso;
+
+  DELETE FROM `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_enriched`
+  WHERE process_day BETWEEN start_date AND p_fecha_proceso;
 
   -- ==========================================
   -- 1.1 Catálogo MP3 en GCS (Método Vaso de Agua)
@@ -74,9 +85,6 @@ BEGIN
     v_load_date AS load_date
   FROM base_ranked
   WHERE rn = 1;
-
-  DELETE FROM `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_catalog`
-  WHERE gcs_uri IN (SELECT DISTINCT gcs_uri FROM temp_mp3_catalog);
 
   INSERT INTO `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_catalog` (
     process_day,

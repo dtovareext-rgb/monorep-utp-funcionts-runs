@@ -2,6 +2,7 @@
 --
 -- IMPORTANTE: SP y tablas hist van en adf_speech_analytics (US), NO en raw_onemarketer.
 -- Vista hilo completo en raw_onemarketer (us-central1).
+-- Orquestación diaria: Cloud Workflows — ver onemarketer/docs/guia-workflow.txt
 --
 -- Orden (tablas con data → usar ALTER, no CREATE OR REPLACE):
 --
@@ -17,15 +18,19 @@
 --   < onemarketer/bigquery/views/v_onemarketer_caso_hilo_completo.sql
 --
 -- bq query --use_legacy_sql=false --location=US \
---   < onemarketer/bigquery/procedures/sp_onemarketer_caso_conversacion_ia.sql
+--   < onemarketer/bigquery/procedures/sp_onemarketer_caso_conversacion_ia_23.sql
 --
 -- bq query --use_legacy_sql=false --location=US \
---   < onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia.sql
+--   < onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia_24.sql
 --
--- CALL (un solo job — etapa 1 llama etapa 2 al final):
---   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia`(DATE '2026-06-22');
+-- Workflow (recomendado):
+--   gcloud workflows deploy onemarketer-daily-pipeline ...
+--   (ETL CF → SP STT lotes → SP Gemini)
 --
--- Re-solo etapa 2 (sin re-transcribir audios):
---   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_caso_conversacion_ia`(DATE '2026-06-22', NULL);
+-- Manual etapa 1 (STT; ya NO llama etapa 2):
+--   CALL `…sp_onemarketer_whatsapp_gen_ia`(DATE '2026-06-22');
+--
+-- Manual etapa 2 (sin re-transcribir):
+--   CALL `…sp_onemarketer_caso_conversacion_ia`(DATE '2026-06-22', NULL);
 --
 -- Nota: hist_onemarketer_whatsapp_gen_ia_* no requieren ALTER (STT reusa las columnas).

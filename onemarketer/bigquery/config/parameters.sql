@@ -47,9 +47,13 @@
 --   DEV:  utp_pregrado_endpoint/reporteChats/services/getChats   (config.json default)
 --   PRD:  utp_pregrado_endpoint/reportechats/services/getChats  (activador: _GCS_PATH → GCP_GCS_PATH)
 --
--- Orquestación sugerida:
---   Cloud Scheduler / ADF → CALL adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia(DATE);
---   Ejecutar DESPUÉS del job onemarketer-etl del mismo día (job en us-central1, SP en US).
+-- Orquestación (Cloud Workflows — ver onemarketer/docs/guia-workflow.txt):
+--   Scheduler → Workflow onemarketer-daily-pipeline
+--     1) Cloud Function ETL (chats + medios)
+--     2) CALL sp_onemarketer_whatsapp_gen_ia(DATE)          -- STT por lotes de 25
+--     3) CALL sp_onemarketer_caso_conversacion_ia(DATE, NULL) -- Gemini
+--   sp_onemarketer_whatsapp_gen_ia YA NO llama etapa 2.
+--   Ejecutar DESPUÉS del ETL del mismo día (job CF en us-central1, SPs en US).
 --
 -- IAM:
 --   SA del job BQ: speech-to-text + Gemini; lectura GCS vía CONNECTION

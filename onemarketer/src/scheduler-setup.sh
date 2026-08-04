@@ -2,6 +2,11 @@
 # Crea/actualiza Cloud Scheduler apuntando a la Cloud Function Gen2.
 # Usa gcp.* de config/config.json (o overrides GCP_* si están exportadas en el shell).
 # Ejecutar desde onemarketer/src con: ./scheduler-setup.sh
+#
+# NOTA (2026-08): el pipeline diario recomendado es Cloud Workflows
+# (ETL → STT → Gemini). Ver onemarketer/docs/guia-workflow.txt
+# Este script deja el Scheduler SOLO en la CF (útil para ETL aislado / debug).
+# Para producción, apunta el Scheduler al Workflow y no dupliques ETL.
 set -euo pipefail
 
 CONFIG_FILE="config/config.json"

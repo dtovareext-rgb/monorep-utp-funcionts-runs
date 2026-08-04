@@ -1,4 +1,17 @@
-##################################################
+-- =============================================================================
+-- UPSERT canal_counter_prompt (anti-crosstalk)
+-- Fuente: queuesmart/prompts/canal_counter_prompt_completo.txt
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   --project_id=prd-utpbi-data-operation \
+--   < queuesmart/bigquery/sqls/update_sys_prompts_canal_counter_crosstalk.sql
+-- =============================================================================
+
+MERGE `prd-utpbi-data-operation.raw_queue_smart.sys_prompts` AS T
+USING (
+  SELECT
+    'canal_counter_prompt' AS prompt_name,
+    '''##################################################
 ROL Y CONTEXTO
 ##################################################
 
@@ -1431,4 +1444,24 @@ Código: {{asesor_codigo}}
 
 INSTRUCCION FINAL DE CROSSTALK:
 Antes de puntuar, identifica el hilo principal asesor-prospecto usando el nombre del asesor del ticket.
-Descarta voces de fondo o de counters vecinos. No penalices por audio ajeno.
+Descarta voces de fondo o de counters vecinos. No penalices por audio ajeno.''' AS prompt_text,
+    CURRENT_TIMESTAMP() AS updated_at
+) AS S
+ON T.prompt_name = S.prompt_name
+WHEN MATCHED THEN
+  UPDATE SET
+    prompt_text = S.prompt_text,
+    updated_at = S.updated_at
+WHEN NOT MATCHED THEN
+  INSERT (prompt_name, prompt_text, updated_at)
+  VALUES (S.prompt_name, S.prompt_text, S.updated_at);
+
+SELECT
+  prompt_name,
+  updated_at,
+  LENGTH(prompt_text) AS chars,
+  STRPOS(prompt_text, 'REGLAS ANTI-CROSSTALK') > 0 AS tiene_anti_crosstalk,
+  STRPOS(prompt_text, '{{asesor_nombre}}') > 0 AS tiene_asesor,
+  STRPOS(prompt_text, '{{transcripcion}}') > 0 AS tiene_placeholder
+FROM `prd-utpbi-data-operation.raw_queue_smart.sys_prompts`
+WHERE prompt_name = 'canal_counter_prompt';

@@ -1,0 +1,295 @@
+# =============================================================================
+# Cloud Workflows — Pipeline diario OneMarketer
+# =============================================================================
+#
+# Orquesta (mismo patrón que QueeSmart, sin Job STT):
+#   1) Cloud Function ETL (chats + medios + MP3 + OCR)
+#   2) SP gen_ia — STT por lotes de 25
+#   3) SP caso_conversacion — Gemini
+#
+# invoke_downstream_sps: true (default) → STT + Gemini tras ETL
+# skip_etl: false (default) → si true, solo corre SPs (reproceso Gen IA)
+#
+# Despliegue / run / scheduler: ver onemarketer/docs/guia-workflow.txt
+# =============================================================================
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
+          - location: ${default(map.get(args, "location"), "us-central1")}
+          - bq_location: ${default(map.get(args, "bq_location"), "US")}
+          # URL Gen2 de la CF (gcloud functions describe … --format='value(serviceConfig.uri)')
+          - etl_function_url: ${default(map.get(args, "etl_function_url"), "")}
+          - etl_function_name: ${default(map.get(args, "etl_function_name"), "prd-utpbi-onemarketer-reporte-chats")}
+          - days_back: ${default(map.get(args, "days_back"), 0)}
+          - force_reprocess: ${default(map.get(args, "force_reprocess"), false)}
+          - skip_etl: ${default(map.get(args, "skip_etl"), false)}
+          - invoke_downstream_sps: ${default(map.get(args, "invoke_downstream_sps"), true)}
+          - process_date: ${default(map.get(args, "process_date"), null)}
+          - started_at: ${sys.now()}
+          - etl_summary: {}
+          - sp_results: {}
+
+    - resolve_process_date:
+        switch:
+          - condition: ${process_date != null}
+            next: resolve_etl_url
+          - condition: true
+            steps:
+              - compute_yesterday:
+                  assign:
+                    # Aprox UTC-5 (Lima). Preferir process_date explícito desde Scheduler.
+                    - process_date: ${text.substring(time.format(sys.now() - 18000), 0, 10)}
+
+    - resolve_etl_url:
+        switch:
+          - condition: ${etl_function_url != ""}
+            next: log_start
+          - condition: true
+            steps:
+              - build_etl_url:
+                  assign:
+                    # Forma cloudfunctions.net Gen2 (si falla, pasar etl_function_url explícita)
+                    - etl_function_url: '${"https://" + location + "-" + project_id + ".cloudfunctions.net/" + etl_function_name}'
+
+    - log_start:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"onemarketer pipeline START process_date=" + process_date + " skip_etl=" + string(skip_etl)}'
+
+    # -------------------------------------------------------------------------
+    # 1) ETL Cloud Function (chats + media)
+    # -------------------------------------------------------------------------
+    - maybe_etl:
+        switch:
+          - condition: ${skip_etl == true}
+            steps:
+              - log_skip_etl:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: "ETL omitido (skip_etl=true)"
+              - mark_etl_skipped:
+                  assign:
+                    - etl_summary:
+                        status: "skipped"
+              - after_skip_etl:
+                  next: maybe_run_sps
+          - condition: true
+            next: run_etl
+
+    - run_etl:
+        call: http.post
+        args:
+          url: ${etl_function_url}
+          auth:
+            type: OIDC
+          headers:
+            Content-Type: "application/json"
+          body:
+            current_date: ${process_date}
+            days_back: ${days_back}
+            force_reprocess: ${force_reprocess}
+          timeout: 1800
+        result: etl_http
+
+    - normalize_etl:
+        assign:
+          - etl_body: ${default(etl_http.body, json.decode("{}"))}
+          - etl_status: ${default(map.get(etl_body, "status"), "unknown")}
+          - etl_failed: ${int(default(map.get(etl_body, "failed"), 0))}
+          - etl_summary:
+              status: ${etl_status}
+              failed: ${etl_failed}
+              body: ${etl_body}
+
+    - log_etl_done:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"ETL done status=" + string(etl_status) + " failed_dates=" + string(etl_failed)}'
+
+    - validate_etl:
+        switch:
+          - condition: ${etl_status == "error" or etl_failed > 0}
+            steps:
+              - raise_etl:
+                  raise:
+                    message: "Cloud Function ETL OneMarketer falló o parcial"
+                    etl: ${etl_summary}
+          - condition: true
+            next: maybe_run_sps
+
+    # -------------------------------------------------------------------------
+    # 2) SPs Gen IA
+    # -------------------------------------------------------------------------
+    - maybe_run_sps:
+        switch:
+          - condition: ${invoke_downstream_sps == false}
+            next: finalize
+          - condition: true
+            next: sp_transcribe
+
+    - sp_transcribe:
+        steps:
+          - log_sp1_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_onemarketer_whatsapp_gen_ia(" + process_date + ")"}'
+          - call_sp1:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+              # STT por lotes puede pasar de 30 min; default del conector = 1800s
+              connector_params:
+                timeout: 14400
+              result: sp1_job
+          - wait_sp1:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp1:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp1_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp1_status
+          - check_sp1:
+              switch:
+                - condition: ${sp1_status.status.state == "DONE"}
+                  next: sp1_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp1:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp1:
+                        next: poll_sp1
+          - sp1_done_check:
+              switch:
+                - condition: ${"errorResult" in sp1_status.status}
+                  steps:
+                    - log_sp1_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP gen_ia FAILED: " + string(default(map.get(map.get(sp1_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp1:
+                        raise:
+                          message: "sp_onemarketer_whatsapp_gen_ia falló"
+                          error: ${sp1_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp1_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP gen_ia (STT por lotes) OK"
+                    - mark_sp1:
+                        assign:
+                          - sp_results["gen_ia"]: "ok"
+
+    - sp_gemini:
+        steps:
+          - log_sp2_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_onemarketer_caso_conversacion_ia(" + process_date + ")"}'
+          - call_sp2:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_onemarketer_caso_conversacion_ia`(DATE ''" + process_date + "'', NULL);"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+              connector_params:
+                timeout: 14400
+              result: sp2_job
+          - wait_sp2:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp2:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp2_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp2_status
+          - check_sp2:
+              switch:
+                - condition: ${sp2_status.status.state == "DONE"}
+                  next: sp2_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp2:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp2:
+                        next: poll_sp2
+          - sp2_done_check:
+              switch:
+                - condition: ${"errorResult" in sp2_status.status}
+                  steps:
+                    - log_sp2_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP caso_conversacion FAILED: " + string(default(map.get(map.get(sp2_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp2:
+                        raise:
+                          message: "sp_onemarketer_caso_conversacion_ia falló"
+                          error: ${sp2_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp2_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP caso_conversacion (Gemini) OK"
+                    - mark_sp2:
+                        assign:
+                          - sp_results["caso_conversacion"]: "ok"
+
+    - finalize:
+        assign:
+          - ended_at: ${sys.now()}
+          - elapsed_seconds: ${ended_at - started_at}
+          - summary:
+              process_date: ${process_date}
+              etl: ${etl_summary}
+              sps: ${sp_results}
+              invoke_downstream_sps: ${invoke_downstream_sps}
+              skip_etl: ${skip_etl}
+              elapsed_seconds: ${elapsed_seconds}
+
+    - log_summary:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"onemarketer pipeline OK process_date=" + string(process_date) + " elapsed_s=" + string(elapsed_seconds)}'
+
+    - return_summary:
+        return: ${summary}

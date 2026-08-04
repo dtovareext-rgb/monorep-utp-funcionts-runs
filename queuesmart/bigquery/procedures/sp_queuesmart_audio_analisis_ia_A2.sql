@@ -4,13 +4,16 @@
 -- Evalúa cada transcripción (etapa 1) con prompt de
 --   raw_queue_smart.sys_prompts
 --
--- Incremental: solo gcs_uri del día SIN evaluacion_json en hist análisis PRD.
--- DELETE/INSERT solo esos URIs (no borra el día completo).
+-- Flujo (reproceso por fecha):
+--   0) DELETE hist análisis raw/prd del día
+--   1) Toma todas las transcripciones del día desde hist STT PRD
+--   2) AI.GENERATE_TABLE + INSERT hist análisis
 --
 -- Formato salida: queuesmart/prompts/Canal_Admision_Output.md
 --   arreglo JSON [{ ... }] con *_marcacion / *_descripcion
 --
--- Placeholders: {{transcripcion}}  {{conversacion}}  {{audio}}
+-- Placeholders: {{transcripcion}} {{transcripcion_con_hablantes}}
+--               {{asesor_nombre}} {{asesor_usuario}} {{asesor_codigo}}
 -- Default prompt_name: canal_counter_prompt
 --
 -- CALL:
@@ -28,6 +31,15 @@ BEGIN
   DECLARE v_audio_count INT64;
 
   SET v_effective_prompt = IFNULL(NULLIF(TRIM(v_prompt_name), ''), 'canal_counter_prompt');
+
+  -- ---------------------------------------------------------------------------
+  -- 0. Reproceso por fecha: borra hist análisis del día
+  -- ---------------------------------------------------------------------------
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
+  WHERE process_date = v_fecha_proceso;
+
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
+  WHERE process_date = v_fecha_proceso;
 
   SET (v_sys_prompt, v_prompt_updated_at) = (
     SELECT AS STRUCT prompt_text, updated_at
@@ -65,41 +77,40 @@ BEGIN
     h.clientetipo,
     h.`database`,
     h.transcripcion,
+    h.transcripcion_con_hablantes,
     CASE
+      WHEN STRPOS(v_sys_prompt, '{{transcripcion_con_hablantes}}') > 0 THEN
+        REPLACE(REPLACE(REPLACE(REPLACE(v_sys_prompt, '{{transcripcion_con_hablantes}}', IFNULL(h.transcripcion_con_hablantes, IFNULL(h.transcripcion, ''))), '{{asesor_nombre}}', IFNULL(h.asesornombre, 'N/D')), '{{asesor_usuario}}', IFNULL(h.asesorusuario, 'N/D')), '{{asesor_codigo}}', IFNULL(h.asesorcodigo, 'N/D'))
       WHEN STRPOS(v_sys_prompt, '{{transcripcion}}') > 0 THEN
-        REPLACE(v_sys_prompt, '{{transcripcion}}', IFNULL(h.transcripcion, ''))
+        REPLACE(REPLACE(REPLACE(REPLACE(v_sys_prompt, '{{transcripcion}}', IFNULL(h.transcripcion, '')), '{{asesor_nombre}}', IFNULL(h.asesornombre, 'N/D')), '{{asesor_usuario}}', IFNULL(h.asesorusuario, 'N/D')), '{{asesor_codigo}}', IFNULL(h.asesorcodigo, 'N/D'))
       WHEN STRPOS(v_sys_prompt, '{{conversacion}}') > 0 THEN
-        REPLACE(v_sys_prompt, '{{conversacion}}', IFNULL(h.transcripcion, ''))
+        REPLACE(REPLACE(REPLACE(REPLACE(v_sys_prompt, '{{conversacion}}', IFNULL(h.transcripcion, '')), '{{asesor_nombre}}', IFNULL(h.asesornombre, 'N/D')), '{{asesor_usuario}}', IFNULL(h.asesorusuario, 'N/D')), '{{asesor_codigo}}', IFNULL(h.asesorcodigo, 'N/D'))
       WHEN STRPOS(v_sys_prompt, '{{audio}}') > 0 THEN
-        REPLACE(v_sys_prompt, '{{audio}}', IFNULL(h.transcripcion, ''))
+        REPLACE(REPLACE(REPLACE(REPLACE(v_sys_prompt, '{{audio}}', IFNULL(h.transcripcion, '')), '{{asesor_nombre}}', IFNULL(h.asesornombre, 'N/D')), '{{asesor_usuario}}', IFNULL(h.asesorusuario, 'N/D')), '{{asesor_codigo}}', IFNULL(h.asesorcodigo, 'N/D'))
       ELSE
         CONCAT(
           v_sys_prompt,
-          '\n\n--- TRANSCRIPCION A EVALUAR ---\n',
-          IFNULL(h.transcripcion, ''),
+          '\n\n--- TRANSCRIPCION CON HABLANTES ---\n',
+          IFNULL(h.transcripcion_con_hablantes, IFNULL(h.transcripcion, '')),
+          '\n\n--- IDENTIDAD ASESOR ---\n',
+          'asesor_nombre: ', IFNULL(h.asesornombre, 'N/D'), '\n',
+          'asesor_usuario: ', IFNULL(h.asesorusuario, 'N/D'), '\n',
+          'asesor_codigo: ', IFNULL(h.asesorcodigo, 'N/D'), '\n',
           '\n\n--- CONTEXTO TICKET ---\n',
           'archivo: ', IFNULL(h.source_file_name, h.file_name), '\n',
-          'asesor: ', IFNULL(h.asesornombre, 'N/D'), '\n',
           'recordid: ', IFNULL(h.recordid, 'N/D'), '\n',
           'campus: ', IFNULL(h.campus_code, 'N/D')
         )
     END AS prompt
   FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd` AS h
-  LEFT JOIN (
-    SELECT DISTINCT gcs_uri
-    FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
-    WHERE NULLIF(TRIM(evaluacion_json), '') IS NOT NULL
-  ) AS done
-    ON done.gcs_uri = h.gcs_uri
   WHERE h.process_date = v_fecha_proceso
-    AND NULLIF(TRIM(h.transcripcion), '') IS NOT NULL
-    AND done.gcs_uri IS NULL;
+    AND NULLIF(TRIM(h.transcripcion), '') IS NOT NULL;
 
   SET v_audio_count = (SELECT COUNT(*) FROM tmp_queuesmart_audio_analisis_input);
 
   IF v_audio_count = 0 THEN
     SELECT FORMAT(
-      'Sin transcripciones pendientes de análisis para fecha %s — etapa 2 finaliza.',
+      'Sin transcripciones para análisis en fecha %s — etapa 2 finaliza.',
       FORMAT_DATE('%Y-%m-%d', v_fecha_proceso)
     );
     RETURN;

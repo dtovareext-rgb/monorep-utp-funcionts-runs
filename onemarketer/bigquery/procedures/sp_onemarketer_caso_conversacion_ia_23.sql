@@ -4,6 +4,8 @@
 -- Evalúa la conversación ENTERA por idcase con canal_escrito_prompt.
 -- Parsea el JSON definido en docs/prompt_canal_escrito_formato_salida.txt
 --
+-- Reproceso: DELETE hist raw/prd del día al inicio (permite re-ejecutar limpio).
+--
 -- CALL:
 --   CALL `...sp_onemarketer_caso_conversacion_ia`(DATE '2026-06-22', NULL);
 -- =============================================================================
@@ -32,6 +34,15 @@ BEGIN
     SELECT FORMAT('Prompt "%s" no encontrado o vacío en sys_prompts — etapa 2 finaliza.', v_effective_prompt);
     RETURN;
   END IF;
+
+  -- ---------------------------------------------------------------------------
+  -- 0. Reproceso por fecha: borra hist del día (permite re-ejecutar limpio)
+  -- ---------------------------------------------------------------------------
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_caso_conversacion_ia_process_data_raw`
+  WHERE process_date = v_fecha_proceso;
+
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_caso_conversacion_ia_process_data_prd`
+  WHERE process_date = v_fecha_proceso;
 
   CREATE OR REPLACE TEMP TABLE tmp_onemarketer_caso_conversacion_input AS
   SELECT
@@ -76,9 +87,6 @@ BEGIN
       0 AS temperature
     )
   ) AS ia;
-
-  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_caso_conversacion_ia_process_data_raw`
-  WHERE process_date = v_fecha_proceso;
 
   -- INSERT con columnas explícitas: la tabla PRD puede ser híbrida
   -- (schema viejo + ALTER) y no coincide por posición (atributo_valor vs atributo).
@@ -291,9 +299,6 @@ BEGIN
     JSON_VALUE(evaluacion_json, '$.atributos.afecta_imagen_negocio.descripcion') AS afecta_imagen_negocio_descripcion,
     DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
   FROM cte_cleaned_json;
-
-  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_caso_conversacion_ia_process_data_prd`
-  WHERE process_date = v_fecha_proceso;
 
   INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_caso_conversacion_ia_process_data_prd` (
     process_date,

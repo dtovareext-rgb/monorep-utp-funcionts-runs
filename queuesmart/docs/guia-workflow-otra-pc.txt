@@ -32,9 +32,11 @@ A) Workflow
 B) SPs desacoplados (IMPORTANTE — correr CREATE OR REPLACE en BQ)
    - sp_queuesmart_mp3_consolidate: YA NO hace CALL a gen_ia
    - sp_queuesmart_mp3_gen_ia: YA NO hace CALL a analisis
+   - sp_queuesmart_mp3_gen_ia: ML.TRANSCRIBE por LOTES de 25 (anti-timeout con ~100+ audios)
    - El Workflow llama los 3 en secuencia y valida errores
 
 C) Job (ya en imagen): prepare/worker, pass-through/FLAC, extensión real, etc.
+   - STT sigue en el SP (no en Job qsmart_transcribe; ese experimento no aplica por decisión cliente)
 
 
 ================================================================================
@@ -111,7 +113,7 @@ Ejemplo día completo (ingesta + 3 SPs):
     --location=us-central1 \
     --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
     --data='{
-      "process_date": "2026-06-19",
+      "process_date": "2026-06-02",
       "project_id": "prd-utpbi-data-operation",
       "job_name": "prd-utpbi-s3-to-gcs-micro-batch",
       "gcs_bucket": "prd-utp-stg-queuesmart",
@@ -206,3 +208,11 @@ Tu usuario necesita TokenCreator sobre genesys para impersonate.
 ================================================================================
 FIN
 ================================================================================
+
+
+# Usa bq query con el texto del archivo
+bq query --use_legacy_sql=false --location=US \
+  --project_id=prd-utpbi-data-operation \
+  --parameter='prompt_name:STRING:canal_counter_prompt' \
+  --parameter='prompt_text:STRING:$(cat canal_counter_prompt_completo.txt)' \
+  "UPDATE \`prd-utpbi-data-operation.raw_queue_smart.sys_prompts\` SET prompt_text = @prompt_text WHERE prompt_name = @prompt_name"

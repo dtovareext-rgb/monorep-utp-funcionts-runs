@@ -2,9 +2,11 @@
 -- SP: OneMarketer WhatsApp — Etapa 1 (transcripción STT) — PRODUCCIÓN
 --
 -- Propósito:
---   Transcribir audios MP3 de WhatsApp (OneMarketer) con speech-to-text-v2
+--   Transcribir audios/videos MP3 de WhatsApp (OneMarketer) con speech-to-text-v2
 --   y persistir en hist_onemarketer_whatsapp_gen_ia_*.
---   Luego CALL etapa 2 (Gemini + canal_escrito_prompt) por idcase.
+--
+-- Técnica anti-timeout:
+--   ML.TRANSCRIBE por LOTES (v_batch_size, default 25) en un WHILE.
 --
 -- Proyecto:  prd-utpbi-data-operation
 -- Fuente:    raw_onemarketer.reporte_whatsapp_mp3 + reporte_chats (us-central1)
@@ -12,30 +14,21 @@
 -- STT:       adf_speech_analytics.speech-to-text-v2  (ML.TRANSCRIBE / Chirp)
 -- Conexión:  US.utp_gen_ia_process
 --
--- Prerrequisitos:
---   1. Cloud Function onemarketer del día → reporte_whatsapp_mp3 con MP3 en GCS
---   2. Tablas hist creadas
---   3. Modelo speech-to-text-v2 y conexión utp_gen_ia_process en US
---
 -- Desplegar (--location=US):
---   bq query --use_legacy_sql=false --location=US < procedures/sp_onemarketer_whatsapp_gen_ia.sql
+--   bq query --use_legacy_sql=false --location=US \
+--     < onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia_24.sql
 --
--- Ejecutar:
+-- Flujo (reproceso por fecha):
+--   0) DELETE hist raw/prd del día
+--   1) Metadata + ML.TRANSCRIBE por lotes → hist
+-- Etapa 2 la orquesta Cloud Workflows → sp_onemarketer_caso_conversacion_ia
+--
+-- Ejecutar (solo etapa 1; etapa 2 la orquesta el Workflow):
 --   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia`(
 --     DATE '2026-06-22'
 --   );
 --
--- Flujo:
---   Etapa 1: ML.TRANSCRIBE → hist_gen_ia_*
---   Etapa 2: CALL sp_onemarketer_caso_conversacion_ia (Gemini + sys_prompts)
---
--- Filtro STT (videos):
---   - Notas de voz / audio puro → se transcriben siempre (asesor o cliente).
---   - Contenedores VIDEO (mime video/* o ext .mp4/.mpeg/...) → SOLO si origin
---     es operador/asesor (promos). Videos de cliente se omiten (spam / tokens).
---
--- Nota: si speech-to-text-v2 NO tiene SPEECH_RECOGNIZER, agregar recognition_config:
---   recognition_config => (JSON '{"language_codes":["es-US"],"model":"chirp","auto_decoding_config":{}}')
+-- STT: se transcriben audios y videos convertidos a MP3 de asesor y de cliente.
 -- =============================================================================
 
 CREATE OR REPLACE PROCEDURE `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia`(
@@ -49,76 +42,26 @@ BEGIN
   DECLARE v_sql STRING;
   DECLARE min_duration_seconds FLOAT64 DEFAULT 0.0;
   DECLARE v_audio_count INT64;
+  DECLARE v_batch_size INT64 DEFAULT 25;
+  DECLARE v_offset INT64 DEFAULT 0;
+  DECLARE v_batch_num INT64 DEFAULT 0;
+  DECLARE v_batch_count INT64;
 
   SET v_fecha_proceso_str = FORMAT_DATE('%Y-%m-%d', v_fecha_proceso);
   SET external_table = '`prd-utpbi-data-operation.adf_speech_analytics.tmp_utp_external_table_onemarketer_whatsapp`';
   SET conexion = '`prd-utpbi-data-operation.US.utp_gen_ia_process`';
 
   -- ---------------------------------------------------------------------------
-  -- PASO 1: URIs elegibles (MP3 OK + filtro video solo asesor/operador)
+  -- 0. Reproceso por fecha: borra hist del día (permite re-ejecutar limpio)
   -- ---------------------------------------------------------------------------
-  SET v_uris = (
-    WITH base AS (
-      SELECT mp3.gcs_uri AS uri
-      FROM `prd-utpbi-data-operation.raw_onemarketer.reporte_whatsapp_mp3` AS mp3
-      LEFT JOIN `prd-utpbi-data-operation.raw_onemarketer.reporte_chats` AS chats
-        ON chats.fecha_evento = mp3.fecha_evento
-       AND chats.idcase = mp3.idcase
-       AND chats.idmessage = mp3.idmessage
-      WHERE mp3.fecha_evento = v_fecha_proceso
-        AND mp3.conversion_status IN ('OK', 'SKIPPED_EXISTS', 'SKIPPED_ALREADY_MP3')
-        AND mp3.gcs_uri IS NOT NULL
-        AND IFNULL(mp3.duration_seconds, 0) >= min_duration_seconds
-        AND (
-          -- Audio / nota de voz: siempre
-          NOT (
-            STARTS_WITH(LOWER(IFNULL(mp3.mime, '')), 'video/')
-            OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.mime, '')), r'(^|/)video(/|$)')
-            OR REGEXP_CONTAINS(
-              LOWER(IFNULL(mp3.source_file_name, IFNULL(mp3.file_name, ''))),
-              r'\.(mp4|m4v|mpeg|mpg|mpe|m2v|mov|qt|avi|mkv|webm|wmv|flv|3gp)(\.|$)'
-            )
-            OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.source_file_name, '')), r'(^|_)video(_|\.|$)')
-          )
-          -- Video: solo operador / asesor
-          OR REGEXP_CONTAINS(
-            LOWER(TRIM(IFNULL(chats.origin, ''))),
-            r'^(operador|asesor)$'
-          )
-        )
-    )
-    SELECT CONCAT(
-      '[',
-      STRING_AGG(CONCAT('"', uri, '"'), ', '),
-      ']'
-    )
-    FROM base
-  );
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
+  WHERE process_date = v_fecha_proceso;
 
-  IF v_uris IS NULL OR v_uris = '[]' THEN
-    SELECT FORMAT(
-      'Sin URIs MP3 elegibles para fecha %s — se omite etapa 1 (audios).',
-      v_fecha_proceso_str
-    );
-  ELSE
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_prd`
+  WHERE process_date = v_fecha_proceso;
 
   -- ---------------------------------------------------------------------------
-  -- PASO 2: External table con las URIs (conexión GCS)
-  -- ---------------------------------------------------------------------------
-  SET v_sql = FORMAT("""
-    CREATE OR REPLACE EXTERNAL TABLE %s
-    WITH CONNECTION %s
-    OPTIONS (
-      object_metadata = 'SIMPLE',
-      uris = %s,
-      max_staleness = INTERVAL 30 MINUTE,
-      metadata_cache_mode = AUTOMATIC
-    )
-  """, external_table, conexion, v_uris);
-  EXECUTE IMMEDIATE v_sql;
-
-  -- ---------------------------------------------------------------------------
-  -- PASO 3: Metadata MP3 + chat (mismo filtro que paso 1)
+  -- PASO 1: Metadata MP3 + chat (+ batch_rn para lotes)
   -- ---------------------------------------------------------------------------
   EXECUTE IMMEDIATE FORMAT("""
     CREATE OR REPLACE TEMP TABLE tmp_onemarketer_whatsapp_audios AS
@@ -132,7 +75,8 @@ BEGIN
       mp3.file_name,
       chats.text AS chat_text,
       chats.origin AS chat_origin,
-      chats.`user` AS chat_user
+      chats.`user` AS chat_user,
+      ROW_NUMBER() OVER (ORDER BY mp3.gcs_uri) - 1 AS batch_rn
     FROM `prd-utpbi-data-operation.raw_onemarketer.reporte_whatsapp_mp3` AS mp3
     LEFT JOIN `prd-utpbi-data-operation.raw_onemarketer.reporte_chats` AS chats
       ON chats.fecha_evento = mp3.fecha_evento
@@ -142,83 +86,116 @@ BEGIN
       AND mp3.conversion_status IN ('OK', 'SKIPPED_EXISTS', 'SKIPPED_ALREADY_MP3')
       AND mp3.gcs_uri IS NOT NULL
       AND IFNULL(mp3.duration_seconds, 0) >= %f
-      AND (
-        NOT (
-          STARTS_WITH(LOWER(IFNULL(mp3.mime, '')), 'video/')
-          OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.mime, '')), r'(^|/)video(/|$)')
-          OR REGEXP_CONTAINS(
-            LOWER(IFNULL(mp3.source_file_name, IFNULL(mp3.file_name, ''))),
-            r'\\.(mp4|m4v|mpeg|mpg|mpe|m2v|mov|qt|avi|mkv|webm|wmv|flv|3gp)(\\.|$)'
-          )
-          OR REGEXP_CONTAINS(LOWER(IFNULL(mp3.source_file_name, '')), r'(^|_)video(_|\\.|$)')
-        )
-        OR REGEXP_CONTAINS(
-          LOWER(TRIM(IFNULL(chats.origin, ''))),
-          r'^(operador|asesor)$'
-        )
-      )
   """, v_fecha_proceso_str, min_duration_seconds);
 
   SET v_audio_count = (SELECT COUNT(*) FROM tmp_onemarketer_whatsapp_audios);
 
-  IF v_audio_count > 0 THEN
+  IF v_audio_count = 0 THEN
+    SELECT FORMAT(
+      'Sin URIs MP3 elegibles para fecha %s — se omite etapa 1 (audios).',
+      v_fecha_proceso_str
+    );
+  ELSE
+    SELECT FORMAT(
+      'STT OneMarketer fecha %s: %d audios en lotes de %d',
+      v_fecha_proceso_str,
+      v_audio_count,
+      v_batch_size
+    );
+
     -- ---------------------------------------------------------------------------
-    -- PASO 4: Speech-to-Text v2 (Chirp) — transcripción literal
+    -- PASO 2: Loop por lotes — external table → ML.TRANSCRIBE → hist raw
     -- ---------------------------------------------------------------------------
-    EXECUTE IMMEDIATE FORMAT("""
-      CREATE OR REPLACE TEMP TABLE tmp_onemarketer_whatsapp_stt_results AS
-      SELECT
-        uri,
-        transcripts,
-        ml_transcribe_result,
-        ml_transcribe_status
-      FROM ML.TRANSCRIBE(
-        MODEL `prd-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`,
-        TABLE %s,
-        recognition_config => (
-          JSON '{"language_codes":["es-US"],"model":"chirp","auto_decoding_config":{}}'
+    WHILE v_offset < v_audio_count DO
+      SET v_batch_num = v_batch_num + 1;
+
+      SET v_uris = (
+        SELECT CONCAT(
+          '[',
+          STRING_AGG(CONCAT('"', gcs_uri, '"'), ', ' ORDER BY batch_rn),
+          ']'
         )
-      )
-    """, external_table);
+        FROM tmp_onemarketer_whatsapp_audios
+        WHERE batch_rn >= v_offset
+          AND batch_rn < v_offset + v_batch_size
+      );
+
+      SET v_batch_count = (
+        SELECT COUNT(*)
+        FROM tmp_onemarketer_whatsapp_audios
+        WHERE batch_rn >= v_offset
+          AND batch_rn < v_offset + v_batch_size
+      );
+
+      SELECT FORMAT(
+        'STT lote %d: offset=%d count=%d',
+        v_batch_num,
+        v_offset,
+        v_batch_count
+      );
+
+      SET v_sql = FORMAT("""
+        CREATE OR REPLACE EXTERNAL TABLE %s
+        WITH CONNECTION %s
+        OPTIONS (
+          object_metadata = 'SIMPLE',
+          uris = %s,
+          max_staleness = INTERVAL 30 MINUTE,
+          metadata_cache_mode = AUTOMATIC
+        )
+      """, external_table, conexion, v_uris);
+      EXECUTE IMMEDIATE v_sql;
+
+      EXECUTE IMMEDIATE FORMAT("""
+        CREATE OR REPLACE TEMP TABLE tmp_onemarketer_whatsapp_stt_batch AS
+        SELECT
+          uri,
+          transcripts,
+          ml_transcribe_result,
+          ml_transcribe_status
+        FROM ML.TRANSCRIBE(
+          MODEL `prd-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`,
+          TABLE %s,
+          recognition_config => (
+            JSON '{"language_codes":["es-US"],"model":"chirp","auto_decoding_config":{}}'
+          )
+        )
+      """, external_table);
+
+      INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
+      SELECT
+        m.process_date,
+        m.gcs_uri,
+        m.idcase,
+        m.idmessage,
+        m.waid,
+        m.duration_seconds,
+        m.chat_text,
+        m.chat_origin,
+        m.chat_user,
+        TO_JSON_STRING(s.ml_transcribe_result) AS json_text,
+        TO_JSON_STRING(s.ml_transcribe_result) AS full_response,
+        IFNULL(NULLIF(TRIM(s.ml_transcribe_status), ''), 'OK') AS status,
+        s.transcripts AS transcripcion,
+        CAST(NULL AS STRING) AS resumen,
+        CAST(NULL AS STRING) AS intencion,
+        CAST(NULL AS STRING) AS idioma,
+        CAST(NULL AS STRING) AS tono,
+        CAST(NULL AS STRING) AS entidades,
+        CAST(NULL AS STRING) AS observaciones,
+        DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
+      FROM tmp_onemarketer_whatsapp_audios AS m
+      INNER JOIN tmp_onemarketer_whatsapp_stt_batch AS s
+        ON s.uri = m.gcs_uri
+      WHERE m.batch_rn >= v_offset
+        AND m.batch_rn < v_offset + v_batch_size;
+
+      SET v_offset = v_offset + v_batch_size;
+    END WHILE;
 
     -- ---------------------------------------------------------------------------
-    -- PASO 5: Join STT + metadata → hist RAW
+    -- PASO 3: Capa PRD (día completo desde raw)
     -- ---------------------------------------------------------------------------
-    DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
-    WHERE process_date = v_fecha_proceso;
-
-    INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
-    SELECT
-      m.process_date,
-      m.gcs_uri,
-      m.idcase,
-      m.idmessage,
-      m.waid,
-      m.duration_seconds,
-      m.chat_text,
-      m.chat_origin,
-      m.chat_user,
-      TO_JSON_STRING(s.ml_transcribe_result) AS json_text,
-      TO_JSON_STRING(s.ml_transcribe_result) AS full_response,
-      IFNULL(NULLIF(TRIM(s.ml_transcribe_status), ''), 'OK') AS status,
-      s.transcripts AS transcripcion,
-      CAST(NULL AS STRING) AS resumen,
-      CAST(NULL AS STRING) AS intencion,
-      CAST(NULL AS STRING) AS idioma,
-      CAST(NULL AS STRING) AS tono,
-      CAST(NULL AS STRING) AS entidades,
-      CAST(NULL AS STRING) AS observaciones,
-      DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
-    FROM tmp_onemarketer_whatsapp_audios AS m
-    INNER JOIN tmp_onemarketer_whatsapp_stt_results AS s
-      ON s.uri = m.gcs_uri;
-
-    -- ---------------------------------------------------------------------------
-    -- PASO 6: Capa PRD (consumo)
-    -- ---------------------------------------------------------------------------
-    DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_prd`
-    WHERE process_date = v_fecha_proceso;
-
     INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_prd`
     SELECT
       process_date,
@@ -239,16 +216,16 @@ BEGIN
       load_date
     FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_whatsapp_gen_ia_process_data_raw`
     WHERE process_date = v_fecha_proceso;
+
+    SELECT FORMAT(
+      'STT OneMarketer OK fecha %s: %d audios en %d lotes',
+      v_fecha_proceso_str,
+      v_audio_count,
+      v_batch_num
+    );
   END IF;
 
-  END IF;
-
-  -- ---------------------------------------------------------------------------
-  -- ETAPA 2: Análisis de conversación completa por idcase (Gemini + sys_prompts)
-  -- ---------------------------------------------------------------------------
-  CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_onemarketer_caso_conversacion_ia`(
-    v_fecha_proceso,
-    NULL
-  );
+  -- Etapa 2 (Gemini) YA NO se llama aquí.
+  -- Orquesta Cloud Workflows → sp_onemarketer_caso_conversacion_ia
 
 END;
