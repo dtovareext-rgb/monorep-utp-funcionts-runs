@@ -153,9 +153,9 @@ main:
                       priority: INTERACTIVE
                   jobReference:
                     location: ${bq_location}
-              # STT por lotes puede pasar de 30 min; default del conector = 1800s
-              connector_params:
-                timeout: 14400
+                # STT por lotes puede pasar de 30 min; default del conector = 1800s
+                connector_params:
+                  timeout: 14400
               result: sp1_job
           - wait_sp1:
               call: sys.sleep
@@ -223,8 +223,8 @@ main:
                       priority: INTERACTIVE
                   jobReference:
                     location: ${bq_location}
-              connector_params:
-                timeout: 14400
+                connector_params:
+                  timeout: 14400
               result: sp2_job
           - wait_sp2:
               call: sys.sleep
