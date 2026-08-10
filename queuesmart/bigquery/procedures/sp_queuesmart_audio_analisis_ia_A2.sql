@@ -220,37 +220,131 @@ BEGIN
     JSON_VALUE(evaluacion_json, '$[0].rebate_descripcion') AS rebate_descripcion,
     CAST(JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_marcacion') AS STRING) AS rebate_efectivo_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_descripcion') AS rebate_efectivo_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_marcacion') AS STRING) AS cierre_comercial_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_descripcion') AS cierre_comercial_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_marcacion') AS STRING) AS sentido_urgencia_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_descripcion') AS sentido_urgencia_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_marcacion') AS STRING) AS afecta_imagen_negocio_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_descripcion') AS afecta_imagen_negocio_descripcion,
-    JSON_VALUE(evaluacion_json, '$[0].objecion_cliente_1_texto') AS objecion_cliente_1_texto,
-    JSON_VALUE(evaluacion_json, '$[0].rebate_asesor_1_texto') AS rebate_asesor_1_texto,
-    JSON_VALUE(evaluacion_json, '$[0].objecion_cliente_2_texto') AS objecion_cliente_2_texto,
-    JSON_VALUE(evaluacion_json, '$[0].rebate_asesor_2_texto') AS rebate_asesor_2_texto,
-    JSON_VALUE(evaluacion_json, '$[0].objecion_cliente_3_texto') AS objecion_cliente_3_texto,
-    JSON_VALUE(evaluacion_json, '$[0].rebate_asesor_3_texto') AS rebate_asesor_3_texto,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_SALUDO') AS STRING) AS t_saludo,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_VALIDACION_DATOS') AS STRING) AS t_validacion_datos,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_SONDEO') AS STRING) AS t_sondeo,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_ACLARA_DUDA') AS STRING) AS t_aclara_duda,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_OBJECION_CLIENTE_1') AS STRING) AS t_objecion_cliente_1,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_REBATE_1') AS STRING) AS t_rebate_1,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_CIERRE_1') AS STRING) AS t_cierre_1,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_OBJECION_CLIENTE_2') AS STRING) AS t_objecion_cliente_2,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_REBATE_2') AS STRING) AS t_rebate_2,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_CIERRE_2') AS STRING) AS t_cierre_2,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_OBJECION_CLIENTE_3') AS STRING) AS t_objecion_cliente_3,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_REBATE_3') AS STRING) AS t_rebate_3,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_CIERRE_3') AS STRING) AS t_cierre_3,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_SENTIDO_DE_URGENCIA') AS STRING) AS t_sentido_de_urgencia,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_CIERRE') AS STRING) AS t_cierre,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_DESPEDIDA') AS STRING) AS t_despedida,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_OFRECE_QR') AS STRING) AS t_ofrece_qr,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].T_COMENTARIO_NEGATIVO_UTP') AS STRING) AS t_comentario_negativo_utp,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].MAYOR_REBATE') AS STRING) AS mayor_rebate,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_MARCACION')
+    ) AS STRING) AS cierre_comercial_marcacion,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_descripcion'),
+      JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_DESCRIPCION')
+    ) AS cierre_comercial_descripcion,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_MARCACION')
+    ) AS STRING) AS sentido_urgencia_marcacion,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_descripcion'),
+      JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_DESCRIPCION')
+    ) AS sentido_urgencia_descripcion,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_MARCACION')
+    ) AS STRING) AS afecta_imagen_negocio_marcacion,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_descripcion'),
+      JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_DESCRIPCION')
+    ) AS afecta_imagen_negocio_descripcion,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].objecion_cliente_1_texto'),
+      JSON_VALUE(evaluacion_json, '$[0].OBJECION_CLIENTE_1_TEXTO')
+    ) AS objecion_cliente_1_texto,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].rebate_asesor_1_texto'),
+      JSON_VALUE(evaluacion_json, '$[0].REBATE_ASESOR_1_TEXTO')
+    ) AS rebate_asesor_1_texto,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].objecion_cliente_2_texto'),
+      JSON_VALUE(evaluacion_json, '$[0].OBJECION_CLIENTE_2_TEXTO')
+    ) AS objecion_cliente_2_texto,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].rebate_asesor_2_texto'),
+      JSON_VALUE(evaluacion_json, '$[0].REBATE_ASESOR_2_TEXTO')
+    ) AS rebate_asesor_2_texto,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].objecion_cliente_3_texto'),
+      JSON_VALUE(evaluacion_json, '$[0].OBJECION_CLIENTE_3_TEXTO')
+    ) AS objecion_cliente_3_texto,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].rebate_asesor_3_texto'),
+      JSON_VALUE(evaluacion_json, '$[0].REBATE_ASESOR_3_TEXTO')
+    ) AS rebate_asesor_3_texto,
+    -- T_* / MAYOR_REBATE: Gemini a veces cambia mayúsculas
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_SALUDO'),
+      JSON_VALUE(evaluacion_json, '$[0].t_saludo')
+    ) AS STRING) AS t_saludo,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_VALIDACION_DATOS'),
+      JSON_VALUE(evaluacion_json, '$[0].t_validacion_datos')
+    ) AS STRING) AS t_validacion_datos,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_SONDEO'),
+      JSON_VALUE(evaluacion_json, '$[0].t_sondeo')
+    ) AS STRING) AS t_sondeo,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_ACLARA_DUDA'),
+      JSON_VALUE(evaluacion_json, '$[0].t_aclara_duda')
+    ) AS STRING) AS t_aclara_duda,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_OBJECION_CLIENTE_1'),
+      JSON_VALUE(evaluacion_json, '$[0].t_objecion_cliente_1')
+    ) AS STRING) AS t_objecion_cliente_1,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_REBATE_1'),
+      JSON_VALUE(evaluacion_json, '$[0].t_rebate_1')
+    ) AS STRING) AS t_rebate_1,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_CIERRE_1'),
+      JSON_VALUE(evaluacion_json, '$[0].t_cierre_1')
+    ) AS STRING) AS t_cierre_1,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_OBJECION_CLIENTE_2'),
+      JSON_VALUE(evaluacion_json, '$[0].t_objecion_cliente_2')
+    ) AS STRING) AS t_objecion_cliente_2,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_REBATE_2'),
+      JSON_VALUE(evaluacion_json, '$[0].t_rebate_2')
+    ) AS STRING) AS t_rebate_2,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_CIERRE_2'),
+      JSON_VALUE(evaluacion_json, '$[0].t_cierre_2')
+    ) AS STRING) AS t_cierre_2,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_OBJECION_CLIENTE_3'),
+      JSON_VALUE(evaluacion_json, '$[0].t_objecion_cliente_3')
+    ) AS STRING) AS t_objecion_cliente_3,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_REBATE_3'),
+      JSON_VALUE(evaluacion_json, '$[0].t_rebate_3')
+    ) AS STRING) AS t_rebate_3,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_CIERRE_3'),
+      JSON_VALUE(evaluacion_json, '$[0].t_cierre_3')
+    ) AS STRING) AS t_cierre_3,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_SENTIDO_DE_URGENCIA'),
+      JSON_VALUE(evaluacion_json, '$[0].t_sentido_de_urgencia')
+    ) AS STRING) AS t_sentido_de_urgencia,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_CIERRE'),
+      JSON_VALUE(evaluacion_json, '$[0].t_cierre')
+    ) AS STRING) AS t_cierre,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_DESPEDIDA'),
+      JSON_VALUE(evaluacion_json, '$[0].t_despedida')
+    ) AS STRING) AS t_despedida,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_OFRECE_QR'),
+      JSON_VALUE(evaluacion_json, '$[0].t_ofrece_qr')
+    ) AS STRING) AS t_ofrece_qr,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].T_COMENTARIO_NEGATIVO_UTP'),
+      JSON_VALUE(evaluacion_json, '$[0].t_comentario_negativo_utp')
+    ) AS STRING) AS t_comentario_negativo_utp,
+    CAST(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].MAYOR_REBATE'),
+      JSON_VALUE(evaluacion_json, '$[0].mayor_rebate')
+    ) AS STRING) AS mayor_rebate,
     DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
   FROM cte_cleaned;
 

@@ -1,9 +1,9 @@
 -- =============================================================================
 -- MERGE canal_escrito_prompt (idempotente: insert o update)
--- Incluye regla 2 (inactividad), 14 (BOT/FLOW), 15 (base64) + JSON + {{conversacion}}
+-- Regla 14 (Caso recibido por), tipificacion OBLIGATORIA (nunca null), base64
 --
 -- bq query --use_legacy_sql=false --location=us-central1 \
---   < onemarketer/bigquery/sqls/update_sys_prompts_canal_escrito.sql
+--   < onemarketer/bigquery/sqls/update_sys_prompts_canal_escrito_23.sql
 -- =============================================================================
 
 MERGE `prd-utpbi-data-operation.raw_onemarketer.sys_prompts` AS t
@@ -166,12 +166,56 @@ Criterio práctico de atribución:
 - Si se identifica alguno de estos comportamientos, asignar score '0' al bloque PECNEG.
 - En caso contrario, asignar score '1'.
 
-14. Mensajes automáticos (bot / flow / menús)
+14. Distinción OBLIGATORIA de roles: [sistema] (bot) vs [operador] (asesor humano) vs [cliente]
 
-- Los mensajes etiquetados como [BOT/FLOW] o que contengan estructuras JSON de flows, botones, listas o menús automatizados de WhatsApp NO deben evaluarse como comunicación humana del asesor.
-- Utilizarlos únicamente como contexto informativo (datos ya recolectados: carrera, sede, edad, modalidad, etc.).
-- NO usar esos mensajes para calificar atributos de estilo, tono, redacción, ortografía, empatía, saludo, actitud comercial ni claridad.
-- El saludo humano del asesor se evalúa solo cuando exista un mensaje de [operador] (u origin equivalente) con texto natural escrito por una persona (por ejemplo, presentación con nombre del asesor).
+La conversación WhatsApp mezcla tres orígenes. Debes identificarlos por la etiqueta del mensaje (`[sistema HH:MM]`, `[operador HH:MM]`, `[cliente HH:MM]`, `[BOT/FLOW]`, `[FLOW]`) y evaluar SOLO al asesor humano.
+
+ANCLA OBLIGATORIA DE ASIGNACIÓN (aplica a TODAS las conversaciones):
+- El asesor a evaluar se asigna cuando aparece el mensaje de sistema con el texto `Caso recibido por`.
+- Ejemplo: `[sistema ...] Caso recibido por daraujog<br/>Caso id: <b>4198095</b>`.
+- El usuario/login que sigue a `Caso recibido por` (ej.: `daraujog`) identifica al asesor humano de esa atención.
+- TODO lo anterior a `Caso recibido por` (bot, templates, ITR, menús, mensajes pre-asignación, copy genérico de transferencia) es automatización/contexto: NO se evalúa como calidad del asesor.
+- La evaluación de calidad (saludo, sondeo, argumentario, rebate, cierre, etc.) empieza SOLO con los mensajes `[operador]` posteriores a `Caso recibido por`.
+- Si en una conversación NO aparece `Caso recibido por`, no asumas asignación humana; no penalices atributos de atención humana y marca 'NA' lo que no pueda evaluarse, explicándolo en resumen_evaluacion.
+
+A) [sistema] = BOT / automatización de la plataforma (NO es el asesor)
+Incluye, entre otros:
+- Transferencias ITR / skill (`ITR has transferred case to Skill...`, `Caso recibido por...`, `Caso id`).
+- Metadatos CRM / lead (`URL Lead`, `Nombre:`, `Apellido:`, `Campus/Sede:`, `Subgrado:`, `Carrera:`, `Estado Cliente:`, `WAID:`).
+- Payloads técnicos JSON (`RESPONSE MARCA INICIO`, `HTTPPOST DATA CIERRA CASO`, `RESPONSE CIERRA CASO`, errores de API, `RecordId`, `MessageId`).
+- Identificadores de cierre (`ID AGENTE`, `TXT AGENTE`, `Cierra caso agente...`).
+- Avisos de plataforma (`Inactivity warning sent to user`).
+- Templates / menús / flows / botones automáticos (`$((template:...))`, `[BOT/FLOW]`, `[FLOW]`, JSON interactive/button/list).
+- Cualquier mensaje de sistema que no sea texto natural escrito por una persona para el cliente.
+
+REGLAS para [sistema]:
+- NUNCA califiques atributos de saludo, despedida, empatía, tono, ortografía, claridad, actitud comercial, rebate, cierre, sondeo ni estilo sobre mensajes [sistema].
+- Úsalos SOLO como contexto (datos ya capturados, momento de transferencia, tipificación de cierre, etc.).
+- NUNCA penalices al asesor por textos, errores técnicos, JSON o plantillas del sistema.
+- El bot NO cuenta como saludo humano ni como presentación del asesor, aunque diga cosas como 'Te pondremos en contacto con un asesor'.
+- El propio mensaje `Caso recibido por ...` es del sistema: sirve para anclar quién es el asesor, pero NO se puntúa.
+
+B) [operador] = ASESOR HUMANO (único sujeto de evaluación de calidad)
+- Evalúa únicamente mensajes `[operador]` POSTERIORES a `Caso recibido por` (texto natural, `[AUDIO]` del asesor, flyers/OCR enviados por el asesor).
+- El saludo humano se cumple solo cuando un `[operador]` (después de la asignación) se presenta con nombre (ej.: 'Mi nombre es Diana Araujo...'), no cuando el sistema avisa la transferencia.
+- Si ANTES de `Caso recibido por` hay mensajes `[operador]` (templates `$((template:...))`, copy genérico 'Te pondremos en contacto con un asesor', etc.), trátalos como automatización: contexto, no puntuación humana.
+- El inicio real de la atención humana es: aparece `Caso recibido por <usuario>` y luego el `[operador]` dialoga/se presenta con el cliente.
+
+C) [cliente] = prospecto
+- Es la contraparte de la atención. Úsalo para contexto de objeciones, respuestas y continuidad.
+- No evalúes atributos de calidad del asesor sobre mensajes del cliente.
+
+D) Señales prácticas (ejemplo de lectura correcta)
+- Antes de `Caso recibido por`: bot/templates/ITR/CRM → ignorar para scores.
+- `[sistema] Caso recibido por daraujog` → ancla de asignación del asesor a evaluar.
+- `[operador] ¡Genial! Te pondremos en contacto con un asesor...` si ocurre antes o en el borde de la transferencia → automatismo/pre-asignación; no es el saludo evaluable.
+- `[operador] Hola... Mi nombre es Diana Araujo y te doy la bienvenida...` (después de `Caso recibido por`) → aquí empieza la evaluación humana.
+- `[sistema] ID AGENTE / HTTPPOST DATA CIERRA CASO / Cierra caso agente...` → cierre técnico; no puntuar estilo; la tipificación/clasificación del cierre puede usarse solo como contexto de resultado.
+
+E) Resumen
+- `Caso recibido por` = momento de asignación del asesor a evaluar (todas las conversaciones).
+- Bot/sistema = contexto. Operador humano post-asignación = evaluación. Cliente = evidencia de la interacción.
+- Ante duda de si un mensaje es bot o humano: NO penalices; prefiere 'NA' o ignóralo para el atributo, y menciónalo brevemente en resumen_evaluacion si afecta la lectura.
 
 15. Material multimedia binario / base64
 
@@ -191,6 +235,8 @@ Validar que el asesor:
 - Se presente o identifique ante el prospecto.
 - Comunique el motivo principal del contacto.
 - Oriente o acompañe al prospecto respecto a su interés en estudiar en la UTP.
+
+IMPORTANTE: Evaluar el saludo SOLO en mensajes [operador] posteriores a `Caso recibido por`. Ignorar templates, bot y mensajes pre-asignación.
 
 Ejemplos de referencia:
 
@@ -1019,6 +1065,15 @@ Seleccionar la motivación predominante según la conversación.
 
 Clasificar el resultado de la conversación.
 
+OBLIGATORIO — NUNCA null / vacío / NA:
+- `clasificadores.tipificacion` DEBE devolver SIEMPRE exactamente uno de: RA, DS, SI, CDE.
+- PROHIBIDO devolver null, "null", "", "NA", "N/A" u omitir el campo.
+- Si hay duda, elige la opción más cercana con esta prioridad de desempate:
+  1) SI — hay promesa clara de inscripción/pago o inscripción en curso.
+  2) DS — el cliente queda fuera del proceso (otra uni, no desea contacto, fuera del país, ya inscrito, etc.).
+  3) CDE — hubo interacción humana post `Caso recibido por` y el cliente dejó de responder sin cerrar la gestión.
+  4) RA — cliente sigue indeciso / revisando alternativas / hablará con padres / pedirá tiempo (default si no aplica 1–3).
+
 Opciones:
 
 - RA (Revisando Alternativas): Cliente aún indeciso o evaluando alternativas.
@@ -1026,7 +1081,7 @@ Opciones:
 - SI (Se Inscribirá): Cliente decidió inscribirse o realizó promesa de pago o pago en línea.
 - CDE (Cliente Deja de Escribir): Existe interacción, pero el cliente abandona el chat y deja de responder sin completar la gestión.
 
-Seleccionar únicamente una tipificación.
+Seleccionar únicamente una tipificación (obligatoria en todas las conversaciones evaluables).
 
 <<<END>>>
 
@@ -1843,7 +1898,7 @@ Estructura exacta:
   },
   "clasificadores": {
     "motivacion_del_cliente": "trabajo|prestigio|status|autorrealizacion_desarrollo_personal|contribucion_a_la_sociedad|null",
-    "tipificacion": "RA|DS|SI|CDE",
+    "tipificacion": "RA|DS|SI|CDE (OBLIGATORIO; NUNCA null)",
     "atributo": "Educacion actualizada|Educacion de calidad|Empleabilidad|Flexibilidad y acompanamiento|Vida universitaria|null",
     "estilo_del_asesor": "Profesional y comercial|Dinamico y entusiasta|Persuasivo vendedor|Neutral / rutinario|Apatico / desmotivado",
     "segundo_numero_contacto": "1|0|NA"
@@ -1872,6 +1927,7 @@ Reglas de salida:
 4. Arrays de clasificacion: incluir SOLO incumplimientos; si no hay, usar [].
 5. No inventes atributos fuera del esquema.
 6. resumen_evaluacion debe seguir las reglas de <<<RESUMEN_EVALUACION>>>.
+7. clasificadores.tipificacion es OBLIGATORIO: siempre "RA" o "DS" o "SI" o "CDE". NUNCA null, vacío ni "NA". Si dudas, usa "RA" (o "CDE" si el cliente dejó de escribir).
 
 --- CONVERSACION A EVALUAR ---
 {{conversacion}}
@@ -1891,10 +1947,9 @@ SELECT
   prompt_name,
   updated_at,
   LENGTH(prompt_text) AS chars,
-  STRPOS(prompt_text, 'Distinguir inactividad del cliente') > 0 AS tiene_regla_inactividad,
-  STRPOS(prompt_text, '14. Mensajes automáticos') > 0 AS tiene_regla_bot_flow,
-  STRPOS(prompt_text, '15. Material multimedia binario') > 0 AS tiene_regla_base64,
-  STRPOS(prompt_text, 'FORMATO DE SALIDA OBLIGATORIO') > 0 AS tiene_formato_salida,
+  STRPOS(prompt_text, 'Caso recibido por') > 0 AS tiene_ancla_caso_recibido,
+  STRPOS(prompt_text, 'clasificadores.tipificacion es OBLIGATORIO') > 0 AS tipificacion_obligatoria,
+  STRPOS(prompt_text, 'OBLIGATORIO — NUNCA null') > 0 AS tipificacion_nunca_null,
   STRPOS(prompt_text, '{{conversacion}}') > 0 AS tiene_placeholder_conversacion
 FROM `prd-utpbi-data-operation.raw_onemarketer.sys_prompts`
 WHERE prompt_name = 'canal_escrito_prompt';

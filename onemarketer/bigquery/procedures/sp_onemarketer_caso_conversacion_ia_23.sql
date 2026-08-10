@@ -217,7 +217,13 @@ BEGIN
     JSON_VALUE(evaluacion_json, '$.precondicion') AS precondicion,
     JSON_VALUE(evaluacion_json, '$.resumen_evaluacion') AS resumen_evaluacion,
     JSON_VALUE(evaluacion_json, '$.clasificadores.motivacion_del_cliente') AS motivacion_del_cliente,
-    JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion') AS tipificacion,
+    -- tipificacion OBLIGATORIA: nunca null; fallback RA si el modelo omite/invalida
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion'), '')))
+           IN ('RA', 'DS', 'SI', 'CDE')
+        THEN UPPER(TRIM(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion')))
+      ELSE 'RA'
+    END AS tipificacion,
     JSON_VALUE(evaluacion_json, '$.clasificadores.atributo') AS atributo,
     JSON_VALUE(evaluacion_json, '$.clasificadores.estilo_del_asesor') AS estilo_del_asesor,
     JSON_VALUE(evaluacion_json, '$.clasificadores.segundo_numero_contacto') AS segundo_numero_contacto,

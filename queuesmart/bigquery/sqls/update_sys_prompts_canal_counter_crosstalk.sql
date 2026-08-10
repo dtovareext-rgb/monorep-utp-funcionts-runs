@@ -1,5 +1,5 @@
 -- =============================================================================
--- UPSERT canal_counter_prompt (anti-crosstalk)
+-- UPSERT canal_counter_prompt (anti-crosstalk + schema JSON completo)
 -- Fuente: queuesmart/prompts/canal_counter_prompt_completo.txt
 --
 -- bq query --use_legacy_sql=false --location=US \
@@ -1352,7 +1352,7 @@ IMPORTANTE PARA EL FORMATO DE RESPUESTA
 
 8. Mantén siempre el JSON completo y respeta el tipo de dato definido para cada campo.
 
-9. Los campos de secuencia de conversación deben devolverse obligatoriamente como números enteros. Si un evento no ocurre, devuelve 0.
+9. Los campos de secuencia de conversación (T_*) y MAYOR_REBATE deben devolverse como números enteros. Si un evento no ocurre, devuelve 0. NUNCA uses texto en esos campos.
 
 10. Si un atributo no aplica según las reglas de la pauta, devuelve una descripción terminada en (NA) y una marcación igual a "NA".
 
@@ -1360,77 +1360,80 @@ IMPORTANTE PARA EL FORMATO DE RESPUESTA
 
 12. Todos los campos deben respetar estrictamente el tipo de dato definido en el formato de salida.
 
-ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves y reemplaza las explicaciones con tus conclusiones en base a la conversación evaluada):
+13. NUNCA omitas claves del JSON. En especial debes incluir siempre: rebate_efectivo_marcacion, cierre_comercial_*, sentido_urgencia_*, afecta_imagen_negocio_*, objecion_cliente_*_texto, rebate_asesor_*_texto, todos los T_* y MAYOR_REBATE. Si no hay evidencia usa 0 o "NA".
+
+ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves. Los T_* y MAYOR_REBATE son ENTEROS):
 
 [
 {
-"tipo_contacto": "La definición se encuentra en <<<TIPO_CONTACTO>>>. Ejemplo: PRIMER_CONTACTO o SEGUIMIENTO.",
-"gestion_principal": "La definición se encuentra en <<<GESTION_PRINCIPAL>>>. Ejemplo: DOCUMENTOS_REGULAR, DOCUMENTOS_CONVALIDACION, PAGO_MATRICULA o RECORDATORIO_EXAMEN.",
-"saludo_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SALUDO>>>. Si cumple marcar 1.",
+"tipo_contacto": "PRIMER_CONTACTO",
+"gestion_principal": "DOCUMENTOS_REGULAR",
+"saludo_descripcion": "Justificación breve. (1)",
 "saludo_marcacion": 1,
-"despedida_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<DESPEDIDA>>>. Si cumple marcar 1.",
+"despedida_descripcion": "Justificación breve. (1)",
 "despedida_marcacion": 1,
-"aclara_duda_cliente_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<ACLARA_DUDA_DEL_CLIENTE>>>. Si cumple marcar 1.",
+"aclara_duda_cliente_descripcion": "Justificación breve. (1)",
 "aclara_duda_cliente_marcacion": 1,
-"presenta_vacio_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SE_PRESENTA_VACIO_AL_INICIO_Y_DURANTE_LA_LLAMADA>>>. Si cumple marcar 1.",
+"presenta_vacio_descripcion": "Justificación breve. (1)",
 "presenta_vacio_marcacion": 1,
-"deja_en_espera_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<DEJA_AL_PROSPECTO_EN_ESPERA_DE_MANERA_INJUSTIFICADA>>>. Si cumple marcar 1.",
+"deja_en_espera_descripcion": "Justificación breve. (1)",
 "deja_en_espera_marcacion": 1,
-"empatia_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<EMPATIA>>>. Si cumple marcar 1.",
+"empatia_descripcion": "Justificación breve. (1)",
 "empatia_marcacion": 1,
-"actitud_comercial_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<ACTITUD_COMERCIAL>>>. Si cumple marcar 1.",
+"actitud_comercial_descripcion": "Justificación breve. (1)",
 "actitud_comercial_marcacion": 1,
-"lenguaje_grosero_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<LENGUAJE_GROSERO>>>. Si cumple marcar 1.",
+"lenguaje_grosero_descripcion": "Justificación breve. (1)",
 "lenguaje_grosero_marcacion": 1,
-"sigue_flujo_gestion_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SIGUE_FLUJO_DE_GESTION_EN_LLAMADA>>>. Si cumple marcar 1.",
+"sigue_flujo_gestion_descripcion": "Justificación breve. (1)",
 "sigue_flujo_gestion_marcacion": 1,
-"brinda_informacion_correcta_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<BRINDA_INFORMACION_CORRECTA>>>. Si cumple marcar 1.",
+"brinda_informacion_correcta_descripcion": "Justificación breve. (1)",
 "brinda_informacion_correcta_marcacion": 1,
-"ofrece_qr_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<OFRECE_ENVIO_DE_QR>>>. Si cumple marcar 1.",
+"ofrece_qr_descripcion": "Justificación breve. (1)",
 "ofrece_qr_marcacion": 1,
-"valida_datos_postulante_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<VALIDA_DATOS_CON_EL_POSTULANTE>>>. Si cumple marcar 1.",
+"valida_datos_postulante_descripcion": "Justificación breve. (1)",
 "valida_datos_postulante_marcacion": 1,
-"sondea_interes_postulante_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SONDEA_DE_ACUERDO_AL_INTERES_DEL_POSTULANTE>>>. Si cumple marcar 1.",
+"sondea_interes_postulante_descripcion": "Justificación breve. (1)",
 "sondea_interes_postulante_marcacion": 1,
-"rebate_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<AGENTE_NO_REBATE>>>. Si cumple marcar 1.",
+"rebate_descripcion": "Justificación breve. (1)",
 "rebate_marcacion": 1,
-"rebate_efectivo_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<REBATE_NO_EFECTIVO>>>. Si cumple marcar 1.",
-"cierre_comercial_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<CIERRE_COMERCIAL>>>. Si cumple marcar 1.",
+"rebate_efectivo_descripcion": "Justificación breve. (1)",
+"rebate_efectivo_marcacion": 1,
+"cierre_comercial_descripcion": "Justificación breve. (1)",
 "cierre_comercial_marcacion": 1,
-"sentido_urgencia_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SENTIDO_DE_URGENCIA>>>. Si cumple marcar 1.",
+"sentido_urgencia_descripcion": "Justificación breve. (1)",
 "sentido_urgencia_marcacion": 1,
-"afecta_imagen_negocio_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<COMENTARIOS_NEGATIVOS_DE_LA_UNIVERSIDAD_O_SUS_EMPLEADOS>>>. Si cumple marcar 1.",
+"afecta_imagen_negocio_descripcion": "Justificación breve. (1)",
 "afecta_imagen_negocio_marcacion": 1,
-"tipificacion_segun_casuistica": "La definición se encuentra en <<<TIPIFICACION_SEGUN_CASUISTICA>>>. Ejemplo: DOCUMENTOS_REGULAR.",
-"carreras_interes": ["Lista de carreras identificadas según <<<CARRERAS_DE_INTERES>>>. Ejemplo de valor: ingenieria_sistemas_informatica. Usa arreglo vacío [] si no hay."],
-"resultado_final_llamada": "Resultado final de la gestión según <<<RESULTADO_FINAL_LLAMADA>>>. Debe contener únicamente uno de los valores definidos en dicho atributo.",
-"conclusion_final_llamada": "Descripción breve del desenlace de la gestión según <<<CONCLUSION_FINAL_LLAMADA>>>.",
-"objecion_cliente_1_texto": "Resumen de la primera objeción identificada según <<<OBJECION_CLIENTE_1_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"rebate_asesor_1_texto": "Resumen del primer rebate identificado según <<<REBATE_ASESOR_1_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"objecion_cliente_2_texto": "Resumen de la segunda objeción identificada según <<<OBJECION_CLIENTE_2_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"rebate_asesor_2_texto": "Resumen del segundo rebate identificado según <<<REBATE_ASESOR_2_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"objecion_cliente_3_texto": "Resumen de la tercera objeción identificada según <<<OBJECION_CLIENTE_3_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"rebate_asesor_3_texto": "Resumen del tercer rebate identificado según <<<REBATE_ASESOR_3_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"resumen_evaluacion": "La definición se encuentra en <<<RESUMEN_EVALUACION>>>.",
-"T_SALUDO": "Momento del saludo según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_VALIDACION_DATOS": "Momento de validación de datos según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_SONDEO": "Momento del sondeo principal según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_ACLARA_DUDA": "Momento en que se atiende una consulta relevante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_OBJECION_CLIENTE_1": "Momento de la primera objeción del postesante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_REBATE_1": "Momento del primer rebate del asesor según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_CIERRE_1": "Momento del primer cierre posterior al rebate según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_OBJECION_CLIENTE_2": "Momento de la segunda objeción del postesante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_REBATE_2": "Momento del segundo rebate del asesor según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_CIERRE_2": "Momento del segundo cierre posterior al rebate según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_OBJECION_CLIENTE_3": "Momento de la tercera objeción del postesante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_REBATE_3": "Momento del tercer rebate del asesor según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_CIERRE_3": "Momento del tercer cierre posterior al rebate según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_SENTIDO_DE_URGENCIA": "Momento del sentido de urgencia según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_CIERRE": "Momento del cierre principal según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_DESPEDIDA": "Momento de la despedida según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_OFRECE_QR": "Momento en que el asesor ofrece QR según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_COMENTARIO_NEGATIVO_UTP": "Momento en que el asesor realiza comentarios negativos sobre UTP según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"MAYOR_REBATE": "1 si se detectan 4 o más rebates durante la interacción; 0 en caso contrario."
+"tipificacion_segun_casuistica": "DOCUMENTOS_REGULAR",
+"carreras_interes": [],
+"resultado_final_llamada": "NA",
+"conclusion_final_llamada": "Resumen breve del desenlace.",
+"objecion_cliente_1_texto": "NA",
+"rebate_asesor_1_texto": "NA",
+"objecion_cliente_2_texto": "NA",
+"rebate_asesor_2_texto": "NA",
+"objecion_cliente_3_texto": "NA",
+"rebate_asesor_3_texto": "NA",
+"resumen_evaluacion": "Resumen breve de la evaluación.",
+"T_SALUDO": 0,
+"T_VALIDACION_DATOS": 0,
+"T_SONDEO": 0,
+"T_ACLARA_DUDA": 0,
+"T_OBJECION_CLIENTE_1": 0,
+"T_REBATE_1": 0,
+"T_CIERRE_1": 0,
+"T_OBJECION_CLIENTE_2": 0,
+"T_REBATE_2": 0,
+"T_CIERRE_2": 0,
+"T_OBJECION_CLIENTE_3": 0,
+"T_REBATE_3": 0,
+"T_CIERRE_3": 0,
+"T_SENTIDO_DE_URGENCIA": 0,
+"T_CIERRE": 0,
+"T_DESPEDIDA": 0,
+"T_OFRECE_QR": 0,
+"T_COMENTARIO_NEGATIVO_UTP": 0,
+"MAYOR_REBATE": 0
 }
 ]
 
@@ -1462,6 +1465,9 @@ SELECT
   LENGTH(prompt_text) AS chars,
   STRPOS(prompt_text, 'REGLAS ANTI-CROSSTALK') > 0 AS tiene_anti_crosstalk,
   STRPOS(prompt_text, '{{asesor_nombre}}') > 0 AS tiene_asesor,
-  STRPOS(prompt_text, '{{transcripcion}}') > 0 AS tiene_placeholder
+  STRPOS(prompt_text, '{{transcripcion}}') > 0 AS tiene_placeholder,
+  STRPOS(prompt_text, 'rebate_efectivo_marcacion') > 0 AS tiene_rebate_efectivo_marcacion,
+  STRPOS(prompt_text, '"T_SALUDO": 0') > 0 AS tiene_t_saludo_entero,
+  STRPOS(prompt_text, 'NUNCA omitas claves') > 0 AS tiene_regla_no_omitir
 FROM `prd-utpbi-data-operation.raw_queue_smart.sys_prompts`
 WHERE prompt_name = 'canal_counter_prompt';
