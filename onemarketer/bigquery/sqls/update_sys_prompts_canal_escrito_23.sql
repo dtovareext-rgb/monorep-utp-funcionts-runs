@@ -1,6 +1,6 @@
 -- =============================================================================
 -- MERGE canal_escrito_prompt (idempotente: insert o update)
--- Regla 14 (Caso recibido por), tipificacion OBLIGATORIA (nunca null), base64
+-- tipificacion + tipificacion_detalle (catálogo RA/DS/SI/CDE), ancla Caso recibido por
 --
 -- bq query --use_legacy_sql=false --location=us-central1 \
 --   < onemarketer/bigquery/sqls/update_sys_prompts_canal_escrito_23.sql
@@ -10,7 +10,14 @@ MERGE `prd-utpbi-data-operation.raw_onemarketer.sys_prompts` AS t
 USING (
   SELECT
     'canal_escrito_prompt' AS prompt_name,
-    '''##################################################
+    '''
+Explorador de tablas
+vista previa
+Estadísticas
+Linaje
+Perfil de datos
+Calidad de los datos
+##################################################
 ROL Y CONTEXTO
 ##################################################
 
@@ -1063,25 +1070,63 @@ Seleccionar la motivación predominante según la conversación.
 
 <<<TIPIFICACION>>>
 
-Clasificar el resultado de la conversación.
+Clasificar el resultado de la conversación en DOS campos (ambos obligatorios):
 
-OBLIGATORIO — NUNCA null / vacío / NA:
-- `clasificadores.tipificacion` DEBE devolver SIEMPRE exactamente uno de: RA, DS, SI, CDE.
+1) `clasificadores.tipificacion` — familia (RA | DS | SI | CDE)
+2) `clasificadores.tipificacion_detalle` — código específico del catálogo (debe coincidir con la familia)
+
+OBLIGATORIO — NUNCA null / vacío / NA en ninguno de los dos:
 - PROHIBIDO devolver null, "null", "", "NA", "N/A" u omitir el campo.
-- Si hay duda, elige la opción más cercana con esta prioridad de desempate:
+- `tipificacion_detalle` DEBE ser EXACTAMENTE uno de los códigos listados abajo (sin inventar variantes).
+- El prefijo de `tipificacion_detalle` DEBE coincidir con `tipificacion` (ej. tipificacion=RA → detalle empieza con RA_; tipificacion=CDE → detalle=CDE; tipificacion=SI → detalle=SI).
+
+Prioridad de desempate para la familia:
   1) SI — hay promesa clara de inscripción/pago o inscripción en curso.
-  2) DS — el cliente queda fuera del proceso (otra uni, no desea contacto, fuera del país, ya inscrito, etc.).
+  2) DS — el cliente queda fuera del proceso (otra uni, no desea contacto, fuera del país, ya alumno UTP, etc.).
   3) CDE — hubo interacción humana post `Caso recibido por` y el cliente dejó de responder sin cerrar la gestión.
   4) RA — cliente sigue indeciso / revisando alternativas / hablará con padres / pedirá tiempo (default si no aplica 1–3).
 
-Opciones:
-
+Familias:
 - RA (Revisando Alternativas): Cliente aún indeciso o evaluando alternativas.
-- DS (Descalificado): Cliente no se inscribirá, ya está inscrito en otra institución, está fuera del país, no desea ser contactado o ya se inscribió.
+- DS (Descalificado): Cliente no se inscribirá / fuera de proceso / ya es alumno / motivos que descalifican.
 - SI (Se Inscribirá): Cliente decidió inscribirse o realizó promesa de pago o pago en línea.
-- CDE (Cliente Deja de Escribir): Existe interacción, pero el cliente abandona el chat y deja de responder sin completar la gestión.
+- CDE (Cliente Deja de Escribir): Existe interacción, pero el cliente abandona el chat sin completar la gestión.
 
-Seleccionar únicamente una tipificación (obligatoria en todas las conversaciones evaluables).
+Catálogo cerrado de `tipificacion_detalle`:
+
+RA (elige exactamente uno; tipificacion=RA):
+- RA_HORARIOS_TRABAJO — Horarios / incompatibilidad por trabajo
+- RA_HORARIOS_FAMILIA — Horarios / incompatibilidad por familia
+- RA_HORARIOS_OTROS_ESTUDIOS — Horarios / otros estudios
+- RA_VOLVER_A_ESCRIBIR — Pedirá volver a escribir / contactar después (default RA si no hay submotivo claro)
+- RA_MOTIVOS_ECONOMICOS — Motivos económicos (aún evaluando; no descalificado)
+- RA_VOLVER_A_LLAMAR_4_HORAS — Volver a llamar / contactar en ~4 horas
+- RA_EVALUA_OTRAS_INSTITUCIONES — Evalúa otras instituciones
+- RA_EVALUA_CONVALIDACION — Evalúa convalidación
+- RA_AUN_NO_DECIDE_LA_CARRERA — Aún no decide la carrera
+- RA_CONVERSARA_CON_SUS_PADRES — Conversará con sus padres
+- RA_VISITARA_COUNTER — Visitará counter
+- RA_DISTANCIA_OTRA_CIUDAD — Distancia / otra ciudad
+- RA_DISTANCIA_OTRO_DISTRITO — Distancia / otro distrito
+
+CDE (tipificacion=CDE):
+- CDE — Cliente dejó de escribir
+
+SI (tipificacion=SI):
+- SI — Se inscribirá / promesa de pago / inscripción en curso
+
+DS (elige exactamente uno; tipificacion=DS):
+- DS_YA_ES_ALUMNO_UTP — Ya es alumno UTP
+- DS_PROXIMO_PROCESO_OTROS — Próximo proceso — otros
+- DS_PROXIMO_EXAMEN_ADMISION_MOTIVOS_ECONOMICOS — Próximo examen de admisión / tramo — motivos económicos
+- DS_NO_ACEPTA_PLAZO_CONVALIDACION — No acepta plazo de convalidación
+- DS_POR_DISTANCIAS — Por distancias (descalificado)
+- DS_BECA_18 — Beca 18
+- DS_MENOR_4TO_SECUNDARIA — Menor de 4to de secundaria
+- DS_MOTIVOS_ECONOMICOS — Motivos económicos (descalificado / no continuará)
+- DS_NO_HAY_CARRERA_DE_INTERES — No hay carrera de interés
+
+Seleccionar exactamente una familia y un detalle del catálogo (obligatorio en todas las conversaciones evaluables).
 
 <<<END>>>
 
@@ -1899,10 +1944,12 @@ Estructura exacta:
   "clasificadores": {
     "motivacion_del_cliente": "trabajo|prestigio|status|autorrealizacion_desarrollo_personal|contribucion_a_la_sociedad|null",
     "tipificacion": "RA|DS|SI|CDE (OBLIGATORIO; NUNCA null)",
+    "tipificacion_detalle": "codigo del catalogo <<<TIPIFICACION>>> (OBLIGATORIO; debe coincidir con tipificacion)",
     "atributo": "Educacion actualizada|Educacion de calidad|Empleabilidad|Flexibilidad y acompanamiento|Vida universitaria|null",
     "estilo_del_asesor": "Profesional y comercial|Dinamico y entusiasta|Persuasivo vendedor|Neutral / rutinario|Apatico / desmotivado",
     "segundo_numero_contacto": "1|0|NA"
   },
+
   "motivo_no_venta": {
     "motivo": "AGENTE|CLIENTE|PROCESO|NA",
     "submotivo": "NA",
@@ -1928,10 +1975,11 @@ Reglas de salida:
 5. No inventes atributos fuera del esquema.
 6. resumen_evaluacion debe seguir las reglas de <<<RESUMEN_EVALUACION>>>.
 7. clasificadores.tipificacion es OBLIGATORIO: siempre "RA" o "DS" o "SI" o "CDE". NUNCA null, vacío ni "NA". Si dudas, usa "RA" (o "CDE" si el cliente dejó de escribir).
+8. clasificadores.tipificacion_detalle es OBLIGATORIO: código exacto del catálogo de <<<TIPIFICACION>>> coherente con tipificacion. NUNCA null ni inventar códigos. Si tipificacion=RA y no hay submotivo claro → RA_VOLVER_A_ESCRIBIR. Si tipificacion=SI → SI. Si tipificacion=CDE → CDE. Si tipificacion=DS sin submotivo claro → DS_PROXIMO_PROCESO_OTROS.
 
 --- CONVERSACION A EVALUAR ---
 {{conversacion}}
-''' AS prompt_text,
+ ''' AS prompt_text,
     CURRENT_TIMESTAMP() AS updated_at
 ) AS s
 ON t.prompt_name = s.prompt_name
@@ -1949,7 +1997,9 @@ SELECT
   LENGTH(prompt_text) AS chars,
   STRPOS(prompt_text, 'Caso recibido por') > 0 AS tiene_ancla_caso_recibido,
   STRPOS(prompt_text, 'clasificadores.tipificacion es OBLIGATORIO') > 0 AS tipificacion_obligatoria,
-  STRPOS(prompt_text, 'OBLIGATORIO — NUNCA null') > 0 AS tipificacion_nunca_null,
+  STRPOS(prompt_text, 'tipificacion_detalle') > 0 AS tipificacion_detalle,
+  STRPOS(prompt_text, 'RA_MOTIVOS_ECONOMICOS') > 0 AS catalogo_ra,
+  STRPOS(prompt_text, 'DS_YA_ES_ALUMNO_UTP') > 0 AS catalogo_ds,
   STRPOS(prompt_text, '{{conversacion}}') > 0 AS tiene_placeholder_conversacion
 FROM `prd-utpbi-data-operation.raw_onemarketer.sys_prompts`
 WHERE prompt_name = 'canal_escrito_prompt';

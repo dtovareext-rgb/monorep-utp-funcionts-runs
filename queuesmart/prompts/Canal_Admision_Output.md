@@ -1,3 +1,5 @@
+> QueeSmart Counter: ver Canal_Counter_Output.md y prompt canal_counter_prompt.
+
 En caso el postulante corte la llamada, abandone la interacción, impida al asesor continuar la gestión o no brinde oportunidad razonable para completar algún punto de evaluación, se considera que el asesor no incumplió dicho atributo y la marcación será "NA".
 
 El análisis de la conversación siempre devolverá la respuesta respetando estrictamente la estructura de un JSON válido, sin omitir ningún campo.

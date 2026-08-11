@@ -32,6 +32,7 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_onem
   -- clasificadores.*
   motivacion_del_cliente STRING,
   tipificacion STRING,
+  tipificacion_detalle STRING,
   atributo STRING,
   estilo_del_asesor STRING,
   segundo_numero_contacto STRING,

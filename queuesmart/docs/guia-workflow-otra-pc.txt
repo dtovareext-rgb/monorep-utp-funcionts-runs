@@ -113,7 +113,7 @@ Ejemplo día completo (ingesta + 3 SPs):
     --location=us-central1 \
     --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
     --data='{
-      "process_date": "2026-08-04",
+      "process_date": "2026-08-03",
       "project_id": "prd-utpbi-data-operation",
       "job_name": "prd-utpbi-s3-to-gcs-micro-batch",
       "gcs_bucket": "prd-utp-stg-queuesmart",

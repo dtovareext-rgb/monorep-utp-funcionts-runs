@@ -1,5 +1,5 @@
 -- =============================================================================
--- UPSERT canal_counter_prompt (anti-crosstalk + schema JSON completo)
+-- UPSERT canal_counter_prompt (marcaciones SI/NO/NA + pauta Counter)
 -- Fuente: queuesmart/prompts/canal_counter_prompt_completo.txt
 --
 -- bq query --use_legacy_sql=false --location=US \
@@ -73,7 +73,7 @@ CRITERIOS DE REDACCIÓN:
 - Utiliza comillas simples para citar intervenciones del asesor o prospecto.
 - No utilices comillas dobles.
 - Si no encuentras correlación con la regla evaluada, explica el motivo.
-- Finaliza cada descripción con la marcación obtenida: (1), (0) o (NA).
+- Finaliza cada descripción con la marcación obtenida: (SI), (NO) o (NA).
 
 ##################################################
 REGLAS GENERALES
@@ -95,15 +95,15 @@ Aplicadas a todos los atributos de la interacción.
 - Si la grabación finaliza abruptamente impidiendo evaluar uno o más atributos, dichos atributos deberán marcarse como 'NA'.
 
 4. Formato de marcación
-- Los campos de score únicamente pueden tomar los valores: '1', '0' o 'NA'.
+- Los campos de score / *_marcacion únicamente pueden tomar los valores: 'SI', 'NO' o 'NA'.
 - Incluir la marcación obtenida al final de cada descripción de atributo entre paréntesis.
-- Ejemplo: (1), (0) o (NA).
+- Ejemplo: (SI), (NO) o (NA).
 
 5. Criterio de evaluación
 - Leer y comprender la descripción completa de cada atributo antes de determinar su cumplimiento.
 - No es necesario que el asesor siga ejemplos o frases de referencia de forma literal.
 - Se permite el parafraseo siempre que el objetivo del atributo se mantenga.
-- Si el cumplimiento se evidencia mediante una formulación distinta, por iniciativa del prospecto o mediante una pregunta diferente del asesor, considerar el atributo como cumplido y asignar score '1'.
+- Si el cumplimiento se evidencia mediante una formulación distinta, por iniciativa del prospecto o mediante una pregunta diferente del asesor, considerar el atributo como cumplido y asignar score 'SI'.
 
 6. Información proporcionada espontáneamente por el prospecto
 - Si el prospecto proporciona espontáneamente información que normalmente debería ser obtenida mediante sondeo, no penalizar al asesor por no haberla solicitado.
@@ -133,8 +133,8 @@ Aplicadas a todos los atributos de la interacción.
 
 13. Afecta imagen institucional
 - Evaluar únicamente si el asesor realiza comentarios negativos sobre la UTP, desmerece a compañeros o afecta la imagen institucional.
-- Si se identifica alguno de estos comportamientos, asignar score '0'.
-- En caso contrario, asignar score '1'.
+- Si se identifica alguno de estos comportamientos, asignar score 'NO'.
+- En caso contrario, asignar score 'SI'.
 
 12. Uso de comillas
 - Utilizar comillas simples para citar intervenciones del asesor o del prospecto.
@@ -203,6 +203,12 @@ ITEM: GESTIÓN DE TIEMPOS
 Validar que el asesor atienda de manera oportuna el ticket asignado cuando no existan prospectos en espera.
 
 Adicionalmente, validar que el asesor mencione o confirme el número de ticket correspondiente durante la atención.
+
+MARCACIÓN (campo presenta_vacio_marcacion):
+- 'SI' si NO hay evidencia de demora injustificada (atención oportuna).
+- 'NO' si SÍ hay demora injustificada.
+- 'NA' SOLO si no es posible evaluar (grabación incompleta / sin evidencia suficiente).
+- PROHIBIDO marcar 'NA' cuando la descripción diga que no se evidencia demora: en ese caso debe ser 'SI'.
 
 <<<END>>> 
 
@@ -339,6 +345,12 @@ Validar que el asesor:
 - Identifique la motivación del prospecto para estudiar.
 - Brinde acompañamiento una vez conocida la motivación.
 
+MARCACIÓN (sondeo_motivacion_marcacion):
+- 'SI' si el asesor sondea/identifica la motivación.
+- 'NO' si debió sondear y NO hay evidencia de sondeo de motivación.
+- 'NA' SOLO en las excepciones de 'No aplica' arriba, o si el asesor preguntó y el prospecto no respondió / la atención se cortó.
+- PROHIBIDO usar 'NA' como sustituto de 'NO' cuando simplemente no hubo sondeo.
+
 Si el asesor realiza la consulta, pero el prospecto no responde, la conversación se desvía o la atención finaliza, calificar como 'NA'.
 
 <<<END>>> 
@@ -363,6 +375,12 @@ Para ello debe:
 - Explorar información relacionada con la carrera de interés.
 - Explorar información relacionada con la modalidad de estudio.
 - Consultar si actualmente trabaja cuando corresponda según el rango etario.
+
+MARCACIÓN (sondea_interes_postulante_marcacion):
+- 'SI' si hay evidencia de sondeo de interés adecuado.
+- 'NO' si debió sondear y NO hay evidencia ('No se evidencia sondeo...' = NO, NUNCA NA).
+- 'NA' SOLO por excepciones de la pauta (interrupción del prospecto, no elegible, etc.).
+- PROHIBIDO: marcar 'NA' con textos como 'No aplica para este tipo de evaluación' o 'No se evidencia sondeo' cuando el atributo sí aplica a Counter.
 
 RANGOS_ETARIOS
 
@@ -458,6 +476,14 @@ El argumentario debe:
 - Explicar el proceso de convalidación únicamente cuando corresponda.
 - Incluir el argumento de empleabilidad.
 
+INFO FUERA DEL PROCESO COMERCIAL (OBLIGATORIO):
+- Si el asesor brinda información que NO compete al área comercial / proceso de admisión Counter
+  (ejemplo: costo de titulación, trámites académicos internos ajenos a la venta, datos inventados
+  o no oficiales del proceso comercial), debe marcarse como incumplimiento.
+- Usar informacion_falsa_marcacion = 'NO' cuando haya intención engañosa, O marcar 'NO' en el
+  subatributo info_correcta_* / brinda_informacion_correcta correspondiente y mencionarlo en resumen_evaluacion.
+- No ignorar estos hallazgos: SÍ son error de evaluación.
+
 Argumento de empleabilidad de referencia:
 
 - La UTP se encuentra entre las universidades cuyos egresados son preferidos por las empresas.
@@ -525,10 +551,17 @@ No aplica si:
 - El prospecto se molesta y finaliza la atención.
 - El prospecto no brinda oportunidad razonable para desarrollar el rebate.
 
+REGLA OBLIGATORIA — TODAS LAS OBJECIONES:
+- Identifica TODAS las objeciones relevantes del prospecto (hasta 3 en objecion_cliente_1..3_texto).
+- NO te quedes solo con la primera objeción: la objeción principal puede no ser la primera.
+- rebate_marcacion = 'SI' SOLO si CADA objeción identificada tiene un rebate correspondiente
+  (rebate_asesor_1..3_texto). Si alguna objeción queda sin rebate → rebate_marcacion = 'NO'.
+- Si no hubo objeciones reales (solo consultas informativas) → rebate_marcacion = 'NA'.
+
 Validar que el asesor:
 
-- Identifique la objeción presentada por el prospecto.
-- Aborde la objeción de manera adecuada.
+- Identifique cada objeción presentada por el prospecto.
+- Aborde cada objeción de manera adecuada.
 - Ofrezca alternativas o soluciones cuando corresponda.
 - Adapte su respuesta a la situación específica del prospecto.
 
@@ -566,20 +599,25 @@ No aplica si:
 - El prospecto se molesta y finaliza la atención.
 - El prospecto no brinda oportunidad razonable para desarrollar el rebate.
 
-Validar que la respuesta brindada por el asesor responda directamente a la objeción presentada.
+NO basta con que el asesor 'rebata' algo: debes medir si el rebate fue ACORDE a la objeción.
+
+Validar pareja por pareja (objeción N ↔ rebate N):
 
 Se considera efectivo cuando:
 
-- El rebate aborda la misma temática de la objeción.
+- El rebate aborda la misma temática de ESA objeción.
 - La respuesta es coherente con la situación planteada.
 - Presenta argumentos, alternativas o soluciones alineadas a la necesidad del prospecto.
 
-Se considera no efectivo cuando:
+Se considera no efectivo (rebate_efectivo_marcacion = 'NO') cuando:
 
-- No responde a la objeción planteada.
+- No responde a la objeción planteada (aunque sí haya 'hablado' o insistido).
 - Utiliza argumentos genéricos que no guarden relación con la objeción.
 - Se limita únicamente a generar sentido de urgencia.
 - No presenta alternativas o soluciones cuando corresponda.
+- Rebatió solo la primera objeción y dejó otras sin respuesta alineada.
+
+rebate_efectivo_marcacion = 'SI' solo si TODOS los rebates requeridos son efectivos respecto a su objeción.
 
 <<<END>>> 
 
@@ -595,21 +633,34 @@ Se califica como 'NA' en los siguientes casos:
 - El prospecto ya se encuentra inscrito.
 - El prospecto interrumpe o finaliza la atención sin brindar oportunidad para realizar el pre-cierre, siempre que el asesor haya intentado rebatir.
 
-Se penaliza si:
+Se penaliza (cierre_comercial_marcacion = 'NO') si:
 
-- El asesor acepta reprogramar sin intentar realizar un cierre.
+- El asesor acepta reprogramar sin intentar realizar un cierre de inscripción.
 - El asesor interrumpe o finaliza la atención.
+- El 'cierre' es inválido (ver lista abajo).
 
-Validar los siguientes componentes:
+NO son cierre comercial válido (marcar 'NO', no 'SI'):
+- Preguntas abiertas sin pedir concretar inscripción/pago.
+- Agendar una siguiente comunicación / 'te escribo luego' / 'hablamos después'.
+- Quedarse a la espera de la confirmación del postulante sin intentar cerrar.
+- Reprogramar o dejar seguimiento sin intento explícito de inscripción.
 
-PRE_CIERRE
+SÍ es cierre válido: intención explícita de concretar inscripción o pago (ej. medio de pago,
+inscribirse ahora, reservar vacante, confirmar monto a pagar hoy).
+
+Validar los siguientes componentes (campos separados en el JSON):
+
+PRE_CIERRE (pre_cierre_marcacion)
 - Consulta al prospecto qué medio de pago utilizará para realizar la inscripción.
 
-CIERRE_COMERCIAL
-- Realiza intentos de cierre luego de abordar las objeciones identificadas.
+CIERRE_COMERCIAL (cierre_comercial_marcacion)
+- Realiza intentos de cierre LUEGO de abordar las objeciones identificadas.
 - Existe intención explícita de concretar la inscripción.
 - Es deseable realizar cierres posteriores a los rebates efectuados.
 - Como referencia, se esperan 2 rebates y 2 intentos de cierre cuando la atención lo permita.
+
+RESUMEN_DE_VENTA (resumen_venta_marcacion)
+- Validar según <<<RESUMEN_DE_VENTA>>> cuando haya venta o promesa de pago.
 
 RESUMEN_DE_VENTA
 - Aplica únicamente cuando la venta o inscripción se concreta.
@@ -774,6 +825,12 @@ Detectar si existe intención maliciosa del asesor al brindar información o rea
 
 Este atributo evalúa la INTENCIÓN del asesor y no los errores involuntarios.
 
+Además, si el asesor brinda información que NO compete al proceso comercial Counter
+(ej. costo de titulación u otros datos ajenos al área), márcalo como hallazgo negativo
+en informacion_falsa_marcacion = 'NO' cuando sea engañoso/deliberado, o en el subatributo
+info_correcta_* / brinda_informacion_correcta = 'NO' y explícalo en resumen_evaluacion.
+Nunca ignores información fuera de proceso.
+
 Considerar:
 
 - El asesor puede confundirse, equivocarse o brindar información incorrecta sin intención de engañar.
@@ -783,8 +840,8 @@ Considerar:
 
 Criterios de evaluación:
 
-- '1': No se detecta intención maliciosa.
-- '0': Se detecta intención maliciosa.
+- 'SI': No se detecta intención maliciosa ni info fuera de proceso engañosa.
+- 'NO': Se detecta intención maliciosa o info fuera de proceso usada para influir.
 
 <<<END>>> 
 
@@ -1290,12 +1347,12 @@ terapia_fisica
 
 Determinar el valor del indicador utilizando el resultado de <<<CARRERAS_DE_INTERES>>>.
 
-Asignar '1' cuando:
+Asignar 'SI' cuando:
 
 - <<<CARRERAS_DE_INTERES>>> contiene dos o más carreras.
 - <<<CARRERAS_DE_INTERES>>> contiene una sola carrera y no existe información específica para dicha carrera en los datos disponibles.
 
-Asignar '0' cuando:
+Asignar 'NO' cuando:
 
 - <<<CARRERAS_DE_INTERES>>> contiene una sola carrera y existe información específica para dicha carrera en los datos disponibles.
 
@@ -1317,7 +1374,7 @@ Todas las descripciones (*_descripcion) deben ser EXTREMADAMENTE CORTAS: máximo
 Sé directo y concreto. No escribas justificaciones largas ni explicaciones extensas.
 
 Ejemplo correcto:
-"Asesor se presentó correctamente mencionando su nombre y UTP. (1)"
+"Asesor se presentó correctamente mencionando su nombre y UTP. (SI)"
 
 Ejemplo incorrecto:
 Oraciones largas con detalles, explicaciones o justificaciones extensas.
@@ -1338,15 +1395,16 @@ IMPORTANTE PARA EL FORMATO DE RESPUESTA
 
 5. Asegúrate de escapar cualquier comilla doble ("") que pueda invalidar el JSON. No incluyas saltos de línea ni caracteres inválidos dentro de los campos de texto. Utiliza una sola línea por campo.
 
-6. Para los campos *_marcacion devuelve obligatoriamente:
+6. Para los campos *_marcacion devuelve obligatoriamente (STRING):
 
-   * 1
-   * 0
+   * "SI"
+   * "NO"
    * "NA"
 
-   No uses formatos como:
+   No uses 1/0 numéricos ni formatos como:
    - "1 | 0 | NA"
    - "Cumple"
+   - true/false
 
 7. Los atributos de "clasificacion" o "carreras_interes" deben ser estrictamente ARREGLOS DE STRINGS EN FORMATO JSON. Ejemplo: ["clasificacion1", "clasificacion2"]. Si no identificaste la clasificación, devuelve un arreglo vacío []. NO LOS RETORNES COMO TEXTO.
 
@@ -1354,13 +1412,15 @@ IMPORTANTE PARA EL FORMATO DE RESPUESTA
 
 9. Los campos de secuencia de conversación (T_*) y MAYOR_REBATE deben devolverse como números enteros. Si un evento no ocurre, devuelve 0. NUNCA uses texto en esos campos.
 
-10. Si un atributo no aplica según las reglas de la pauta, devuelve una descripción terminada en (NA) y una marcación igual a "NA".
+10. Si un atributo no aplica según las reglas de la pauta, devuelve una descripción terminada en (NA) y una marcación igual a "NA". No uses NA cuando el atributo aplica y simplemente no se cumplió (eso es "NO") ni cuando se cumplió (eso es "SI").
 
 11. Evalúa únicamente información presente en la conversación y en el contexto proporcionado. No realices inferencias externas ni supongas acciones no evidenciadas.
 
 12. Todos los campos deben respetar estrictamente el tipo de dato definido en el formato de salida.
 
-13. NUNCA omitas claves del JSON. En especial debes incluir siempre: rebate_efectivo_marcacion, cierre_comercial_*, sentido_urgencia_*, afecta_imagen_negocio_*, objecion_cliente_*_texto, rebate_asesor_*_texto, todos los T_* y MAYOR_REBATE. Si no hay evidencia usa 0 o "NA".
+13. NUNCA omitas claves del JSON. Incluye siempre rebates/objeciones, pre_cierre, resumen_venta, subatributos Counter nuevos, T_* y MAYOR_REBATE. En *_marcacion usa "SI"/"NO"/"NA"; en T_* usa enteros.
+
+14. NO incluyas claves de Admisión retiradas de Counter: empatia_*, actitud_comercial_*, sigue_flujo_gestion_*, ofrece_qr_*, valida_datos_postulante_*, T_OFRECE_QR.
 
 ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves. Los T_* y MAYOR_REBATE son ENTEROS):
 
@@ -1368,42 +1428,70 @@ ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves. Los T_* y MAYOR_REBA
 {
 "tipo_contacto": "PRIMER_CONTACTO",
 "gestion_principal": "DOCUMENTOS_REGULAR",
-"saludo_descripcion": "Justificación breve. (1)",
-"saludo_marcacion": 1,
-"despedida_descripcion": "Justificación breve. (1)",
-"despedida_marcacion": 1,
-"aclara_duda_cliente_descripcion": "Justificación breve. (1)",
-"aclara_duda_cliente_marcacion": 1,
-"presenta_vacio_descripcion": "Justificación breve. (1)",
-"presenta_vacio_marcacion": 1,
-"deja_en_espera_descripcion": "Justificación breve. (1)",
-"deja_en_espera_marcacion": 1,
-"empatia_descripcion": "Justificación breve. (1)",
-"empatia_marcacion": 1,
-"actitud_comercial_descripcion": "Justificación breve. (1)",
-"actitud_comercial_marcacion": 1,
-"lenguaje_grosero_descripcion": "Justificación breve. (1)",
-"lenguaje_grosero_marcacion": 1,
-"sigue_flujo_gestion_descripcion": "Justificación breve. (1)",
-"sigue_flujo_gestion_marcacion": 1,
-"brinda_informacion_correcta_descripcion": "Justificación breve. (1)",
-"brinda_informacion_correcta_marcacion": 1,
-"ofrece_qr_descripcion": "Justificación breve. (1)",
-"ofrece_qr_marcacion": 1,
-"valida_datos_postulante_descripcion": "Justificación breve. (1)",
-"valida_datos_postulante_marcacion": 1,
-"sondea_interes_postulante_descripcion": "Justificación breve. (1)",
-"sondea_interes_postulante_marcacion": 1,
-"rebate_descripcion": "Justificación breve. (1)",
-"rebate_marcacion": 1,
-"rebate_efectivo_descripcion": "Justificación breve. (1)",
-"rebate_efectivo_marcacion": 1,
-"cierre_comercial_descripcion": "Justificación breve. (1)",
-"cierre_comercial_marcacion": 1,
-"sentido_urgencia_descripcion": "Justificación breve. (1)",
-"sentido_urgencia_marcacion": 1,
-"afecta_imagen_negocio_descripcion": "Justificación breve. (1)",
-"afecta_imagen_negocio_marcacion": 1,
+"saludo_descripcion": "Justificación breve. (SI)",
+"saludo_marcacion": "SI",
+"despedida_descripcion": "Justificación breve. (SI)",
+"despedida_marcacion": "SI",
+"aclara_duda_cliente_descripcion": "Justificación breve. (SI)",
+"aclara_duda_cliente_marcacion": "SI",
+"presenta_vacio_descripcion": "Sin demora injustificada. (SI)",
+"presenta_vacio_marcacion": "SI",
+"deja_en_espera_descripcion": "Justificación breve. (SI)",
+"deja_en_espera_marcacion": "SI",
+"lenguaje_grosero_descripcion": "Justificación breve. (SI)",
+"lenguaje_grosero_marcacion": "SI",
+"tono_sarcastico_despectivo_descripcion": "Justificación breve. (SI)",
+"tono_sarcastico_despectivo_marcacion": "SI",
+"confronta_prospecto_descripcion": "Justificación breve. (SI)",
+"confronta_prospecto_marcacion": "SI",
+"tono_seguridad_descripcion": "Justificación breve. (SI)",
+"tono_seguridad_marcacion": "SI",
+"escucha_activa_descripcion": "Justificación breve. (SI)",
+"escucha_activa_marcacion": "SI",
+"brinda_informacion_correcta_descripcion": "Justificación breve. (SI)",
+"brinda_informacion_correcta_marcacion": "SI",
+"info_seguro_estudiantil_descripcion": "Justificación breve. (NA)",
+"info_seguro_estudiantil_marcacion": "NA",
+"plazo_entrega_documentos_descripcion": "Justificación breve. (NA)",
+"plazo_entrega_documentos_marcacion": "NA",
+"plazo_pago_matricula_descripcion": "Justificación breve. (NA)",
+"plazo_pago_matricula_marcacion": "NA",
+"otros_beneficios_descripcion": "Justificación breve. (NA)",
+"otros_beneficios_marcacion": "NA",
+"sondeo_motivacion_descripcion": "Justificación breve. (SI)",
+"sondeo_motivacion_marcacion": "SI",
+"sondea_interes_postulante_descripcion": "Justificación breve. (SI)",
+"sondea_interes_postulante_marcacion": "SI",
+"info_correcta_completa_sondeo_descripcion": "Justificación breve. (SI)",
+"info_correcta_completa_sondeo_marcacion": "SI",
+"info_correcta_becas_descripcion": "Justificación breve. (NA)",
+"info_correcta_becas_marcacion": "NA",
+"info_correcta_descuentos_descripcion": "Justificación breve. (NA)",
+"info_correcta_descuentos_marcacion": "NA",
+"info_correcta_convenios_descripcion": "Justificación breve. (NA)",
+"info_correcta_convenios_marcacion": "NA",
+"info_correcta_convalidacion_descripcion": "Justificación breve. (NA)",
+"info_correcta_convalidacion_marcacion": "NA",
+"info_correcta_carrera_campus_modalidad_turnos_descripcion": "Justificación breve. (SI)",
+"info_correcta_carrera_campus_modalidad_turnos_marcacion": "SI",
+"info_correcta_inversion_descripcion": "Justificación breve. (SI)",
+"info_correcta_inversion_marcacion": "SI",
+"rebate_descripcion": "Todas las objeciones rebatidas. (SI)",
+"rebate_marcacion": "SI",
+"rebate_efectivo_descripcion": "Rebates acordes a cada objeción. (SI)",
+"rebate_efectivo_marcacion": "SI",
+"pre_cierre_descripcion": "Justificación breve. (SI)",
+"pre_cierre_marcacion": "SI",
+"cierre_comercial_descripcion": "Cierre con intención de inscripción. (SI)",
+"cierre_comercial_marcacion": "SI",
+"resumen_venta_descripcion": "Justificación breve. (NA)",
+"resumen_venta_marcacion": "NA",
+"sentido_urgencia_descripcion": "Justificación breve. (SI)",
+"sentido_urgencia_marcacion": "SI",
+"afecta_imagen_negocio_descripcion": "Justificación breve. (SI)",
+"afecta_imagen_negocio_marcacion": "SI",
+"informacion_falsa_descripcion": "Sin info falsa ni fuera de proceso. (SI)",
+"informacion_falsa_marcacion": "SI",
 "tipificacion_segun_casuistica": "DOCUMENTOS_REGULAR",
 "carreras_interes": [],
 "resultado_final_llamada": "NA",
@@ -1431,7 +1519,6 @@ ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves. Los T_* y MAYOR_REBA
 "T_SENTIDO_DE_URGENCIA": 0,
 "T_CIERRE": 0,
 "T_DESPEDIDA": 0,
-"T_OFRECE_QR": 0,
 "T_COMENTARIO_NEGATIVO_UTP": 0,
 "MAYOR_REBATE": 0
 }
@@ -1463,11 +1550,10 @@ SELECT
   prompt_name,
   updated_at,
   LENGTH(prompt_text) AS chars,
-  STRPOS(prompt_text, 'REGLAS ANTI-CROSSTALK') > 0 AS tiene_anti_crosstalk,
-  STRPOS(prompt_text, '{{asesor_nombre}}') > 0 AS tiene_asesor,
-  STRPOS(prompt_text, '{{transcripcion}}') > 0 AS tiene_placeholder,
-  STRPOS(prompt_text, 'rebate_efectivo_marcacion') > 0 AS tiene_rebate_efectivo_marcacion,
-  STRPOS(prompt_text, '"T_SALUDO": 0') > 0 AS tiene_t_saludo_entero,
-  STRPOS(prompt_text, 'NUNCA omitas claves') > 0 AS tiene_regla_no_omitir
+  STRPOS(prompt_text, '"SI"') > 0 AS usa_si_no,
+  STRPOS(prompt_text, '"saludo_marcacion": "SI"') > 0 AS ejemplo_si,
+  STRPOS(prompt_text, 'TODAS LAS OBJECIONES') > 0 AS tiene_rebate_todas,
+  STRPOS(prompt_text, 'tono_sarcastico_despectivo_marcacion') > 0 AS tiene_subattrs,
+  STRPOS(prompt_text, '{{asesor_nombre}}') > 0 AS tiene_asesor
 FROM `prd-utpbi-data-operation.raw_queue_smart.sys_prompts`
 WHERE prompt_name = 'canal_counter_prompt';

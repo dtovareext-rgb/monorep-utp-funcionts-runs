@@ -82,7 +82,7 @@ Día completo (ETL + STT + Gemini). Sustituye ETL_URL:
     --project=prd-utpbi-data-operation \
     --location=us-central1 \
     --data='{
-      "process_date": "2026-06-22",
+      "process_date": "2026-08-04",
       "project_id": "prd-utpbi-data-operation",
       "etl_function_url": "ETL_URL",
       "invoke_downstream_sps": true,

@@ -109,6 +109,7 @@ BEGIN
     resumen_evaluacion,
     motivacion_del_cliente,
     tipificacion,
+    tipificacion_detalle,
     atributo,
     estilo_del_asesor,
     segundo_numero_contacto,
@@ -224,6 +225,73 @@ BEGIN
         THEN UPPER(TRIM(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion')))
       ELSE 'RA'
     END AS tipificacion,
+    -- tipificacion_detalle: catálogo cerrado coherente con tipificacion
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion'), '')))
+           IN ('RA', 'DS', 'SI', 'CDE')
+        THEN
+          CASE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion')))
+            WHEN 'RA' THEN
+              CASE
+                WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle'), ''))) IN (
+                  'RA_HORARIOS_TRABAJO',
+                  'RA_HORARIOS_FAMILIA',
+                  'RA_HORARIOS_OTROS_ESTUDIOS',
+                  'RA_VOLVER_A_ESCRIBIR',
+                  'RA_MOTIVOS_ECONOMICOS',
+                  'RA_VOLVER_A_LLAMAR_4_HORAS',
+                  'RA_EVALUA_OTRAS_INSTITUCIONES',
+                  'RA_EVALUA_CONVALIDACION',
+                  'RA_AUN_NO_DECIDE_LA_CARRERA',
+                  'RA_CONVERSARA_CON_SUS_PADRES',
+                  'RA_VISITARA_COUNTER',
+                  'RA_DISTANCIA_OTRA_CIUDAD',
+                  'RA_DISTANCIA_OTRO_DISTRITO'
+                )
+                  THEN UPPER(TRIM(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle')))
+                ELSE 'RA_VOLVER_A_ESCRIBIR'
+              END
+            WHEN 'DS' THEN
+              CASE
+                WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle'), ''))) IN (
+                  'DS_YA_ES_ALUMNO_UTP',
+                  'DS_PROXIMO_PROCESO_OTROS',
+                  'DS_PROXIMO_EXAMEN_ADMISION_MOTIVOS_ECONOMICOS',
+                  'DS_NO_ACEPTA_PLAZO_CONVALIDACION',
+                  'DS_POR_DISTANCIAS',
+                  'DS_BECA_18',
+                  'DS_MENOR_4TO_SECUNDARIA',
+                  'DS_MOTIVOS_ECONOMICOS',
+                  'DS_NO_HAY_CARRERA_DE_INTERES'
+                )
+                  THEN UPPER(TRIM(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle')))
+                ELSE 'DS_PROXIMO_PROCESO_OTROS'
+              END
+            WHEN 'SI' THEN 'SI'
+            WHEN 'CDE' THEN 'CDE'
+            ELSE 'RA_VOLVER_A_ESCRIBIR'
+          END
+      ELSE
+        CASE
+          WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle'), ''))) IN (
+            'RA_HORARIOS_TRABAJO',
+            'RA_HORARIOS_FAMILIA',
+            'RA_HORARIOS_OTROS_ESTUDIOS',
+            'RA_VOLVER_A_ESCRIBIR',
+            'RA_MOTIVOS_ECONOMICOS',
+            'RA_VOLVER_A_LLAMAR_4_HORAS',
+            'RA_EVALUA_OTRAS_INSTITUCIONES',
+            'RA_EVALUA_CONVALIDACION',
+            'RA_AUN_NO_DECIDE_LA_CARRERA',
+            'RA_CONVERSARA_CON_SUS_PADRES',
+            'RA_VISITARA_COUNTER',
+            'RA_DISTANCIA_OTRA_CIUDAD',
+            'RA_DISTANCIA_OTRO_DISTRITO'
+          )
+            THEN UPPER(TRIM(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle')))
+          ELSE 'RA_VOLVER_A_ESCRIBIR'
+        END
+    END AS tipificacion_detalle,
     JSON_VALUE(evaluacion_json, '$.clasificadores.atributo') AS atributo,
     JSON_VALUE(evaluacion_json, '$.clasificadores.estilo_del_asesor') AS estilo_del_asesor,
     JSON_VALUE(evaluacion_json, '$.clasificadores.segundo_numero_contacto') AS segundo_numero_contacto,
@@ -321,6 +389,7 @@ BEGIN
     resumen_evaluacion,
     motivacion_del_cliente,
     tipificacion,
+    tipificacion_detalle,
     atributo,
     estilo_del_asesor,
     segundo_numero_contacto,
@@ -418,6 +487,7 @@ BEGIN
     resumen_evaluacion,
     motivacion_del_cliente,
     tipificacion,
+    tipificacion_detalle,
     atributo,
     estilo_del_asesor,
     segundo_numero_contacto,

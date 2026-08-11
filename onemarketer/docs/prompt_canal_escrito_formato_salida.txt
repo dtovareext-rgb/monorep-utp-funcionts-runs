@@ -52,6 +52,7 @@ Estructura exacta:
   "clasificadores": {
     "motivacion_del_cliente": "trabajo|prestigio|status|autorrealizacion_desarrollo_personal|contribucion_a_la_sociedad|null",
     "tipificacion": "RA|DS|SI|CDE",
+    "tipificacion_detalle": "RA_*|DS_*|SI|CDE",
     "atributo": "Educacion actualizada|Educacion de calidad|Empleabilidad|Flexibilidad y acompanamiento|Vida universitaria|null",
     "estilo_del_asesor": "Profesional y comercial|Dinamico y entusiasta|Persuasivo vendedor|Neutral / rutinario|Apatico / desmotivado",
     "segundo_numero_contacto": "1|0|NA"

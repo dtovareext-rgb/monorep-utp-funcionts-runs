@@ -1,5 +1,5 @@
 -- Gen IA QueeSmart análisis audio vs sys_prompts — capa RAW — PRODUCCIÓN
--- Schema alineado a queuesmart/prompts/Canal_Admision_Output.md
+-- Schema alineado a queuesmart/prompts/Canal_Counter_Output.md
 -- Grano: process_date + gcs_uri
 -- Prompt: raw_queue_smart.sys_prompts.canal_counter_prompt
 -- prd-utpbi-data-operation.adf_speech_analytics (US)
@@ -40,7 +40,7 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_queu
   conclusion_final_llamada STRING,
   resumen_evaluacion STRING,
   carreras_interes STRING,
-  -- Atributos (marcacion STRING: 1|0|NA)
+  -- Atributos (marcacion STRING: SI|NO|NA)
   saludo_marcacion STRING,
   saludo_descripcion STRING,
   despedida_marcacion STRING,
@@ -51,20 +51,10 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_queu
   presenta_vacio_descripcion STRING,
   deja_en_espera_marcacion STRING,
   deja_en_espera_descripcion STRING,
-  empatia_marcacion STRING,
-  empatia_descripcion STRING,
-  actitud_comercial_marcacion STRING,
-  actitud_comercial_descripcion STRING,
   lenguaje_grosero_marcacion STRING,
   lenguaje_grosero_descripcion STRING,
-  sigue_flujo_gestion_marcacion STRING,
-  sigue_flujo_gestion_descripcion STRING,
   brinda_informacion_correcta_marcacion STRING,
   brinda_informacion_correcta_descripcion STRING,
-  ofrece_qr_marcacion STRING,
-  ofrece_qr_descripcion STRING,
-  valida_datos_postulante_marcacion STRING,
-  valida_datos_postulante_descripcion STRING,
   sondea_interes_postulante_marcacion STRING,
   sondea_interes_postulante_descripcion STRING,
   rebate_marcacion STRING,
@@ -77,6 +67,45 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_queu
   sentido_urgencia_descripcion STRING,
   afecta_imagen_negocio_marcacion STRING,
   afecta_imagen_negocio_descripcion STRING,
+  -- Subatributos Counter
+  tono_sarcastico_despectivo_marcacion STRING,
+  tono_sarcastico_despectivo_descripcion STRING,
+  confronta_prospecto_marcacion STRING,
+  confronta_prospecto_descripcion STRING,
+  tono_seguridad_marcacion STRING,
+  tono_seguridad_descripcion STRING,
+  escucha_activa_marcacion STRING,
+  escucha_activa_descripcion STRING,
+  info_seguro_estudiantil_marcacion STRING,
+  info_seguro_estudiantil_descripcion STRING,
+  plazo_entrega_documentos_marcacion STRING,
+  plazo_entrega_documentos_descripcion STRING,
+  plazo_pago_matricula_marcacion STRING,
+  plazo_pago_matricula_descripcion STRING,
+  otros_beneficios_marcacion STRING,
+  otros_beneficios_descripcion STRING,
+  sondeo_motivacion_marcacion STRING,
+  sondeo_motivacion_descripcion STRING,
+  info_correcta_completa_sondeo_marcacion STRING,
+  info_correcta_completa_sondeo_descripcion STRING,
+  info_correcta_becas_marcacion STRING,
+  info_correcta_becas_descripcion STRING,
+  info_correcta_descuentos_marcacion STRING,
+  info_correcta_descuentos_descripcion STRING,
+  info_correcta_convenios_marcacion STRING,
+  info_correcta_convenios_descripcion STRING,
+  info_correcta_convalidacion_marcacion STRING,
+  info_correcta_convalidacion_descripcion STRING,
+  info_correcta_carrera_campus_modalidad_turnos_marcacion STRING,
+  info_correcta_carrera_campus_modalidad_turnos_descripcion STRING,
+  info_correcta_inversion_marcacion STRING,
+  info_correcta_inversion_descripcion STRING,
+  pre_cierre_marcacion STRING,
+  pre_cierre_descripcion STRING,
+  resumen_venta_marcacion STRING,
+  resumen_venta_descripcion STRING,
+  informacion_falsa_marcacion STRING,
+  informacion_falsa_descripcion STRING,
   -- Objeciones / rebates texto
   objecion_cliente_1_texto STRING,
   rebate_asesor_1_texto STRING,
@@ -101,12 +130,11 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_queu
   t_sentido_de_urgencia STRING,
   t_cierre STRING,
   t_despedida STRING,
-  t_ofrece_qr STRING,
   t_comentario_negativo_utp STRING,
   mayor_rebate STRING,
   load_date DATETIME
 )
 PARTITION BY process_date
 OPTIONS (
-  description = 'Gen IA análisis pauta Counter QueeSmart — schema Canal_Admision_Output'
+  description = 'Gen IA análisis pauta Counter QueeSmart — schema Canal_Counter_Output'
 );

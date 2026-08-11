@@ -9,8 +9,8 @@
 --   1) Toma todas las transcripciones del día desde hist STT PRD
 --   2) AI.GENERATE_TABLE + INSERT hist análisis
 --
--- Formato salida: queuesmart/prompts/Canal_Admision_Output.md
---   arreglo JSON [{ ... }] con *_marcacion / *_descripcion
+-- Formato salida: queuesmart/prompts/Canal_Counter_Output.md
+--   arreglo JSON [{ ... }] con *_marcacion (SI|NO|NA) / *_descripcion
 --
 -- Placeholders: {{transcripcion}} {{transcripcion_con_hablantes}}
 --               {{asesor_nombre}} {{asesor_usuario}} {{asesor_codigo}}
@@ -137,6 +137,129 @@ BEGIN
   WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
   INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
+(
+    process_date,
+    gcs_uri,
+    file_name,
+    source_file_name,
+    audio,
+    recordid,
+    rowid,
+    codagencia,
+    campus_code,
+    asesornombre,
+    asesorusuario,
+    asesorcodigo,
+    ndoc,
+    nombresusuario,
+    numcelular,
+    clientetipo,
+    `database`,
+    transcripcion,
+    prompt_name,
+    prompt_updated_at,
+    json_text,
+    evaluacion_json,
+    full_response,
+    status,
+    analisis_llm,
+    tipo_contacto,
+    gestion_principal,
+    tipificacion_segun_casuistica,
+    resultado_final_llamada,
+    conclusion_final_llamada,
+    resumen_evaluacion,
+    carreras_interes,
+    saludo_marcacion,
+    saludo_descripcion,
+    despedida_marcacion,
+    despedida_descripcion,
+    aclara_duda_cliente_marcacion,
+    aclara_duda_cliente_descripcion,
+    presenta_vacio_marcacion,
+    presenta_vacio_descripcion,
+    deja_en_espera_marcacion,
+    deja_en_espera_descripcion,
+    lenguaje_grosero_marcacion,
+    lenguaje_grosero_descripcion,
+    brinda_informacion_correcta_marcacion,
+    brinda_informacion_correcta_descripcion,
+    sondea_interes_postulante_marcacion,
+    sondea_interes_postulante_descripcion,
+    rebate_marcacion,
+    rebate_descripcion,
+    rebate_efectivo_marcacion,
+    rebate_efectivo_descripcion,
+    cierre_comercial_marcacion,
+    cierre_comercial_descripcion,
+    sentido_urgencia_marcacion,
+    sentido_urgencia_descripcion,
+    afecta_imagen_negocio_marcacion,
+    afecta_imagen_negocio_descripcion,
+    tono_sarcastico_despectivo_marcacion,
+    tono_sarcastico_despectivo_descripcion,
+    confronta_prospecto_marcacion,
+    confronta_prospecto_descripcion,
+    tono_seguridad_marcacion,
+    tono_seguridad_descripcion,
+    escucha_activa_marcacion,
+    escucha_activa_descripcion,
+    info_seguro_estudiantil_marcacion,
+    info_seguro_estudiantil_descripcion,
+    plazo_entrega_documentos_marcacion,
+    plazo_entrega_documentos_descripcion,
+    plazo_pago_matricula_marcacion,
+    plazo_pago_matricula_descripcion,
+    otros_beneficios_marcacion,
+    otros_beneficios_descripcion,
+    sondeo_motivacion_marcacion,
+    sondeo_motivacion_descripcion,
+    info_correcta_completa_sondeo_marcacion,
+    info_correcta_completa_sondeo_descripcion,
+    info_correcta_becas_marcacion,
+    info_correcta_becas_descripcion,
+    info_correcta_descuentos_marcacion,
+    info_correcta_descuentos_descripcion,
+    info_correcta_convenios_marcacion,
+    info_correcta_convenios_descripcion,
+    info_correcta_convalidacion_marcacion,
+    info_correcta_convalidacion_descripcion,
+    info_correcta_carrera_campus_modalidad_turnos_marcacion,
+    info_correcta_carrera_campus_modalidad_turnos_descripcion,
+    info_correcta_inversion_marcacion,
+    info_correcta_inversion_descripcion,
+    pre_cierre_marcacion,
+    pre_cierre_descripcion,
+    resumen_venta_marcacion,
+    resumen_venta_descripcion,
+    informacion_falsa_marcacion,
+    informacion_falsa_descripcion,
+    objecion_cliente_1_texto,
+    rebate_asesor_1_texto,
+    objecion_cliente_2_texto,
+    rebate_asesor_2_texto,
+    objecion_cliente_3_texto,
+    rebate_asesor_3_texto,
+    t_saludo,
+    t_validacion_datos,
+    t_sondeo,
+    t_aclara_duda,
+    t_objecion_cliente_1,
+    t_rebate_1,
+    t_cierre_1,
+    t_objecion_cliente_2,
+    t_rebate_2,
+    t_cierre_2,
+    t_objecion_cliente_3,
+    t_rebate_3,
+    t_cierre_3,
+    t_sentido_de_urgencia,
+    t_cierre,
+    t_despedida,
+    t_comentario_negativo_utp,
+    mayor_rebate,
+    load_date
+)
   WITH cte_cleaned AS (
     SELECT
       ia.*,
@@ -190,60 +313,316 @@ BEGIN
     JSON_VALUE(evaluacion_json, '$[0].conclusion_final_llamada') AS conclusion_final_llamada,
     JSON_VALUE(evaluacion_json, '$[0].resumen_evaluacion') AS resumen_evaluacion,
     TO_JSON_STRING(JSON_QUERY(evaluacion_json, '$[0].carreras_interes')) AS carreras_interes,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion') AS STRING) AS saludo_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion')))
+    END AS saludo_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].saludo_descripcion') AS saludo_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].despedida_marcacion') AS STRING) AS despedida_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].despedida_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].despedida_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].despedida_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].despedida_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].despedida_marcacion')))
+    END AS despedida_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].despedida_descripcion') AS despedida_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].aclara_duda_cliente_marcacion') AS STRING) AS aclara_duda_cliente_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].aclara_duda_cliente_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].aclara_duda_cliente_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].aclara_duda_cliente_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].aclara_duda_cliente_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].aclara_duda_cliente_marcacion')))
+    END AS aclara_duda_cliente_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].aclara_duda_cliente_descripcion') AS aclara_duda_cliente_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].presenta_vacio_marcacion') AS STRING) AS presenta_vacio_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].presenta_vacio_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].presenta_vacio_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].presenta_vacio_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].presenta_vacio_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].presenta_vacio_marcacion')))
+    END AS presenta_vacio_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].presenta_vacio_descripcion') AS presenta_vacio_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].deja_en_espera_marcacion') AS STRING) AS deja_en_espera_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].deja_en_espera_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].deja_en_espera_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].deja_en_espera_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].deja_en_espera_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].deja_en_espera_marcacion')))
+    END AS deja_en_espera_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].deja_en_espera_descripcion') AS deja_en_espera_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].empatia_marcacion') AS STRING) AS empatia_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].empatia_descripcion') AS empatia_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].actitud_comercial_marcacion') AS STRING) AS actitud_comercial_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].actitud_comercial_descripcion') AS actitud_comercial_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].lenguaje_grosero_marcacion') AS STRING) AS lenguaje_grosero_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].lenguaje_grosero_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].lenguaje_grosero_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].lenguaje_grosero_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].lenguaje_grosero_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].lenguaje_grosero_marcacion')))
+    END AS lenguaje_grosero_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].lenguaje_grosero_descripcion') AS lenguaje_grosero_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].sigue_flujo_gestion_marcacion') AS STRING) AS sigue_flujo_gestion_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].sigue_flujo_gestion_descripcion') AS sigue_flujo_gestion_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].brinda_informacion_correcta_marcacion') AS STRING) AS brinda_informacion_correcta_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].brinda_informacion_correcta_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].brinda_informacion_correcta_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].brinda_informacion_correcta_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].brinda_informacion_correcta_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].brinda_informacion_correcta_marcacion')))
+    END AS brinda_informacion_correcta_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].brinda_informacion_correcta_descripcion') AS brinda_informacion_correcta_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].ofrece_qr_marcacion') AS STRING) AS ofrece_qr_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].ofrece_qr_descripcion') AS ofrece_qr_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].valida_datos_postulante_marcacion') AS STRING) AS valida_datos_postulante_marcacion,
-    JSON_VALUE(evaluacion_json, '$[0].valida_datos_postulante_descripcion') AS valida_datos_postulante_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].sondea_interes_postulante_marcacion') AS STRING) AS sondea_interes_postulante_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].sondea_interes_postulante_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].sondea_interes_postulante_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].sondea_interes_postulante_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].sondea_interes_postulante_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].sondea_interes_postulante_marcacion')))
+    END AS sondea_interes_postulante_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].sondea_interes_postulante_descripcion') AS sondea_interes_postulante_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].rebate_marcacion') AS STRING) AS rebate_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].rebate_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].rebate_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].rebate_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].rebate_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].rebate_marcacion')))
+    END AS rebate_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].rebate_descripcion') AS rebate_descripcion,
-    CAST(JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_marcacion') AS STRING) AS rebate_efectivo_marcacion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_marcacion')))
+    END AS rebate_efectivo_marcacion,
     JSON_VALUE(evaluacion_json, '$[0].rebate_efectivo_descripcion') AS rebate_efectivo_descripcion,
-    CAST(COALESCE(
+    CASE
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_marcacion'),
       JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_MARCACION')
-    ) AS STRING) AS cierre_comercial_marcacion,
+    ), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_MARCACION')
+    ), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_MARCACION')
+    ), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_MARCACION')
+    )), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_MARCACION')
+    )))
+    END AS cierre_comercial_marcacion,
     COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].cierre_comercial_descripcion'),
       JSON_VALUE(evaluacion_json, '$[0].CIERRE_COMERCIAL_DESCRIPCION')
     ) AS cierre_comercial_descripcion,
-    CAST(COALESCE(
+    CASE
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_marcacion'),
       JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_MARCACION')
-    ) AS STRING) AS sentido_urgencia_marcacion,
+    ), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_MARCACION')
+    ), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_MARCACION')
+    ), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_MARCACION')
+    )), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_MARCACION')
+    )))
+    END AS sentido_urgencia_marcacion,
     COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].sentido_urgencia_descripcion'),
       JSON_VALUE(evaluacion_json, '$[0].SENTIDO_URGENCIA_DESCRIPCION')
     ) AS sentido_urgencia_descripcion,
-    CAST(COALESCE(
+    CASE
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_marcacion'),
       JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_MARCACION')
-    ) AS STRING) AS afecta_imagen_negocio_marcacion,
+    ), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_MARCACION')
+    ), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_MARCACION')
+    ), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_MARCACION')
+    )), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_marcacion'),
+      JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_MARCACION')
+    )))
+    END AS afecta_imagen_negocio_marcacion,
     COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].afecta_imagen_negocio_descripcion'),
       JSON_VALUE(evaluacion_json, '$[0].AFECTA_IMAGEN_NEGOCIO_DESCRIPCION')
     ) AS afecta_imagen_negocio_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].tono_sarcastico_despectivo_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].tono_sarcastico_despectivo_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].tono_sarcastico_despectivo_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].tono_sarcastico_despectivo_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].tono_sarcastico_despectivo_marcacion')))
+    END AS tono_sarcastico_despectivo_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].tono_sarcastico_despectivo_descripcion') AS tono_sarcastico_despectivo_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].confronta_prospecto_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].confronta_prospecto_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].confronta_prospecto_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].confronta_prospecto_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].confronta_prospecto_marcacion')))
+    END AS confronta_prospecto_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].confronta_prospecto_descripcion') AS confronta_prospecto_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].tono_seguridad_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].tono_seguridad_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].tono_seguridad_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].tono_seguridad_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].tono_seguridad_marcacion')))
+    END AS tono_seguridad_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].tono_seguridad_descripcion') AS tono_seguridad_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].escucha_activa_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].escucha_activa_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].escucha_activa_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].escucha_activa_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].escucha_activa_marcacion')))
+    END AS escucha_activa_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].escucha_activa_descripcion') AS escucha_activa_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_seguro_estudiantil_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_seguro_estudiantil_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_seguro_estudiantil_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_seguro_estudiantil_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_seguro_estudiantil_marcacion')))
+    END AS info_seguro_estudiantil_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_seguro_estudiantil_descripcion') AS info_seguro_estudiantil_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].plazo_entrega_documentos_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].plazo_entrega_documentos_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].plazo_entrega_documentos_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].plazo_entrega_documentos_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].plazo_entrega_documentos_marcacion')))
+    END AS plazo_entrega_documentos_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].plazo_entrega_documentos_descripcion') AS plazo_entrega_documentos_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].plazo_pago_matricula_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].plazo_pago_matricula_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].plazo_pago_matricula_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].plazo_pago_matricula_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].plazo_pago_matricula_marcacion')))
+    END AS plazo_pago_matricula_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].plazo_pago_matricula_descripcion') AS plazo_pago_matricula_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].otros_beneficios_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].otros_beneficios_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].otros_beneficios_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].otros_beneficios_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].otros_beneficios_marcacion')))
+    END AS otros_beneficios_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].otros_beneficios_descripcion') AS otros_beneficios_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].sondeo_motivacion_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].sondeo_motivacion_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].sondeo_motivacion_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].sondeo_motivacion_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].sondeo_motivacion_marcacion')))
+    END AS sondeo_motivacion_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].sondeo_motivacion_descripcion') AS sondeo_motivacion_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_completa_sondeo_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_completa_sondeo_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_completa_sondeo_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_completa_sondeo_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_completa_sondeo_marcacion')))
+    END AS info_correcta_completa_sondeo_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_correcta_completa_sondeo_descripcion') AS info_correcta_completa_sondeo_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_becas_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_becas_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_becas_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_becas_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_becas_marcacion')))
+    END AS info_correcta_becas_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_correcta_becas_descripcion') AS info_correcta_becas_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_descuentos_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_descuentos_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_descuentos_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_descuentos_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_descuentos_marcacion')))
+    END AS info_correcta_descuentos_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_correcta_descuentos_descripcion') AS info_correcta_descuentos_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convenios_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convenios_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convenios_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convenios_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convenios_marcacion')))
+    END AS info_correcta_convenios_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_correcta_convenios_descripcion') AS info_correcta_convenios_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convalidacion_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convalidacion_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convalidacion_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convalidacion_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_convalidacion_marcacion')))
+    END AS info_correcta_convalidacion_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_correcta_convalidacion_descripcion') AS info_correcta_convalidacion_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_carrera_campus_modalidad_turnos_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_carrera_campus_modalidad_turnos_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_carrera_campus_modalidad_turnos_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_carrera_campus_modalidad_turnos_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_carrera_campus_modalidad_turnos_marcacion')))
+    END AS info_correcta_carrera_campus_modalidad_turnos_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_correcta_carrera_campus_modalidad_turnos_descripcion') AS info_correcta_carrera_campus_modalidad_turnos_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_inversion_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_inversion_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].info_correcta_inversion_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_inversion_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].info_correcta_inversion_marcacion')))
+    END AS info_correcta_inversion_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].info_correcta_inversion_descripcion') AS info_correcta_inversion_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].pre_cierre_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].pre_cierre_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].pre_cierre_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].pre_cierre_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].pre_cierre_marcacion')))
+    END AS pre_cierre_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].pre_cierre_descripcion') AS pre_cierre_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].resumen_venta_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].resumen_venta_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].resumen_venta_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].resumen_venta_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].resumen_venta_marcacion')))
+    END AS resumen_venta_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].resumen_venta_descripcion') AS resumen_venta_descripcion,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].informacion_falsa_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].informacion_falsa_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].informacion_falsa_marcacion'), ''))) IN ('NA', 'N/A', 'N.A.') THEN 'NA'
+      WHEN NULLIF(TRIM(JSON_VALUE(evaluacion_json, '$[0].informacion_falsa_marcacion')), '') IS NULL THEN NULL
+      ELSE UPPER(TRIM(JSON_VALUE(evaluacion_json, '$[0].informacion_falsa_marcacion')))
+    END AS informacion_falsa_marcacion,
+    JSON_VALUE(evaluacion_json, '$[0].informacion_falsa_descripcion') AS informacion_falsa_descripcion,
     COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].objecion_cliente_1_texto'),
       JSON_VALUE(evaluacion_json, '$[0].OBJECION_CLIENTE_1_TEXTO')
@@ -334,10 +713,6 @@ BEGIN
       JSON_VALUE(evaluacion_json, '$[0].t_despedida')
     ) AS STRING) AS t_despedida,
     CAST(COALESCE(
-      JSON_VALUE(evaluacion_json, '$[0].T_OFRECE_QR'),
-      JSON_VALUE(evaluacion_json, '$[0].t_ofrece_qr')
-    ) AS STRING) AS t_ofrece_qr,
-    CAST(COALESCE(
       JSON_VALUE(evaluacion_json, '$[0].T_COMENTARIO_NEGATIVO_UTP'),
       JSON_VALUE(evaluacion_json, '$[0].t_comentario_negativo_utp')
     ) AS STRING) AS t_comentario_negativo_utp,
@@ -352,6 +727,124 @@ BEGIN
   WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
   INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
+(
+    process_date,
+    gcs_uri,
+    file_name,
+    source_file_name,
+    audio,
+    recordid,
+    rowid,
+    codagencia,
+    campus_code,
+    asesornombre,
+    asesorusuario,
+    asesorcodigo,
+    ndoc,
+    nombresusuario,
+    numcelular,
+    clientetipo,
+    `database`,
+    transcripcion,
+    prompt_name,
+    evaluacion_json,
+    tipo_contacto,
+    gestion_principal,
+    tipificacion_segun_casuistica,
+    resultado_final_llamada,
+    conclusion_final_llamada,
+    resumen_evaluacion,
+    carreras_interes,
+    saludo_marcacion,
+    saludo_descripcion,
+    despedida_marcacion,
+    despedida_descripcion,
+    aclara_duda_cliente_marcacion,
+    aclara_duda_cliente_descripcion,
+    presenta_vacio_marcacion,
+    presenta_vacio_descripcion,
+    deja_en_espera_marcacion,
+    deja_en_espera_descripcion,
+    lenguaje_grosero_marcacion,
+    lenguaje_grosero_descripcion,
+    brinda_informacion_correcta_marcacion,
+    brinda_informacion_correcta_descripcion,
+    sondea_interes_postulante_marcacion,
+    sondea_interes_postulante_descripcion,
+    rebate_marcacion,
+    rebate_descripcion,
+    rebate_efectivo_marcacion,
+    rebate_efectivo_descripcion,
+    cierre_comercial_marcacion,
+    cierre_comercial_descripcion,
+    sentido_urgencia_marcacion,
+    sentido_urgencia_descripcion,
+    afecta_imagen_negocio_marcacion,
+    afecta_imagen_negocio_descripcion,
+    tono_sarcastico_despectivo_marcacion,
+    tono_sarcastico_despectivo_descripcion,
+    confronta_prospecto_marcacion,
+    confronta_prospecto_descripcion,
+    tono_seguridad_marcacion,
+    tono_seguridad_descripcion,
+    escucha_activa_marcacion,
+    escucha_activa_descripcion,
+    info_seguro_estudiantil_marcacion,
+    info_seguro_estudiantil_descripcion,
+    plazo_entrega_documentos_marcacion,
+    plazo_entrega_documentos_descripcion,
+    plazo_pago_matricula_marcacion,
+    plazo_pago_matricula_descripcion,
+    otros_beneficios_marcacion,
+    otros_beneficios_descripcion,
+    sondeo_motivacion_marcacion,
+    sondeo_motivacion_descripcion,
+    info_correcta_completa_sondeo_marcacion,
+    info_correcta_completa_sondeo_descripcion,
+    info_correcta_becas_marcacion,
+    info_correcta_becas_descripcion,
+    info_correcta_descuentos_marcacion,
+    info_correcta_descuentos_descripcion,
+    info_correcta_convenios_marcacion,
+    info_correcta_convenios_descripcion,
+    info_correcta_convalidacion_marcacion,
+    info_correcta_convalidacion_descripcion,
+    info_correcta_carrera_campus_modalidad_turnos_marcacion,
+    info_correcta_carrera_campus_modalidad_turnos_descripcion,
+    info_correcta_inversion_marcacion,
+    info_correcta_inversion_descripcion,
+    pre_cierre_marcacion,
+    pre_cierre_descripcion,
+    resumen_venta_marcacion,
+    resumen_venta_descripcion,
+    informacion_falsa_marcacion,
+    informacion_falsa_descripcion,
+    objecion_cliente_1_texto,
+    rebate_asesor_1_texto,
+    objecion_cliente_2_texto,
+    rebate_asesor_2_texto,
+    objecion_cliente_3_texto,
+    rebate_asesor_3_texto,
+    t_saludo,
+    t_validacion_datos,
+    t_sondeo,
+    t_aclara_duda,
+    t_objecion_cliente_1,
+    t_rebate_1,
+    t_cierre_1,
+    t_objecion_cliente_2,
+    t_rebate_2,
+    t_cierre_2,
+    t_objecion_cliente_3,
+    t_rebate_3,
+    t_cierre_3,
+    t_sentido_de_urgencia,
+    t_cierre,
+    t_despedida,
+    t_comentario_negativo_utp,
+    mayor_rebate,
+    load_date
+)
   SELECT
     process_date,
     gcs_uri,
@@ -390,20 +883,10 @@ BEGIN
     presenta_vacio_descripcion,
     deja_en_espera_marcacion,
     deja_en_espera_descripcion,
-    empatia_marcacion,
-    empatia_descripcion,
-    actitud_comercial_marcacion,
-    actitud_comercial_descripcion,
     lenguaje_grosero_marcacion,
     lenguaje_grosero_descripcion,
-    sigue_flujo_gestion_marcacion,
-    sigue_flujo_gestion_descripcion,
     brinda_informacion_correcta_marcacion,
     brinda_informacion_correcta_descripcion,
-    ofrece_qr_marcacion,
-    ofrece_qr_descripcion,
-    valida_datos_postulante_marcacion,
-    valida_datos_postulante_descripcion,
     sondea_interes_postulante_marcacion,
     sondea_interes_postulante_descripcion,
     rebate_marcacion,
@@ -416,6 +899,44 @@ BEGIN
     sentido_urgencia_descripcion,
     afecta_imagen_negocio_marcacion,
     afecta_imagen_negocio_descripcion,
+    tono_sarcastico_despectivo_marcacion,
+    tono_sarcastico_despectivo_descripcion,
+    confronta_prospecto_marcacion,
+    confronta_prospecto_descripcion,
+    tono_seguridad_marcacion,
+    tono_seguridad_descripcion,
+    escucha_activa_marcacion,
+    escucha_activa_descripcion,
+    info_seguro_estudiantil_marcacion,
+    info_seguro_estudiantil_descripcion,
+    plazo_entrega_documentos_marcacion,
+    plazo_entrega_documentos_descripcion,
+    plazo_pago_matricula_marcacion,
+    plazo_pago_matricula_descripcion,
+    otros_beneficios_marcacion,
+    otros_beneficios_descripcion,
+    sondeo_motivacion_marcacion,
+    sondeo_motivacion_descripcion,
+    info_correcta_completa_sondeo_marcacion,
+    info_correcta_completa_sondeo_descripcion,
+    info_correcta_becas_marcacion,
+    info_correcta_becas_descripcion,
+    info_correcta_descuentos_marcacion,
+    info_correcta_descuentos_descripcion,
+    info_correcta_convenios_marcacion,
+    info_correcta_convenios_descripcion,
+    info_correcta_convalidacion_marcacion,
+    info_correcta_convalidacion_descripcion,
+    info_correcta_carrera_campus_modalidad_turnos_marcacion,
+    info_correcta_carrera_campus_modalidad_turnos_descripcion,
+    info_correcta_inversion_marcacion,
+    info_correcta_inversion_descripcion,
+    pre_cierre_marcacion,
+    pre_cierre_descripcion,
+    resumen_venta_marcacion,
+    resumen_venta_descripcion,
+    informacion_falsa_marcacion,
+    informacion_falsa_descripcion,
     objecion_cliente_1_texto,
     rebate_asesor_1_texto,
     objecion_cliente_2_texto,
@@ -438,7 +959,6 @@ BEGIN
     t_sentido_de_urgencia,
     t_cierre,
     t_despedida,
-    t_ofrece_qr,
     t_comentario_negativo_utp,
     mayor_rebate,
     load_date
