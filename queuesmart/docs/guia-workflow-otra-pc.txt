@@ -113,19 +113,20 @@ Ejemplo día completo (ingesta + 3 SPs):
     --location=us-central1 \
     --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
     --data='{
-      "process_date": "2026-08-03",
+      "process_date": "2026-08-04",
       "project_id": "prd-utpbi-data-operation",
       "job_name": "prd-utpbi-s3-to-gcs-micro-batch",
       "gcs_bucket": "prd-utp-stg-queuesmart",
-      "max_failed_tasks": 0,
       "invoke_downstream_sps": true
     }'
 
 Notas:
   - process_date = fecha de los audios (nombre archivo), no “hoy”.
   - invoke_downstream_sps true → corre consolidate + gen_ia + analisis.
+  - No pases max_failed_tasks: 0. Default -1 = si algunas tasks fallan (OOM), igual se corre consolidate.
   - Worker puede tardar >30 min; el YAML tiene timeout 14400 s (4 h).
   - Si ya hay muchos archivos en GCS, worker irá más rápido (already_in_gcs).
+  - Si FLAC falla, se cataloga el original (webm/mp3) y el pipeline sigue.
 
 Ver ejecución:
 
@@ -169,7 +170,8 @@ IMPORTANTE: desactivar / no usar el Scheduler viejo que disparaba el Job directo
   3. Cloud Run Job role=worker (tasks=count, parallelism del Job)
        timeout conector Workflow: 14400 s
 
-  4. Si failedCount > max_failed_tasks → PARA (no SPs)
+  4. Si failedCount alto: default max_failed_tasks=-1 → IGUAL corre SPs
+       (el worker ya catalogó el original si el FLAC falló / OOM a medias)
 
   5. CALL sp_queuesmart_mp3_consolidate(fecha)
 
@@ -198,6 +200,8 @@ Tu usuario necesita TokenCreator sobre genesys para impersonate.
 ================================================================================
 
   - Timeout 1800 s en run_worker_job → YAML viejo; redeploy con connector_params 14400
+  - Worker con tasks fallidas tumba el workflow ANTES de max_failed_tasks
+      → YAML nuevo captura OperationError y aplica el umbral en gate_on_failures
   - parse error unexpected entry 'connector_params' → debe ir DENTRO de args (no al nivel de result)
   - Doble Gen IA → SPs viejos aún con CALL; redeploy consolidate + gen_ia
   - revisionId no sube → no subiste el YAML nuevo a Cloud Shell (rm + upload)

@@ -9,6 +9,7 @@
 -- Flujo (reproceso por fecha/ventana):
 --   0) DELETE catalog + enriched de la ventana
 --   1.1 Catálogo MP3 (hist → queuesmart_mp3_catalog), dedup por gcs_uri
+--       y 1 archivo por stem (preferir .flac si existe; el worker borra el original)
 --   1.2 Enriquecido GCS + tickets (→ queuesmart_mp3_enriched)
 --       join: COALESCE(source_file_name, file_name) = tickets.audio
 --
@@ -65,6 +66,26 @@ BEGIN
       ) AS rn
     FROM `prd-utpbi-data-operation.raw_queue_smart.hist_queesmart_mp3_catalog`
     WHERE fecha_audio BETWEEN start_date AND p_fecha_proceso
+  ),
+  one_per_uri AS (
+    SELECT * EXCEPT(rn)
+    FROM base_ranked
+    WHERE rn = 1
+  ),
+  prefer_flac AS (
+    SELECT
+      *,
+      ROW_NUMBER() OVER (
+        PARTITION BY
+          fecha_audio,
+          campus_code,
+          type_code,
+          correlative
+        ORDER BY
+          CASE WHEN LOWER(file_name) LIKE '%.flac' THEN 0 ELSE 1 END,
+          fecha_procesamiento DESC
+      ) AS rn_stem
+    FROM one_per_uri
   )
   SELECT
     fecha_audio AS process_day,
@@ -83,8 +104,8 @@ BEGIN
     sync_mode,
     convert_method,
     v_load_date AS load_date
-  FROM base_ranked
-  WHERE rn = 1;
+  FROM prefer_flac
+  WHERE rn_stem = 1;
 
   INSERT INTO `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_catalog` (
     process_day,

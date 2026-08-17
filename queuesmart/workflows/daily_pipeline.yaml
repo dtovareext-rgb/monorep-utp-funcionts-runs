@@ -24,8 +24,9 @@ main:
           - job_name: ${default(map.get(args, "job_name"), "prd-utpbi-s3-to-gcs-micro-batch")}
           - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-queuesmart")}
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests")}
-          # Umbral: si failed_tasks > max_failed_tasks → ERROR y no corre SPs
-          - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
+          # -1 = no bloquear SPs por tasks fallidas (el worker cataloga el original si FLAC falla).
+          # >= 0 = umbral duro (0 = cualquier fallo para el pipeline).
+          - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), -1)}
           # true = consolidate + gen_ia + analisis
           - invoke_downstream_sps: ${default(map.get(args, "invoke_downstream_sps"), true)}
           - process_date: ${default(map.get(args, "process_date"), null)}
@@ -157,28 +158,48 @@ main:
 
     # -------------------------------------------------------------------------
     # 3) WORKER: N tasks en paralelo (1 archivo por task)
-    # Igual que prepare: jobs.run espera el fin de TODAS las tasks.
+    # jobs.run espera el fin de TODAS las tasks.
+    # Si alguna task falla, el conector lanza OperationError y NUNCA devolvía
+    # el Execution → no se evaluaba max_failed_tasks. Se captura y se sigue
+    # a normalize_worker / gate_on_failures.
     # -------------------------------------------------------------------------
     - run_worker_job:
-        call: googleapis.run.v1.namespaces.jobs.run
-        args:
-          name: '${"namespaces/" + project_id + "/jobs/" + job_name}'
-          location: ${location}
-          body:
-            overrides:
-              taskCount: ${manifest_count}
-              containerOverrides:
-                - env:
-                    - name: QS_JOB_ROLE
-                      value: worker
-                    - name: SYNC_PROCESS_DATE
-                      value: ${process_date}
-                    - name: SYNC_TARGET_DATE
-                      value: ${process_date}
-          # Por defecto el conector corta a 1800s; un día con muchos audios puede pasar de 30 min
-          connector_params:
-            timeout: 14400
-        result: worker_status
+        try:
+          steps:
+            - call_worker:
+                call: googleapis.run.v1.namespaces.jobs.run
+                args:
+                  name: '${"namespaces/" + project_id + "/jobs/" + job_name}'
+                  location: ${location}
+                  body:
+                    overrides:
+                      taskCount: ${manifest_count}
+                      containerOverrides:
+                        - env:
+                            - name: QS_JOB_ROLE
+                              value: worker
+                            - name: SYNC_PROCESS_DATE
+                              value: ${process_date}
+                            - name: SYNC_TARGET_DATE
+                              value: ${process_date}
+                  connector_params:
+                    timeout: 14400
+                result: worker_status
+            - mark_worker_connector_ok:
+                assign:
+                  - worker_connector_ok: true
+        except:
+          as: worker_err
+          steps:
+            - log_worker_connector_err:
+                call: sys.log
+                args:
+                  severity: WARNING
+                  text: '${"WORKER jobs.run OperationError (se evalúa failedCount): " + string(default(map.get(worker_err, "message"), "n/a"))}'
+            - assign_worker_from_err:
+                assign:
+                  - worker_connector_ok: false
+                  - worker_status: ${default(map.get(worker_err, "operation"), worker_err)}
 
     - normalize_worker:
         assign:
@@ -203,7 +224,7 @@ main:
 
     - log_worker_result:
         switch:
-          - condition: ${failed_count > max_failed_tasks}
+          - condition: ${max_failed_tasks >= 0 and failed_count > max_failed_tasks}
             steps:
               - log_worker_err:
                   call: sys.log
@@ -220,7 +241,13 @@ main:
 
     - gate_on_failures:
         switch:
-          - condition: ${failed_count > max_failed_tasks}
+          - condition: ${not(default(worker_connector_ok, true)) and failed_count == 0 and succeeded_count == 0}
+            steps:
+              - raise_worker_unknown:
+                  raise:
+                    message: "Worker falló sin failedCount en el error del conector"
+                    error: ${default(worker_status, "n/a")}
+          - condition: ${max_failed_tasks >= 0 and failed_count > max_failed_tasks}
             steps:
               - block_sps:
                   call: sys.log
@@ -231,6 +258,15 @@ main:
                   raise:
                     message: "Ingesta parcial: SPs bloqueados"
                     ingest: ${ingest_summary}
+          - condition: ${failed_count > 0}
+            steps:
+              - warn_partial:
+                  call: sys.log
+                  args:
+                    severity: WARNING
+                    text: '${"WORKER parcial failed=" + string(failed_count) + " succeeded=" + string(succeeded_count) + " — se continúa a SPs (original catalogado si FLAC falló)"}'
+              - continue_partial:
+                  next: maybe_run_sps
           - condition: true
             next: maybe_run_sps
 

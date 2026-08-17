@@ -24,8 +24,8 @@ SUPPORTED_EXTENSIONS = frozenset({
     ".caf", ".mp2", ".mpeg", ".mpg",
 })
 
-# Extensiones posibles ya existentes en GCS (legacy .mp3 + formatos reales).
-KNOWN_STORAGE_EXTS = (".webm", ".ogg", ".opus", ".flac", ".wav", ".mp3", ".m4a")
+# Preferir FLAC si ya existe; si no, el original (webm/mp3/…).
+KNOWN_STORAGE_EXTS = (".flac", ".webm", ".ogg", ".opus", ".wav", ".mp3", ".m4a")
 
 # Loudnorm EBU R128 + highpass suave (sin lowpass agresivo: en MP3/comprimidos
 # lowpass=3400 recortaba claridad y omitía fonemas). Counter abierto = volumen bajo.
@@ -220,9 +220,15 @@ def transcode_to_flac(
         "error",
         "-err_detect",
         "ignore_err",
+        "-threads",
+        "1",
         "-i",
         input_path,
         "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
         "-af",
         audio_filter,
         "-c:a",
