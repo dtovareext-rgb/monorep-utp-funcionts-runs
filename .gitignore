@@ -3,3 +3,4 @@ qs_s3_to_gcs/.env
 qs_s3_to_gcs/**/.env
 qs_sql_to_bq/.env
 qs_sql_to_bq/**/.env
+.tools/

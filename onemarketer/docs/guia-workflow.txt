@@ -77,12 +77,14 @@ Verificar: el SP NO debe terminar con CALL sp_onemarketer_caso_conversacion_ia.
 ================================================================================
 
 Día completo (ETL + STT + Gemini). Sustituye ETL_URL:
+   ETL_URL="https://prd-utpbi-onemarketer-reporte-chats-cuke52vlga-uc.a.run.app"
+
 
   gcloud workflows run onemarketer-daily-pipeline \
     --project=prd-utpbi-data-operation \
     --location=us-central1 \
     --data='{
-      "process_date": "2026-08-04",
+      "process_date": "2026-08-11",
       "project_id": "prd-utpbi-data-operation",
       "etl_function_url": "ETL_URL",
       "invoke_downstream_sps": true,
@@ -95,7 +97,7 @@ Solo Gen IA (ETL ya corrido):
     --project=prd-utpbi-data-operation \
     --location=us-central1 \
     --data='{
-      "process_date": "2026-06-22",
+      "process_date": "2026-08-10",
       "etl_function_url": "ETL_URL",
       "skip_etl": true,
       "invoke_downstream_sps": true
@@ -103,6 +105,7 @@ Solo Gen IA (ETL ya corrido):
 
 Notas:
   - process_date = día de los chats/medios (no “hoy” del job).
+  - Sin process_date: el Workflow usa AYER America/Lima (UTC-5). Scheduler 4 AM del 14 → procesa el 13.
   - Timeout HTTP del ETL en el Workflow: 1800 s. Si la CF tarda >30 min,
     el Workflow puede cortar aunque la CF siga; en ese caso usar skip_etl
     o revisar el tope de medios (candidato a Fase 2 Job paralelo).

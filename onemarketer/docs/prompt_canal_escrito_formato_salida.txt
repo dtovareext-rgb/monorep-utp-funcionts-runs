@@ -4,6 +4,7 @@ FORMATO DE SALIDA OBLIGATORIO
 
 Devuelve UNICO objeto JSON valido (sin markdown, sin backticks, sin texto fuera del JSON).
 Usa comillas dobles en las claves y valores del JSON (esta regla aplica solo al JSON de salida; en las descripciones de atributos sigue usando comillas simples para citar mensajes).
+OBLIGATORIO: incluye TODAS las claves del esquema. NUNCA cortes el JSON a mitad de atributos. Cada descripcion maximo 2 oraciones.
 
 Estructura exacta:
 

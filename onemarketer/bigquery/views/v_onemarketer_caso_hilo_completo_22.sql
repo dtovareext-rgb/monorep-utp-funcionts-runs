@@ -52,10 +52,15 @@ mensajes_base AS (
     (
       STARTS_WITH(TRIM(IFNULL(c.text, '')), '{')
       AND (
-        REGEXP_CONTAINS(c.text, r'(?i)"(interactive|button|buttons|action|flow|nfm_reply|list_reply|sections)"')
+        REGEXP_CONTAINS(c.text, r'(?i)"(interactive|button|buttons|action|flow|nfm_reply|list_reply|sections|flow_token)"')
         OR REGEXP_CONTAINS(c.text, r'(?i)"(type|payload)"\s*:')
       )
     ) AS es_bot_flow,
+    -- Señalización de llamada WhatsApp / WebRTC (no es diálogo)
+    (
+      REGEXP_CONTAINS(IFNULL(c.text, ''), r'(?i)"sdp_type"\s*:')
+      OR REGEXP_CONTAINS(IFNULL(c.text, ''), r'(?i)(ice-ufrag|a=candidate:|a=fingerprint:)')
+    ) AS es_webrtc_sdp,
     -- Base64 / binario extenso (JPEG, PNG, GIF, PDF, data-URI, etc.)
     (
       LENGTH(IFNULL(c.text, '')) >= 400
@@ -86,6 +91,7 @@ mensajes AS (
     b.*,
     CASE
       WHEN b.es_bot_flow THEN 'BOT/FLOW'
+      WHEN b.es_webrtc_sdp THEN 'sistema'
       ELSE IFNULL(b.origin, 'N/D')
     END AS rol_mensaje,
     CASE
@@ -98,6 +104,10 @@ mensajes AS (
           'No evaluar como comunicación humana del asesor. ',
           'Payload técnico omitido.'
         )
+
+      -- 0b) WebRTC / llamada WhatsApp
+      WHEN b.es_webrtc_sdp THEN
+        '[SISTEMA] Señalización de llamada WhatsApp omitida. No evaluar.'
 
       -- 1) Audio transcrito
       WHEN NULLIF(TRIM(b.audio_transcripcion), '') IS NOT NULL THEN
@@ -115,7 +125,14 @@ mensajes AS (
               THEN '[DOCUMENTO] '
             ELSE '[OCR] '
           END,
-          TRIM(b.ocr_text),
+          IF(
+            LENGTH(TRIM(b.ocr_text)) > 3500,
+            CONCAT(
+              SUBSTR(TRIM(b.ocr_text), 1, 3500),
+              '\n[OCR truncado: brochure/malla enviado; no pegar el resto en la evaluacion.]'
+            ),
+            TRIM(b.ocr_text)
+          ),
           -- Caption solo si es texto legible (no base64 ni flow)
           IF(
             NULLIF(TRIM(b.chat_text), '') IS NOT NULL

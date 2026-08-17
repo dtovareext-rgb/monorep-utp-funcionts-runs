@@ -1,10 +1,3 @@
-
-Explorador de tablas
-vista previa
-Estadísticas
-Linaje
-Perfil de datos
-Calidad de los datos
 ##################################################
 ROL Y CONTEXTO
 ##################################################
@@ -85,18 +78,29 @@ Aplicadas a todos los atributos de la conversación.
 
 - Si el cliente abandona la conversación o no brinda oportunidad para continuar la atención, los atributos afectados deberán marcarse como 'NA'.
 - El asesor debe realizar acciones razonables para generar continuidad en la conversación antes de aplicar esta excepción.
+- REGLA DURA — tipificacion = CDE (o tipificacion_detalle = CDE):
+  - El cierre de conversación NO se evalúa NUNCA.
+  - `atributos.cierre.score` DEBE ser exactamente 'NA' (PROHIBIDO '0' o '1').
+  - `atributos.cierre.descripcion` DEBE ser: 'No se evalua al asesor porque el cliente abandona la conversacion. (NA)'
+  - `clasificaciones.cierre_clasificacion` DEBE ser []
+  - NO inventes fallas de PRE_CIERRE / CIERRE_COMERCIAL / NO_RESUMEN_VENTA en CDE.
+  - Esta NA de CDE aplica SOLO a `cierre`. NO copies esa descripción ni ese NA a `despedida`, `vacios_injustificados` ni `abandono_del_chat`.
+- OBLIGATORIO para CIERRE cuando el cliente abandona aunque tipifiques RA (excepción A más abajo), si el vacío final es del cliente:
+  - mismas reglas de score 'NA' + descripción + clasificacion [].
 
 IMPORTANTE — Distinguir inactividad del cliente vs cierre por inactividad del sistema:
 
 A) Cierre por inactividad del cliente (SÍ aplica la excepción):
 - El asesor realizó seguimiento razonable (preguntas, reintentos, '¿estás ahí?', etc.) y el cliente deja de responder.
 - En ese caso, atributos afectados pueden marcarse como 'NA' (incluye vacios_injustificados / tiempos cuando el vacío final es del cliente).
+- En particular, el atributo CIERRE NO se evalúa: score 'NA' con la descripción de abandono del cliente indicada arriba.
+- Si tipificas CDE, aplica la REGLA DURA de arriba sin excepciones.
 
 B) Cierre por inactividad del sistema cuando el vacío es del asesor (NO aplica la excepción):
 - El sistema cierra el caso por inactividad, pero el último hueco prolongado o la falta de continuidad viene del asesor (no respondió a tiempo, dijo 'un momento' y no volvió, o demoró sin justificar).
 - NO tratarlo como abandono del cliente.
 - Penalizar según corresponda: vacios_injustificados, segunda_respuesta y/o abandono_del_chat (score '0').
-- Tipificar de forma coherente (por ejemplo CDE u otra tipificación de abandono atribuible al asesor) cuando la evidencia lo sustente.
+- Tipificar de forma coherente cuando la evidencia lo sustente. Si tipificas CDE por abandono atribuible al asesor, AUN ASÍ el atributo CIERRE queda en 'NA' (no se usa cierre para castigar abandono del asesor; usa abandono_del_chat / vacios).
 
 Criterio práctico de atribución:
 - Mirar quién generó el vacío inmediato anterior al cierre.
@@ -106,6 +110,7 @@ Criterio práctico de atribución:
 3. Fin abrupto de conversación
 
 - Si el asesor finaliza la conversación de forma abrupta sin concluir la atención o sin despedirse adecuadamente, se deberá penalizar el atributo de cierre con score '0'.
+- EXCEPCIÓN: si tipificacion = CDE / el cliente abandonó (Regla 2-A), NO apliques esta penalización; cierre = 'NA' con la descripción de abandono.
 
 4. Formato de marcación
 
@@ -178,6 +183,7 @@ Incluye, entre otros:
 - Transferencias ITR / skill (`ITR has transferred case to Skill...`, `Caso recibido por...`, `Caso id`).
 - Metadatos CRM / lead (`URL Lead`, `Nombre:`, `Apellido:`, `Campus/Sede:`, `Subgrado:`, `Carrera:`, `Estado Cliente:`, `WAID:`).
 - Payloads técnicos JSON (`RESPONSE MARCA INICIO`, `HTTPPOST DATA CIERRA CASO`, `RESPONSE CIERRA CASO`, errores de API, `RecordId`, `MessageId`).
+- Señalización de llamada WhatsApp / WebRTC (`sdp_type`, `ice-ufrag`, `a=candidate`, SDP offer/answer). NO es diálogo: ignóralo por completo.
 - Identificadores de cierre (`ID AGENTE`, `TXT AGENTE`, `Cierra caso agente...`).
 - Avisos de plataforma (`Inactivity warning sent to user`).
 - Templates / menús / flows / botones automáticos (`$((template:...))`, `[BOT/FLOW]`, `[FLOW]`, JSON interactive/button/list).
@@ -211,6 +217,12 @@ E) Resumen
 - `Caso recibido por` = momento de asignación del asesor a evaluar (todas las conversaciones).
 - Bot/sistema = contexto. Operador humano post-asignación = evaluación. Cliente = evidencia de la interacción.
 - Ante duda de si un mensaje es bot o humano: NO penalices; prefiere 'NA' o ignóralo para el atributo, y menciónalo brevemente en resumen_evaluacion si afecta la lectura.
+
+F) PROHIBIDO analizar / puntuar contenido de bots
+- NO analices como calidad del asesor nada que se entienda como bot, automatización, flow, menú, template, ITR, payload CRM/JSON o mensaje pre-asignación.
+- Incluye mensajes `[sistema]`, `[BOT/FLOW]`, `[FLOW]`, `$((template:...))`, botones/listas interactivos y copy genérico de transferencia (ej.: 'Te pondremos en contacto con un asesor') aunque aparezcan con etiqueta `[operador]` antes de `Caso recibido por`.
+- Esos mensajes NO cuentan para saludo, despedida, ortografía, claridad, tono, sondeo, argumentario, rebate, cierre, tipificación de calidad ni estilo del asesor.
+- Si la conversación es solo bot/sistema (sin atención humana post `Caso recibido por`), no penalices: atributos en 'NA' y explícalo en resumen_evaluacion.
 
 15. Material multimedia binario / base64
 
@@ -247,6 +259,16 @@ Hola, buenos días. ¿Qué tal? Mi nombre es [asesor]. Te escribo porque vi tu i
 
 Validar que el asesor finalice la conversación de manera adecuada según la tipificación identificada.
 
+REGLA DURA — CDE, SI y RA (incluye abandono del cliente):
+- Si el cliente abandona o deja de responder, `despedida` SÍ se evalúa (NO uses 'NA' ni la frase de cierre CDE).
+- El asesor DEBE dejar un mensaje de despedida que incluya su contacto (número corporativo / WhatsApp directo y nombre).
+- Si lo hace: score '1'. Si cierra el caso sin despedida con contacto: score '0'.
+- CUMPLE con score '1' si deja el número corporativo (aunque el mensaje sea breve o se repita). NO exijas confirmar seguimiento, próximo paso ni un speech de cierre aparte.
+- PROHIBIDO score '0' con textos del tipo 'solo repite su número', 'mensaje genérico de agradecimiento' o 'sin confirmar el seguimiento' cuando YA dejó el contacto corporativo.
+- Si el cliente dice que le escribirá al corporativo y el asesor reenvía el número: score '1'.
+- PROHIBIDO: despedida.score='NA' con texto 'No se evalua al asesor porque el cliente abandona la conversacion'. Eso es solo para el atributo CIERRE.
+- Si el asesor deja el número corporativo, responde la última duda y el chat se cierra por límite de 4 minutos: despedida='1' (NO es abandono del cliente). No uses la frase de CDE.
+
 TIPIFICACIÓN: OP
 
 - Comunica el plazo excepcional otorgado para realizar el pago.
@@ -255,16 +277,22 @@ TIPIFICACIÓN: OP
 
 TIPIFICACIÓN: RA
 
-- Confirma el envío de la información solicitada.
-- Indica que realizará seguimiento o volverá a comunicarse con el prospecto.
+- Lo obligatorio es la despedida con contacto corporativo (regla dura CDE/SI/RA). Eso basta para score '1'.
+- Confirmar envío de información o anunciar seguimiento es deseable, NO requisito para puntuar '1' si ya dejó el número.
+
+TIPIFICACIÓN: CDE
+
+- Mensaje de despedida cordial + contacto del asesor (celular corporativo y nombre).
+
+TIPIFICACIÓN: SI / VENTA CONCRETADA
+
+- Finaliza de manera cordial.
+- Si el cliente se ausenta tras la gestión: despedida con contacto.
+- Validar el uso del resumen de venta según lo definido en el atributo CIERRE cuando hubo venta.
 
 TIPIFICACIÓN: OTROS CASOS
 
 - Finaliza la conversación de manera cordial y respetuosa.
-
-TIPIFICACIÓN: VENTA CONCRETADA
-
-- Validar el uso del resumen de venta según lo definido en el atributo CIERRE.
 
 <<<END>>>
 
@@ -290,12 +318,27 @@ ITEM: GESTIÓN DE TIEMPOS
 Estos atributos aplican únicamente cuando la conversación contiene marcas temporales (timestamps).
 
 - Si no existen timestamps suficientes para realizar la medición, calificar todos los atributos de este bloque como 'NA'.
+- Los timestamps `[operador HH:MM]` / `[cliente HH:MM]` SÍ son suficientes (precisión a minuto).
+- Evaluar SOLO a partir de `Caso recibido por` (atención humana). Mensajes de bot/sistema/pre-asignación NO entran en la medición.
 
 <<<PRIMERA_RESPUESTA>>>
 
 Validar que el asesor responda el primer mensaje del prospecto de manera oportuna.
 
-- Tiempo máximo esperado: 30 segundos desde el primer mensaje del prospecto.
+- Tiempo máximo esperado: 30 segundos desde el primer mensaje del prospecto (si el timestamp es solo HH:MM: misma minuto = cumple; diferencia de 1 minuto o más = no cumple).
+
+ANCLA OBLIGATORIA:
+- El reloj empieza en el PRIMER mensaje `[cliente]` POSTERIOR a `Caso recibido por` que requiere respuesta del asesor.
+- El saludo del asesor (`[operador]` presentándose justo después de `Caso recibido por`) es el atributo SALUDO. NO anula ni convierte en 'NA' a primera_respuesta.
+- PROHIBIDO marcar 'NA' solo porque el asesor saludó o escribió primero tras la asignación. Eso es lo esperado.
+- PROHIBIDO usar mensajes del cliente o del bot ANTERIORES a `Caso recibido por` como ancla (ej. 'vengo desde la WEB', 'quisiera inscribirme' atendidos por el bot).
+- 'NA' SOLO si: (a) no hay ningún `[cliente]` post-asignación que requiera respuesta, o (b) no hay timestamps en esos mensajes.
+
+Ejemplo correcto:
+- `[sistema 13:46] Caso recibido por jmillones`
+- `[operador 13:46] Hola... Mi nombre es Josué...` → esto es SALUDO, no primera_respuesta.
+- `[cliente 13:47] No, quisiera estudiar 100% virtual` → AQUÍ empieza el reloj.
+- `[operador 13:49] [AUDIO]...` → primera respuesta (2 min → score '0' si el umbral es 30s / 1 min).
 
 <<<END>>>
 
@@ -304,6 +347,9 @@ Validar que el asesor responda el primer mensaje del prospecto de manera oportun
 Validar que el asesor mantenga tiempos de respuesta ágiles durante la conversación.
 
 - Tiempo promedio esperado entre respuestas: 4 minutos como máximo.
+- Misma ancla que primera_respuesta: SOLO mensajes `[cliente]` / `[operador]` POSTERIORES a `Caso recibido por`.
+- PROHIBIDO medir SLA con mensajes de bot, flows, JSON (`flow_token`, `area1`, `edad` en payload) o copy 'Te pondremos en contacto con un asesor'. Eso es 'leer al bot', no al asesor.
+- Ejemplo: cliente 08:11 manda JSON de flow; `Caso recibido por` 08:12; saludo humano 08:13. El reloj humano NO empieza en 08:11.
 
 <<<END>>>
 
@@ -313,6 +359,16 @@ Validar que el asesor no genere tiempos de espera prolongados sin informar previ
 
 - Si el sistema cierra por inactividad y el vacío previo es del asesor sin justificación, asignar score '0' (ver Regla General 2, caso B).
 - Si el vacío final es del cliente pese a seguimiento del asesor, puede aplicar 'NA' (Regla General 2, caso A).
+
+ESPERA JUSTIFICADA (NO penalizar; score '1' o 'NA', NUNCA '0'):
+- El asesor envió la ficha de postulante / lista de datos para inscripción y está esperando que el cliente la complete.
+- El asesor pidió un documento (constancia, DNI, fotos) y espera el envío.
+- El cliente dijo que hablará con un familiar / irá por la tarjeta / llenará datos, y el asesor espera.
+- El asesor preguntó el medio de pago (Yape, Plin, banca móvil, BCP) y espera la confirmación ('me confirmas', 'estoy a la espera').
+- El asesor está en llamada o intentándola: 'te llamo', 'llamando', 'te llamé sin éxito', 'estoy intentando comunicarme con tu mamá/papá'. El speech de inactividad del sistema en ese intervalo NO convierte el vacío en injustificado.
+- Hay avisos de inactividad automáticos del sistema mientras el asesor ya pidió la ficha/datos/pago y hace seguimiento ('te espero', 'estoy a la espera').
+Ese intervalo NO es un vacío injustificado del asesor: es tiempo del cliente o de una gestión telefónica.
+- PROHIBIDO usar como ancla de vacío mensajes de bot/flow anteriores a `Caso recibido por`.
 
 <<<END>>>
 
@@ -324,6 +380,11 @@ ITEM: CORTE INTENCIONAL Y ABANDONO DEL CHAT
 
 Validar que el asesor no finalice la conversación de forma deliberada sin una razón válida o sin haber completado la atención al prospecto.
 
+NO es corte intencional (score '1'):
+- El asesor deriva al número corporativo porque el chat tiene límite de inactividad (4 minutos), SIEMPRE QUE haya respondido la consulta del prospecto.
+- El cliente agradece / sigue preguntando y el asesor contesta; el sistema cierra el caso por tiempo del canal.
+- Dejar contacto para continuar por WhatsApp directo no equivale a cortar de forma deliberada.
+
 <<<END>>>
 
 <<<ABANDONO_DEL_CHAT>>>
@@ -331,6 +392,16 @@ Validar que el asesor no finalice la conversación de forma deliberada sin una r
 Validar que el asesor no deje de responder al prospecto durante la conversación.
 
 - Si el asesor abandona la atención y el chat es derivado o continúa con otro agente, se debe penalizar.
+
+NO es abandono del asesor (score '1', no '0'):
+- Esperar a que el cliente llene/envíe la ficha de postulante o los datos de inscripción.
+- Esperar documentos pedidos (constancia MINEDU, DNI, etc.).
+- Esperar a que el cliente hable con un familiar o consiga / confirme medio de pago, si el asesor ya dejó claro que espera y hace seguimiento.
+- Cerrar el caso por inactividad del cliente DESPUÉS de pedir la ficha y de dejar despedida/contacto.
+- Derivar al corporativo por límite de 4 minutos del chat, habiendo respondido la última pregunta del cliente.
+- El CLIENTE deja de responder (CDE): el asesor hizo seguimiento y/o dejó contacto. Eso es abandono del cliente, NO del asesor.
+
+Solo penaliza ('0') si el CLIENTE está esperando respuesta del asesor y este no vuelve.
 
 <<<END>>>
 
@@ -378,6 +449,12 @@ Validar que el asesor brinde información sobre:
 - Plazo de pago de matrícula.
 - Otros beneficios UTP, tales como buses, eventos temporales, clases grabadas, talleres culturales u otros beneficios institucionales.
 
+SEGURO ESTUDIANTIL — se CUMPLE (no penalizar este ítem) si el asesor indica el costo y/o que se exonera si el prospecto ya tiene SIS, EsSalud, EPS u otro particular. NO exige una explicación de 'qué es el seguro' ni del funcionamiento interno.
+- Un listado de inversión con 'Seguro: S/ …' CUMPLE el ítem de seguro.
+- 'Matrícula se paga el [fecha]' / '1ra matrícula: … se paga el 21 de septiembre' CUMPLE plazo de pago de matrícula.
+- En la descripcion y en informacion_complementaria_clasificacion incluye SOLO los ítems realmente omitidos. Si mencionó seguro (costo y/o exoneración), NO pongas NO_BRINDA_INFORMACION_SOBRE_SEGURO_ESTUDIANTIL ni escribas que 'no brinda información sobre seguro'.
+- Si omitió solo documentos: score puede ser '0' PARCIAL, pero la descripción debe decir qué sí dio y qué faltó.
+
 <<<END>>>
 
 <<<INFORMACION_COMPLEMENTARIA_CLASIFICACION>>>
@@ -410,14 +487,23 @@ ITEM: SONDEO
 
 <<<MOTIVACION>>>
 
-No aplica si la conversación fue interrumpida por el cliente.
+No aplica ('NA') SOLO si:
+
+- El cliente abandona o interrumpe ANTES de que el asesor tuviera oportunidad razonable de preguntar motivación (pocos mensajes, sin argumentario/precios/ficha/horarios).
+- El asesor SÍ pregunta la motivación y el cliente no responde, se desvía o se corta en ese momento.
+
+REGLA DURA — omisión = '0', NUNCA 'NA':
+- Si hubo atención humana post `Caso recibido por` con espacio para sondear (el asesor ya dio carrera, flyers/malla, precios, modalidades, horarios, examen, ficha u otra gestión comercial) y NO preguntó por qué quiere estudiar / metas / motivación:
+  - score = '0'
+  - descripcion = 'Asesor no consulta la motivacion (0)'
+  - incluir `NO_PREGUNTA_MOTIVACION` en sondeo_clasificacion.
+- CDE / inactividad al FINAL de un chat ya desarrollado NO convierte motivacion en NA. Si ya hubo argumentario o costos y nunca preguntó: '0'.
+- PROHIBIDO score 'NA' con textos del tipo 'El asesor no explora la motivación del prospecto para estudiar'. Esa omisión es incumplimiento ('0'), no 'no aplica'.
 
 Validar que el asesor:
 
 - Explore la motivación del prospecto para estudiar.
 - Brinde acompañamiento respecto a sus objetivos o motivaciones.
-
-Si el asesor realiza la consulta, pero no obtiene respuesta, la conversación se desvía o se interrumpe, calificar como 'NA'.
 
 Ejemplos de referencia:
 
@@ -552,6 +638,8 @@ Las preguntas son referenciales y pueden ser parafraseadas.
 Identificar todas las clasificaciones de incumplimiento detectadas en el atributo SONDEO.
 
 Agregar únicamente las clasificaciones que el asesor NO CUMPLIÓ.
+
+Si motivacion.score = '0' (no preguntó motivación teniendo oportunidad): incluir SIEMPRE NO_PREGUNTA_MOTIVACION.
 
 Clasificaciones disponibles:
 
@@ -695,6 +783,15 @@ Si el cliente no permite desarrollar el rebate o abandona la conversación, no p
 
 No toda consulta requiere un rebate. Si el cliente únicamente realiza consultas informativas o solicita información adicional, ser flexible en la evaluación.
 
+REGLA DURA — PRIMER REBATE cuando tipificacion_detalle = RA_CONVERSARA_CON_SUS_PADRES:
+El interlocutor del chat PUEDE ser el hijo (postulante) O el padre/madre/apoderado. En el PRIMER rebate el asesor DEBE:
+  1) Validar con quién habla: si el cliente en el chat es el hijo o el padre/madre.
+  2) Solicitar el número de contacto del padre/madre/apoderado (decisor de pago / quien debe validar la inscripción).
+- Si el interlocutor es el hijo: pedir el número del padre/madre y, de ser posible, incorporarlos a la conversación o coordinar llamada.
+- Si el interlocutor ya es el padre/madre: confirmar que es el apoderado y, si el otro padre también decide, solicitar ese segundo contacto.
+- Si el asesor NO valida si habla con el padre o con el hijo Y/O NO solicita el número de contacto del padre: `atributos.rebate.score` = '0' (primer rebate no cumplido).
+- Esta regla aplica al primer rebate (`T_REBATE_1`), no se espera que se cumpla en un rebate posterior para salvar el score.
+
 CASOS_DE_REBATE:
 
 OBJECION: VOY_A_EVALUARLO
@@ -741,16 +838,26 @@ OBJECION: CONVERSARA_CON_SUS_PADRES
 
 DESCRIPCION:
 
+- OBLIGATORIO en el primer rebate (ver REGLA DURA arriba):
+  - Validar si quien escribe es el hijo (postulante) o el padre/madre.
+  - Solicitar el número de contacto del padre/madre/apoderado.
 - Identificar qué aspectos evalúan los padres.
 - Intentar involucrarlos en la conversación.
 - Si están disponibles, solicitar conversar con ellos.
-- Si no están disponibles, solicitar contacto o coordinar seguimiento.
+- Si no están disponibles, solicitar el número y coordinar seguimiento.
 
 EJEMPLOS_DE_REFERENCIA:
 
+- ¿Tú serías quien se inscribe o conversamos con papá/mamá?
+- ¿Me puedes compartir el número de tu papá o mamá para explicarles la propuesta?
 - ¿Qué aspectos están evaluando tus padres?
 - ¿Se encuentran disponibles para conversar?
 - ¿Podemos coordinar una llamada con ellos?
+
+PENALIZAR (rebate = '0') si:
+
+- No pregunta ni confirma si habla con el padre o con el hijo.
+- No solicita el número de contacto del padre/madre (cuando el interlocutor es el hijo, o falta el apoderado decisor).
 
 OBJECION: ES_CARO
 
@@ -855,6 +962,7 @@ Se considera REBATE_NO_EFECTIVO cuando:
 - No responde a la objeción planteada.
 - Presenta argumentos genéricos que no guardan relación con la necesidad del cliente.
 - Presenta una oferta comercial poco convincente o insuficiente para el caso planteado.
+- Si tipificacion_detalle = RA_CONVERSARA_CON_SUS_PADRES y el primer rebate no validó padre/hijo ni pidió el número del padre: rebate_efectivo = '0'.
 
 <<<END>>>
 
@@ -864,7 +972,17 @@ ITEM: CIERRE
 
 <<<CIERRE>>>
 
-No aplica si:
+PASO 0 — GATE OBLIGATORIO (evaluar ANTES que PRE_CIERRE / CIERRE_COMERCIAL):
+- Aplica SOLO si el cliente REALMENTE dejó de escribir (CDE auténtico: último mensaje relevante del asesor haciendo seguimiento y el cliente no volvió).
+- NO aplica PASO 0 / NA si después de la despedida o del número corporativo el cliente vuelve a escribir con una consulta y el asesor responde.
+- En ese caso: evalúa cierre. Si responde la duda y NO retoma el cierre comercial (inscripción/vacante/pago): score '0' y NO_CIERRE_COMERCIAL. PROHIBIDO copiar 'No se evalua al asesor porque el cliente abandona la conversacion'.
+- Si CDE auténtico:
+  - score = 'NA'
+  - descripcion = 'No se evalua al asesor porque el cliente abandona la conversacion. (NA)'
+  - cierre_clasificacion = []
+  - DETENTE: no evalúes PRE_CIERRE ni CIERRE_COMERCIAL. PROHIBIDO devolver '0' o '1'.
+
+No aplica si (también score 'NA' cuando corresponda, sin clasificaciones de incumplimiento):
 
 - El cliente aún se encuentra evaluando.
 - El cliente es alumno y busca reingreso.
@@ -872,14 +990,13 @@ No aplica si:
 - El prospecto ya se encuentra inscrito.
 - La conversación se centra principalmente en convencer al cliente.
 - No se genera inscripción.
-- El cliente abandona el chat o deja de responder.
 
-Se penaliza si:
+Se penaliza (solo si NO aplica el PASO 0 / CDE / abandono del cliente):
 
 - El asesor acepta reprogramar sin intentar realizar un cierre.
-- El asesor abandona la conversación.
+- El asesor abandona la conversación (responsabilidad del asesor; no confundir con abandono del cliente).
 
-Validar los siguientes puntos:
+Validar los siguientes puntos SOLO si pasó el PASO 0 sin CDE/abandono:
 
 PRE_CIERRE
 
@@ -982,6 +1099,13 @@ CONFIRMACION_FINAL:
 
 No es necesario que el asesor siga literalmente un contrato verbal o speech específico. Lo importante es que realice una lectura o confirmación estructurada de la venta, valide los datos registrados, confirme las condiciones económicas de la inscripción y valide la conformidad del cliente.
 
+CUMPLE (score '1') — no exijas un speech formal de 'contrato verbal':
+- Envió una plantilla / checklist de datos de inscripción que incluye DNI (y el cliente lo completa o se valida en ficha). Eso SÍ cuenta como validación de DATOS_PERSONALES / DNI.
+- Recapituló carrera + modalidad + sede/región + inscripción/matrícula/pensión (aunque sea en un mensaje tipo checklist) y pidió conformidad ('¿estás de acuerdo?', 'valida que los datos estén correctos').
+- El cliente responde 'sí', 'está bien', 'acepto' o equivalente.
+- NO penalices porque el voucher/pago aún no llegó, porque el chat pasó a corporativo para enviar el voucher, o porque no leyó cada campo de la ficha en voz alta.
+- PROHIBIDO score '0' con texto del tipo 'no valida la conformidad de manera formal' si ya hubo plantilla de DNI/datos + resumen de costos + aceptación del cliente.
+
 <<<END>>>
 
 <<<CIERRE_CLASIFICACION>>>
@@ -989,6 +1113,8 @@ No es necesario que el asesor siga literalmente un contrato verbal o speech espe
 Identificar todas las clasificaciones de incumplimiento detectadas en el atributo CIERRE.
 
 Agregar únicamente las clasificaciones que el asesor NO CUMPLIÓ.
+
+Si cierre.score = 'NA' por abandono del cliente: devolver [] (sin clasificaciones).
 
 Clasificaciones disponibles:
 
@@ -1079,6 +1205,11 @@ Familias:
 - DS (Descalificado): Cliente no se inscribirá / fuera de proceso / ya es alumno / motivos que descalifican.
 - SI (Se Inscribirá): Cliente decidió inscribirse o realizó promesa de pago o pago en línea.
 - CDE (Cliente Deja de Escribir): Existe interacción, pero el cliente abandona el chat sin completar la gestión.
+- PROHIBIDO tipificar CDE (y PROHIBIDO tipificacion_detalle=CDE) si:
+  - El cliente vuelve a escribir después de la despedida o del número corporativo, o
+  - El último intercambio es una pregunta del cliente y el asesor responde, o
+  - El caso se cierra por el límite de 4 minutos del canal mientras aún había diálogo.
+  En esos casos usa RA (detalle típico: RA_VOLVER_A_ESCRIBIR). `tipificacion_detalle` NUNCA es "NA".
 
 Catálogo cerrado de `tipificacion_detalle`:
 
@@ -1092,13 +1223,14 @@ RA (elige exactamente uno; tipificacion=RA):
 - RA_EVALUA_OTRAS_INSTITUCIONES — Evalúa otras instituciones
 - RA_EVALUA_CONVALIDACION — Evalúa convalidación
 - RA_AUN_NO_DECIDE_LA_CARRERA — Aún no decide la carrera
-- RA_CONVERSARA_CON_SUS_PADRES — Conversará con sus padres
+- RA_CONVERSARA_CON_SUS_PADRES — Conversará con sus padres (en el PRIMER rebate: validar si habla con padre o hijo y pedir el número del padre; si no, rebate=0)
 - RA_VISITARA_COUNTER — Visitará counter
 - RA_DISTANCIA_OTRA_CIUDAD — Distancia / otra ciudad
 - RA_DISTANCIA_OTRO_DISTRITO — Distancia / otro distrito
 
 CDE (tipificacion=CDE):
 - CDE — Cliente dejó de escribir
+- Si eliges CDE: `atributos.cierre` DEBE ir en score 'NA' con descripcion 'No se evalua al asesor porque el cliente abandona la conversacion. (NA)' y cierre_clasificacion=[]. PROHIBIDO cierre '0'/'1' en CDE.
 
 SI (tipificacion=SI):
 - SI — Se inscribirá / promesa de pago / inscripción en curso
@@ -1172,6 +1304,10 @@ Aplica únicamente cuando la tipificación sea:
 - SI
 
 Validar si el asesor solicitó, registró o gestionó un segundo número de contacto para futuras comunicaciones.
+
+Si tipificacion_detalle = RA_CONVERSARA_CON_SUS_PADRES:
+- El segundo número esperado es el del padre/madre/apoderado (no un número genérico cualquiera), salvo que el interlocutor ya sea el padre y se haya validado.
+- Si no lo solicita: score '0' en este clasificador (y rebate '0' según la REGLA DURA de primer rebate).
 
 Si la tipificación es distinta de RA o SI, asignar:
 
@@ -1553,12 +1689,25 @@ ITEM: CALIDAD_DE_REDACCION_ESCRITA
 
 Validar que el asesor redacte adecuadamente durante la conversación.
 
-Considerar:
+ALCANCE OBLIGATORIO — solo texto escrito:
+- Evalúa ÚNICAMENTE mensajes de texto escritos por el asesor (`[operador]` posteriores a `Caso recibido por`).
+- PROHIBIDO usar mensajes `[AUDIO]` o su texto STT para ortografía, signos o gramática.
+- PROHIBIDO devolver score '0' o '1' basándote en errores o aciertos de una transcripción de audio.
+- NO aplica a OCR de imágenes/documentos, base64, plantillas de sistema/bot ni mensajes `[sistema]`.
+- Si el asesor solo se comunicó por audio, o no hay texto escrito evaluable post-asignación:
+  - score = 'NA'
+  - descripcion = 'No se evalua ortografia porque el contenido del asesor es audio transcrito / no hay texto escrito evaluable. (NA)'
+- Si hay texto escrito Y audios: evalúa ortografía SOLO sobre el texto escrito; en la descripción NO menciones el audio ni la transcripción.
+- Nunca penalices errores de STT (homófonos, puntuación de transcripción, palabras cortadas) como faltas del asesor.
+
+Considerar (solo sobre texto escrito del asesor):
 
 - Correcta ortografía.
 - Uso adecuado de signos de puntuación.
 - Respeto de reglas gramaticales.
 - Redacción profesional y comprensible.
+
+Si el texto escrito del asesor tiene faltas evidentes (plurales omitidos, puntuación duplicada '..', frases rotas), score '0'. PROHIBIDO score '1' cuando hay errores claros en mensajes escritos (ej. 'te voy comentando los horario', 'si claro que si..').
 
 <<<END>>>
 
@@ -1657,6 +1806,8 @@ Considerar:
 - TECNICISMOS: Evita el uso excesivo de términos técnicos que puedan dificultar la comprensión del prospecto.
 
 El asesor debe mantener una actitud profesional, cordial y orientada a la atención del prospecto durante toda la conversación.
+
+PROHIBIDO score '0' por dejar el número corporativo ante inactividad o límite de 4 minutos. Eso es la despedida exigida en CDE/SI/RA, NO un 'intento de derivar a número personal' ni falta de seguimiento.
 
 <<<END>>>
 
@@ -1884,6 +2035,8 @@ FORMATO DE SALIDA OBLIGATORIO
 
 Devuelve UNICO objeto JSON valido (sin markdown, sin backticks, sin texto fuera del JSON).
 Usa comillas dobles en las claves y valores del JSON (esta regla aplica solo al JSON de salida; en las descripciones de atributos sigue usando comillas simples para citar mensajes).
+OBLIGATORIO: incluye TODAS las claves del esquema (atributos, clasificaciones, clasificadores, motivo_no_venta, carreras, resumen_evaluacion). NUNCA cortes el JSON a mitad de `atributos` (p. ej. después de confronta_al_prospecto).
+Cada `descripcion` máximo 2 oraciones. NO pegues OCR, malla curricular, SDP/WebRTC ni payloads. Prioriza completar el JSON entero antes que alargar textos.
 
 Estructura exacta:
 
@@ -1964,6 +2117,19 @@ Reglas de salida:
 6. resumen_evaluacion debe seguir las reglas de <<<RESUMEN_EVALUACION>>>.
 7. clasificadores.tipificacion es OBLIGATORIO: siempre "RA" o "DS" o "SI" o "CDE". NUNCA null, vacío ni "NA". Si dudas, usa "RA" (o "CDE" si el cliente dejó de escribir).
 8. clasificadores.tipificacion_detalle es OBLIGATORIO: código exacto del catálogo de <<<TIPIFICACION>>> coherente con tipificacion. NUNCA null ni inventar códigos. Si tipificacion=RA y no hay submotivo claro → RA_VOLVER_A_ESCRIBIR. Si tipificacion=SI → SI. Si tipificacion=CDE → CDE. Si tipificacion=DS sin submotivo claro → DS_PROXIMO_PROCESO_OTROS.
+9. NO analices ni puntúes contenido de bots/sistema/templates/flows (Regla 14-F).
+10. ortografia_y_signos_de_puntuacion: PROHIBIDO basarla en [AUDIO]/STT. Solo texto escrito del asesor. Si no hay texto escrito evaluable → score "NA" con la descripción de audio/texto no evaluable. Si puntúas 0/1, no menciones audio ni transcripción en la descripción.
+11. CDE auténtico: cierre.score="NA" con la frase de abandono y cierre_clasificacion=[]. Si el cliente VOLVIÓ a escribir tras despedida/corporativo: NO es CDE → tipifica RA (detalle no puede ser NA; usa RA_VOLVER_A_ESCRIBIR si no hay otro). cierre SÍ se evalúa: si no retoma el cierre tras la consulta → "0". despedida/corte_intencional/abandono_del_chat NO van en NA por "abandono" en ese escenario.
+12. Si tipificacion_detalle="RA_CONVERSARA_CON_SUS_PADRES": en el PRIMER rebate el asesor DEBE validar si habla con el padre o con el hijo y solicitar el número de contacto del padre/madre. Si no lo hace, atributos.rebate.score="0".
+13. primera_respuesta: NO marques NA porque el asesor saludó primero tras `Caso recibido por`. Mide desde el primer `[cliente]` post-asignación. El saludo es el atributo saludo.
+14. motivacion: si el asesor no sondeó la motivación teniendo conversación desarrollada (carrera/precios/horarios/examen), score="0" y descripcion 'Asesor no consulta la motivacion (0)'. NUNCA "NA" por CDE al final. NA solo si el cliente cortó antes de poder preguntar o si el asesor preguntó y no obtuvo respuesta.
+15. informacion_complementaria: mencionar costo del seguro y/o exoneración si ya tiene SIS/EsSalud/EPS cumple el ítem de seguro. En clasificacion/descripcion lista SOLO lo omitido (ej. plazo de documentos).
+16. resumen_de_venta: si hay plantilla/ficha con DNI, recap de costos y el cliente acepta, score="1". No exijas speech formal ni penalices porque el voucher aún no llegó.
+17. JSON completo: emite TODAS las claves de atributos (desde saludo hasta afecta_imagen_negocio) más clasificaciones/clasificadores. Si el hilo es largo (brochure/OCR/SDP), ignora ruido técnico y acorta descripciones; no dejes columnas vacías.
+18. despedida en CDE/SI/RA: si el asesor dejó número corporativo, score="1". No penalices por repetir el número o no anunciar seguimiento.
+19. vacios/abandono: espera de ficha, medio de pago, llamada ('te llamo', 'comunicarme con tu mamá') o respuesta del cliente = no es '0' del asesor. No midas tiempos con bot/flow pre-asignación.
+20. actitud_comercial: NO penalices por invitar al corporativo ante inactividad.
+21. informacion_complementaria: 'Seguro: S/ X' cumple seguro; fecha de pago de matrícula cumple ese plazo. Describe SOLO lo omitido (habitualmente documentos).
 
 --- CONVERSACION A EVALUAR ---
 {{conversacion}}

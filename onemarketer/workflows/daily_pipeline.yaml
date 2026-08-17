@@ -41,8 +41,10 @@ main:
             steps:
               - compute_yesterday:
                   assign:
-                    # Aprox UTC-5 (Lima). Preferir process_date explícito desde Scheduler.
-                    - process_date: ${text.substring(time.format(sys.now() - 18000), 0, 10)}
+                    # Sin process_date: "ayer" en America/Lima (UTC-5 aprox).
+                    # 18000 = 5h (hoy Lima) + 86400 = 1 día → ayer Lima.
+                    # Scheduler 4 AM del 14 → process_date = 13.
+                    - process_date: ${text.substring(time.format(sys.now() - 104400), 0, 10)}
 
     - resolve_etl_url:
         switch:

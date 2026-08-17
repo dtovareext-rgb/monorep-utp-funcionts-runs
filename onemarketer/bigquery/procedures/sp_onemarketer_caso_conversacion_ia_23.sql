@@ -4,6 +4,10 @@
 -- Evalúa la conversación ENTERA por idcase con canal_escrito_prompt.
 -- Parsea el JSON definido en docs/prompt_canal_escrito_formato_salida.txt
 --
+-- Reglas duras post-LLM (refuerzo del prompt):
+--   - tipificacion/detalle CDE → cierre_score=NA + descripción de abandono + clasificacion []
+--   - ortografía basada en audio/STT o sin texto escrito → score/desc NA
+--
 -- Reproceso: DELETE hist raw/prd del día al inicio (permite re-ejecutar limpio).
 --
 -- CALL:
@@ -308,7 +312,13 @@ BEGIN
     JSON_QUERY(evaluacion_json, '$.clasificaciones.informacion_complementaria_clasificacion') AS informacion_complementaria_clasificacion,
     JSON_QUERY(evaluacion_json, '$.clasificaciones.sondeo_clasificacion') AS sondeo_clasificacion,
     JSON_QUERY(evaluacion_json, '$.clasificaciones.argumentario_de_venta_clasificacion') AS argumentario_de_venta_clasificacion,
-    JSON_QUERY(evaluacion_json, '$.clasificaciones.cierre_clasificacion') AS cierre_clasificacion,
+    -- CDE / abandono cliente: no evaluar cierre (regla dura, no depende del LLM)
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion'), ''))) = 'CDE'
+        OR UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle'), ''))) = 'CDE'
+        THEN TO_JSON_STRING([])
+      ELSE JSON_QUERY(evaluacion_json, '$.clasificaciones.cierre_clasificacion')
+    END AS cierre_clasificacion,
     JSON_QUERY(evaluacion_json, '$.clasificaciones.informacion_falsa_clasificacion') AS informacion_falsa_clasificacion,
     JSON_QUERY(evaluacion_json, '$.clasificaciones.actitud_comercial_clasificacion') AS actitud_comercial_clasificacion,
     JSON_VALUE(evaluacion_json, '$.atributos.saludo.score') AS saludo_score,
@@ -351,14 +361,55 @@ BEGIN
     JSON_VALUE(evaluacion_json, '$.atributos.rebate.descripcion') AS rebate_descripcion,
     JSON_VALUE(evaluacion_json, '$.atributos.rebate_efectivo.score') AS rebate_efectivo_score,
     JSON_VALUE(evaluacion_json, '$.atributos.rebate_efectivo.descripcion') AS rebate_efectivo_descripcion,
-    JSON_VALUE(evaluacion_json, '$.atributos.cierre.score') AS cierre_score,
-    JSON_VALUE(evaluacion_json, '$.atributos.cierre.descripcion') AS cierre_descripcion,
+    -- CDE: cierre siempre NA (cliente abandona; no penalizar asesor)
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion'), ''))) = 'CDE'
+        OR UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle'), ''))) = 'CDE'
+        THEN 'NA'
+      ELSE JSON_VALUE(evaluacion_json, '$.atributos.cierre.score')
+    END AS cierre_score,
+    CASE
+      WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion'), ''))) = 'CDE'
+        OR UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$.clasificadores.tipificacion_detalle'), ''))) = 'CDE'
+        THEN 'No se evalua al asesor porque el cliente abandona la conversacion. (NA)'
+      ELSE JSON_VALUE(evaluacion_json, '$.atributos.cierre.descripcion')
+    END AS cierre_descripcion,
     JSON_VALUE(evaluacion_json, '$.atributos.resumen_de_venta.score') AS resumen_de_venta_score,
     JSON_VALUE(evaluacion_json, '$.atributos.resumen_de_venta.descripcion') AS resumen_de_venta_descripcion,
     JSON_VALUE(evaluacion_json, '$.atributos.sentido_de_urgencia.score') AS sentido_de_urgencia_score,
     JSON_VALUE(evaluacion_json, '$.atributos.sentido_de_urgencia.descripcion') AS sentido_de_urgencia_descripcion,
-    JSON_VALUE(evaluacion_json, '$.atributos.ortografia_y_signos_de_puntuacion.score') AS ortografia_y_signos_de_puntuacion_score,
-    JSON_VALUE(evaluacion_json, '$.atributos.ortografia_y_signos_de_puntuacion.descripcion') AS ortografia_y_signos_de_puntuacion_descripcion,
+    -- Ortografía: no aplica a audio/STT; si el modelo cita audio o no hay texto escrito post-asignación → NA
+    CASE
+      WHEN REGEXP_CONTAINS(
+             LOWER(IFNULL(JSON_VALUE(evaluacion_json, '$.atributos.ortografia_y_signos_de_puntuacion.descripcion'), '')),
+             r'audio|transcri'
+           )
+        THEN 'NA'
+      WHEN IFNULL(audio_transcrito_count, 0) > 0
+        AND REGEXP_CONTAINS(IFNULL(conversacion_completa, ''), r'(?i)\[AUDIO\]')
+        AND NOT REGEXP_CONTAINS(
+              REGEXP_REPLACE(IFNULL(conversacion_completa, ''), r'(?i)\[AUDIO\][^\n]*', ''),
+              r'(?i)\[operador[^\]]*\]\s*[^\[\n]{20,}'
+            )
+        THEN 'NA'
+      ELSE JSON_VALUE(evaluacion_json, '$.atributos.ortografia_y_signos_de_puntuacion.score')
+    END AS ortografia_y_signos_de_puntuacion_score,
+    CASE
+      WHEN REGEXP_CONTAINS(
+             LOWER(IFNULL(JSON_VALUE(evaluacion_json, '$.atributos.ortografia_y_signos_de_puntuacion.descripcion'), '')),
+             r'audio|transcri'
+           )
+        OR (
+          IFNULL(audio_transcrito_count, 0) > 0
+          AND REGEXP_CONTAINS(IFNULL(conversacion_completa, ''), r'(?i)\[AUDIO\]')
+          AND NOT REGEXP_CONTAINS(
+                REGEXP_REPLACE(IFNULL(conversacion_completa, ''), r'(?i)\[AUDIO\][^\n]*', ''),
+                r'(?i)\[operador[^\]]*\]\s*[^\[\n]{20,}'
+              )
+        )
+        THEN 'No se evalua ortografia porque el contenido del asesor es audio transcrito / no hay texto escrito evaluable. (NA)'
+      ELSE JSON_VALUE(evaluacion_json, '$.atributos.ortografia_y_signos_de_puntuacion.descripcion')
+    END AS ortografia_y_signos_de_puntuacion_descripcion,
     JSON_VALUE(evaluacion_json, '$.atributos.plantillas_whatsapp.score') AS plantillas_whatsapp_score,
     JSON_VALUE(evaluacion_json, '$.atributos.plantillas_whatsapp.descripcion') AS plantillas_whatsapp_descripcion,
     JSON_VALUE(evaluacion_json, '$.atributos.uso_de_flyers_videos_y_artes.score') AS uso_de_flyers_videos_y_artes_score,

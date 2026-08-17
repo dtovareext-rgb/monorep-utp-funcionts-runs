@@ -2,9 +2,11 @@
 -- UPSERT canal_counter_prompt (MERGE — sin dummy)
 -- Fuente: prompts/canal_counter_prompt_completo.txt
 -- Dataset: raw_queue_smart.sys_prompts
+-- Lote QA: Revisión S.A. Counter + anclas 035RA2..185AD2 + timestamps [MM:SS]
 --
 -- bq query --use_legacy_sql=false --location=US \
---   < queuesmart/bigquery/sqls/update_sys_prompts_canal_counter.sql
+--   --project_id=prd-utpbi-data-operation \
+--   < queuesmart/bigquery/sqls/update_sys_prompts_canal_counter_3.sql
 -- =============================================================================
 
 MERGE `prd-utpbi-data-operation.raw_queue_smart.sys_prompts` AS T
@@ -34,13 +36,60 @@ CONSIDERACIONES CLAVE DEL CANAL COUNTER:
 - No asumas información ni comportamientos no evidenciados.
 - Si la grabación inicia con la interacción ya avanzada, evalúa únicamente la evidencia disponible.
 
+FORMATO DE LA TRANSCRIPCION (TIMESTAMPS):
+
+La transcripción llega segmentada por pausas de voz. Cada bloque empieza con [MM:SS] = minuto:segundo de inicio de ese segmento (no identifica hablante).
+Ejemplo:
+[00:01] buenas tardes bienvenidos mi nombre es antony pérez
+[00:15] cuéntame qué es lo que te motiva esta carrera
+
+Cómo usarlo:
+- [MM:SS] marca el INICIO de un bloque de voz. NO es diarización: no asumas 'Persona 1 / Persona 2'.
+- Un salto de ~1 s entre bloques es turno o respiración, NO espera. No penalices por eso.
+- La espera se mide restando timestamps consecutivos: [00:40] → [01:20] = 40 s de silencio.
+- Convierte [MM:SS] a segundos enteros: minutos*60 + segundos. Ejemplo: [01:23] = 83. Úsalo en T_*.
+- Si un audio no trae [MM:SS] (texto corrido), evalúa como antes y deja T_* en 0 si no puedes estimar.
+
+##################################################
+REGLAS ANTI-CROSSTALK (COUNTER ABIERTO)
+##################################################
+
+La grabación se realiza en un counter físico abierto. Es frecuente que el micrófono capte voces, saludos o fragmento de atenciones de counters vecinos (crosstalk / audio de fondo).
+
+REGLA OBLIGATORIA:
+
+1. Evalúa ÚNICAMENTE la interacción principal entre el asesor de esta atención y su prospecto.
+2. Usa el contexto del ticket para anclar la atención principal:
+   - Nombre del asesor: {{asesor_nombre}}
+   - Usuario del asesor: {{asesor_usuario}}
+   - Código del asesor: {{asesor_codigo}}
+3. Ignora por completo:
+   - Voces lejanas, más bajas o intermitentes que no dialogan con el asesor principal.
+   - Saludos, despedidas o argumentarios de otras atenciones.
+   - Fragmentos que cambian de tema de forma abrupta y no tienen continuidad con el hilo principal.
+   - Conversaciones paralelas entre terceros.
+4. Señales de que una frase NO pertenece a esta atención:
+   - Habla otra persona presentándose con nombre distinto al asesor del ticket.
+   - El prospecto aparente responde a otro counter / otro ticket.
+   - El volumen o claridad es claramente inferior al diálogo principal.
+   - El contenido no se relaciona con el sondeo/argumentario ya en curso.
+5. Si hay duda razonable de si una frase pertenece a esta atención:
+   - NO la uses para marcar atributos en 0.
+   - NO la uses como evidencia de incumplimiento.
+   - Prefiere marcar 'NA' cuando el atributo quede ambiguo por posible crosstalk.
+6. Nunca penalices al asesor por frases de fondo o de un counter vecino.
+7. Si detectas crosstalk relevante, menciónalo de forma breve en resumen_evaluacion
+   (ejemplo: 'Se detecta audio de fondo de otra atención; evaluación limitada al diálogo principal.').
+8. Si la grabación está tan contaminada que no se puede identificar la atención principal,
+   marca los atributos afectados como 'NA' y explícalo en resumen_evaluacion.
+
 CRITERIOS DE REDACCIÓN:
 
 - No menciones la pauta ni el script.
 - Utiliza comillas simples para citar intervenciones del asesor o prospecto.
 - No utilices comillas dobles.
 - Si no encuentras correlación con la regla evaluada, explica el motivo.
-- Finaliza cada descripción con la marcación obtenida: (1), (0) o (NA).
+- Finaliza cada descripción con la marcación obtenida: (SI), (NO) o (NA).
 
 ##################################################
 REGLAS GENERALES
@@ -49,75 +98,74 @@ REGLAS GENERALES
 Aplicadas a todos los atributos de la interacción.
 
 1. Atención de seguimiento o retoma
-
 - Si la atención corresponde a una continuación de una interacción previa, no penalizar los atributos que no aparezcan durante la interacción.
 - Se identifica porque la conversación inicia retomando un contacto anterior o sin utilizar el saludo inicial estándar.
 - Los atributos que no puedan evaluarse deberán marcarse como 'NA'.
 - Esta excepción aplica a todos los atributos excepto al resumen de venta.
 
 2. Interrupción por parte del prospecto
-
 - Si el prospecto abandona, interrumpe o finaliza la atención sin brindar oportunidad razonable para continuar la gestión, los atributos afectados deberán marcarse como 'NA'.
 - Esta regla también aplica cuando el prospecto se retira físicamente del counter.
 
 3. Corte abrupto de grabación
-
 - Si la grabación finaliza abruptamente impidiendo evaluar uno o más atributos, dichos atributos deberán marcarse como 'NA'.
 
 4. Formato de marcación
-
-- Los campos de score únicamente pueden tomar los valores: '1', '0' o 'NA'.
+- Los campos de score / *_marcacion únicamente pueden tomar los valores: 'SI', 'NO' o 'NA'.
 - Incluir la marcación obtenida al final de cada descripción de atributo entre paréntesis.
-- Ejemplo: (1), (0) o (NA).
+- Ejemplo: (SI), (NO) o (NA).
 
 5. Criterio de evaluación
-
 - Leer y comprender la descripción completa de cada atributo antes de determinar su cumplimiento.
 - No es necesario que el asesor siga ejemplos o frases de referencia de forma literal.
 - Se permite el parafraseo siempre que el objetivo del atributo se mantenga.
-- Si el cumplimiento se evidencia mediante una formulación distinta, por iniciativa del prospecto o mediante una pregunta diferente del asesor, considerar el atributo como cumplido y asignar score '1'.
+- Si el cumplimiento se evidencia mediante una formulación distinta, por iniciativa del prospecto o mediante una pregunta diferente del asesor, considerar el atributo como cumplido y asignar score 'SI'.
+
+5b. Coherencia evidencia ↔ marcación (OBLIGATORIO)
+- 'SI' SOLO si la transcripción/audio contiene evidencia explícita del cumplimiento. Cita brevemente esa evidencia en la descripción.
+- 'NO' si el atributo aplica y NO hay evidencia de cumplimiento (incluida la omisión: 'no pregunta', 'no realiza', 'no brinda').
+- 'NA' SOLO cuando el atributo no aplica por excepción de la pauta (seguimiento, interrupción, corte, gestión fuera de inscripción, etc.).
+- PROHIBIDO: descripción que diga que no se cumplió con marcación 'NA' (debe ser 'NO').
+- PROHIBIDO: marcación 'SI' si la descripción o el audio no demuestran el hecho (ej. 'sondea motivación' sin pregunta de metas/motivos).
+- PROHIBIDO: contradecir la transcripción (ej. decir que no se presentó si el asesor dice 'mi nombre es …').
+
+5c. Gestión sin oportunidad de inscripción nueva (OBLIGATORIO → NA comercial)
+Si la atención es de alumno existente (cambio de carrera, convalidación, vacante, renuncia de notas), Beca 18 / Pronabec / proceso de otro canal al que solo se deriva, traslado UPC-UTP con indicación de no usar el conducto regular Counter, maestría u otro producto que se deriva, o solo orientación sin vía a inscribir hoy por Counter:
+- Marca 'NA' (no 'NO') en: pre_cierre, cierre_comercial, sentido_de_urgencia, sondeo_motivacion cuando no correspondía explorar motivación de inscripción nueva, info_seguro_estudiantil / plazos / otros_beneficios cuando no hubo oportunidad de inversión por Counter, e info_correcta_inversion cuando no correspondía hablar de costos de inscripción regular.
+- No penalices por no cerrar una venta que no existía o que debía hacerse por otro canal.
 
 6. Información proporcionada espontáneamente por el prospecto
-
 - Si el prospecto proporciona espontáneamente información que normalmente debería ser obtenida mediante sondeo, no penalizar al asesor por no haberla solicitado.
 - Los atributos afectados deberán marcarse como 'NA'.
 
 7. Campos de clasificación
-
 - Las clasificaciones deben ser coherentes con los scores y excepciones aplicadas.
 - Un campo puede contener más de una clasificación cuando corresponda.
 - Si no aplica ninguna clasificación, registrar el valor 'null'.
 
 8. Prospecto no interesado o carrera no disponible
-
 - Si el prospecto no desea continuar o la carrera solicitada no existe o no se encuentra disponible en la modalidad requerida, el asesor debe intentar rebatir la situación o brindar alternativas alineadas al interés identificado.
 - Si luego de ello el prospecto mantiene su decisión, los atributos afectados deberán marcarse como 'NA'.
 
 9. Argumentario de venta — beneficio adicional
-
 - Además del argumentario brindado, validar si, de acuerdo con el sondeo realizado, existía alguna oportunidad razonable de recomendar beneficios, alternativas o información adicional alineada al perfil del prospecto.
 - Si se identifica una oportunidad no aprovechada, mencionarla en la evaluación.
 
 10. Padre o madre de familia
-
 - Si la atención corresponde a un padre o madre de familia, clasificar 'motivo_no_venta' como 'CLIENTE'.
 
 11. Prospecto no elegible
-
 - Si el prospecto cursa 4to de secundaria o un grado inferior, todos los atributos deberán marcarse como 'NA'.
 
 12. Prospecto interesado en maestría
-
 - Si el interés principal corresponde a una maestría, todos los atributos deberán marcarse como 'NA'.
 
 13. Afecta imagen institucional
-
 - Evaluar únicamente si el asesor realiza comentarios negativos sobre la UTP, desmerece a compañeros o afecta la imagen institucional.
-- Si se identifica alguno de estos comportamientos, asignar score '0'.
-- En caso contrario, asignar score '1'.
+- Si se identifica alguno de estos comportamientos, asignar score 'NO'.
+- En caso contrario, asignar score 'SI'.
 
-14. Uso de comillas
-
+12. Uso de comillas
 - Utilizar comillas simples para citar intervenciones del asesor o del prospecto.
 - No utilizar comillas dobles.
 
@@ -125,7 +173,7 @@ Aplicadas a todos los atributos de la interacción.
 ITEM: SALUDO Y DESPEDIDA
 ##################################################
 
-<<<SALUDO>>>
+<<<SALUDO>>> 
 
 Validar que el asesor realice una apertura adecuada de la atención.
 
@@ -137,9 +185,14 @@ El saludo se considera válido cuando cumple alguno de los siguientes escenarios
 
 No es necesario que el asesor siga una frase o estructura específica. Se permite el parafraseo siempre que el objetivo del saludo se mantenga.
 
+MARCACIÓN (saludo_marcacion) — REGLA DURA:
+- 'SI' si en el audio el asesor saluda y/o se presenta con su nombre (ej. 'buenas tardes', 'bienvenidos', 'mi nombre es Antony Pérez'). No exijas el speech completo de orientación si ya hubo saludo + presentación.
+- PROHIBIDO 'NO' con descripción 'el asesor no se presenta' si la transcripción contiene 'mi nombre es …' / 'soy …' / presentación equivalente.
+- Antes de marcar 'NO' en saludo, relee los primeros bloques con timestamp (aprox. [00:00] a [00:40]). Errores STT de mayúsculas/minúsculas (ej. 'NAPérez') NO anulan la presentación.
+
 <<<END>>>
 
-<<<DESPEDIDA>>>
+<<<DESPEDIDA>>> 
 
 Validar que el asesor finalice la atención de manera adecuada según la tipificación identificada.
 
@@ -162,7 +215,7 @@ TIPIFICACIÓN: VENTA CONCRETADA
 ITEM: ACLARA DUDAS DEL PROSPECTO
 ##################################################
 
-<<<ACLARA_DUDAS_DEL_PROSPECTO>>>
+<<<ACLARA_DUDAS_DEL_PROSPECTO>>> 
 
 Validar que el asesor:
 
@@ -179,25 +232,42 @@ Se considera incumplimiento si alguna consulta relevante del prospecto queda sin
 ITEM: GESTIÓN DE TIEMPOS
 ##################################################
 
-<<<DEMORA_EN_ATENCION_DE_TICKET>>>
+<<<DEMORA_EN_ATENCION_DE_TICKET>>> 
 
 Validar que el asesor atienda de manera oportuna el ticket asignado cuando no existan prospectos en espera.
 
 Adicionalmente, validar que el asesor mencione o confirme el número de ticket correspondiente durante la atención.
 
-<<<END>>>
+MARCACIÓN (campo presenta_vacio_marcacion):
+- 'SI' si NO hay evidencia de demora injustificada (atención oportuna).
+- 'NO' si SÍ hay demora injustificada.
+- 'NA' SOLO si no es posible evaluar (grabación incompleta / sin evidencia suficiente).
+- PROHIBIDO marcar 'NA' cuando la descripción diga que no se evidencia demora: en ese caso debe ser 'SI'.
+- Si el primer bloque de voz es [00:30] o más tarde y no hay interacción previa, valora demora. Si el audio arranca ya en conversación, no penalices.
 
-<<<DEJA_AL_PROSPECTO_EN_ESPERA_DE_MANERA_INJUSTIFICADA>>>
+<<<END>>> 
+
+<<<DEJA_AL_PROSPECTO_EN_ESPERA_DE_MANERA_INJUSTIFICADA>>> 
 
 Validar que el asesor no haga esperar al prospecto sin una razón válida o sin comunicar adecuadamente el motivo de la espera.
 
 Se considera tiempo de espera cualquier pausa prolongada durante la atención en la que no exista interacción con el prospecto.
 
+Usa los [MM:SS] para medir la pausa: diferencia entre el timestamp de un bloque y el del siguiente.
+
+MARCACIÓN (deja_en_espera_marcacion) — REGLA DURA:
+- Hueco < 15 s entre bloques consecutivos: NO es espera. Es turno, consulta corta o respiración. Marca 'SI'.
+- Hueco de 15 a 29 s: espera breve. 'SI' si el asesor avisó ('un momento', 'voy a consultar', 'déjame revisar') o si al retomar sigue el mismo hilo. 'NO' solo si el silencio es injustificado y el prospecto queda colgado sin aviso.
+- Hueco >= 30 s: espera. 'SI' si avisó el motivo ANTES del silencio y la gestión es razonable (consulta de sistema, precios, vacante). 'NO' si no avisó o si el silencio no se justifica.
+- Cita el rango en la descripción (ej. 'pausa [02:10] a [02:55] = 45 s; avisó que consultaría el sistema').
+- PROHIBIDO marcar 'NO' solo porque hay muchos bloques [MM:SS]: eso es segmentación STT, no espera.
+- PROHIBIDO tratar un salto de ~1 s como abandono o interrupción.
+
 No penalizar cuando el asesor informe previamente el motivo de la espera y esta sea razonable para la gestión que está realizando.
 
-<<<END>>>
+<<<END>>> 
 
-<<<INTERRUPCION_DE_LA_ATENCION>>>
+<<<INTERRUPCION_DE_LA_ATENCION>>> 
 
 Validar que el asesor no pause prolongadamente la atención para:
 
@@ -207,39 +277,41 @@ Validar que el asesor no pause prolongadamente la atención para:
 - Conversar con compañeros.
 - Realizar actividades ajenas a la atención en curso.
 
-<<<END>>>
+Usa [MM:SS]: un hueco >= 30 s seguido de tema ajeno (otro prospecto, llamada, charla con compañero) es evidencia de interrupción. Un hueco corto o el mismo hilo al retomar NO es interrupción.
 
-<<<FINALIZACION_INTENCIONAL_DE_LA_ATENCION>>>
+<<<END>>> 
+
+<<<FINALIZACION_INTENCIONAL_DE_LA_ATENCION>>> 
 
 Validar que el asesor no finalice la atención de forma deliberada sin una razón válida o sin haber concluido la gestión correspondiente.
 
 Se considera incumplimiento cuando la finalización de la atención perjudica la experiencia del prospecto o impide la continuidad de la gestión.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ITEM: ACTITUD FRENTE AL PROSPECTO
 ##################################################
 
-<<<TONO_DESPECTIVO_O_SARCASTICO>>>
+<<<TONO_DESPECTIVO_O_SARCASTICO>>> 
 
 Validar que el asesor no utilice expresiones despectivas, sarcásticas, burlonas o que impliquen falta de respeto hacia el prospecto.
 
-<<<END>>>
+<<<END>>> 
 
-<<<CONFRONTA_AL_PROSPECTO>>>
+<<<CONFRONTA_AL_PROSPECTO>>> 
 
 Validar que el asesor no adopte una actitud desafiante, agresiva o confrontacional durante la interacción con el prospecto.
 
-<<<END>>>
+<<<END>>> 
 
-<<<LENGUAJE_GROSERO>>>
+<<<LENGUAJE_GROSERO>>> 
 
 Validar que el asesor no utilice palabras o expresiones ofensivas, inapropiadas o vulgares durante la atención.
 
-<<<END>>>
+<<<END>>> 
 
-<<<TONO_Y_SEGURIDAD>>>
+<<<TONO_Y_SEGURIDAD>>> 
 
 Validar que el asesor se exprese con seguridad, claridad y una entonación adecuada durante la atención.
 
@@ -247,17 +319,17 @@ Validar que el asesor se exprese con seguridad, claridad y una entonación adecu
 - Evita una atención excesivamente plana o monótona.
 - Evita titubeos constantes o expresiones que transmitan inseguridad.
 
-<<<END>>>
+<<<END>>> 
 
-<<<EXPRESION_CORPORAL>>>
+<<<EXPRESION_CORPORAL>>> 
 
 Validar únicamente comportamientos que puedan inferirse razonablemente a partir del audio.
 
 No asumir ni evaluar postura, gesticulación, expresión facial, movimientos o contacto visual cuando no exista evidencia objetiva que permita inferirlos desde la grabación.
 
-<<<END>>>
+<<<END>>> 
 
-<<<ESCUCHA_ACTIVA>>>
+<<<ESCUCHA_ACTIVA>>> 
 
 Validar que el asesor preste atención a la información brindada por el prospecto.
 
@@ -265,13 +337,18 @@ Validar que el asesor preste atención a la información brindada por el prospec
 - Evita solicitar reiteradamente información ya proporcionada.
 - Evita distracciones que obliguen al prospecto a repetir información previamente indicada.
 
-<<<END>>>
+MARCACIÓN (escucha_activa_marcacion):
+- 'SI' si sigue el hilo, retoma datos ya dichos y no obliga a repetir.
+- 'NO' si pide repetir información ya brindada, demuestra no haber escuchado, o se distrae de forma evidente en el audio.
+- Hablar con un acompañante/familiar presente en el counter NO es por sí solo 'NO', si el asesor sigue atendiendo la consulta.
+
+<<<END>>> 
 
 ##################################################
 ITEM: INFORMACION_COMPLEMENTARIA
 ##################################################
 
-<<<INFORMACION_COMPLEMENTARIA>>>
+<<<INFORMACION_COMPLEMENTARIA>>> 
 
 Validar que el asesor brinde, cuando corresponda según el contexto de la atención, información complementaria relevante para el prospecto.
 
@@ -282,11 +359,18 @@ Considerar información relacionada con:
 - Plazo de pago de matrícula.
 - Beneficios UTP, tales como calidad educativa, empleabilidad, infraestructura, buses, eventos temporales, clases grabadas, talleres culturales u otros beneficios institucionales.
 
+REGLAS DURAS DE MARCACIÓN (info_seguro_estudiantil / plazo_entrega_documentos / plazo_pago_matricula / otros_beneficios):
+- 'NA' SOLO si la atención NO ameritaba ese ítem (sin oportunidad razonable: no se habló de inversión/inscripción, o gestión fuera de venta nueva — alumno, Beca 18, maestría, solo derivación).
+- Si hubo oportunidad de hablar de la INVERSIÓN (costos, inscripción, matrícula, pensión): el seguro NO puede ir en 'NA'. Debe ser 'SI' (mencionó costo y/o exoneración SIS/EsSalud/EPS) o 'NO' (omitió el seguro).
+- Si el contexto ameritaba plazos de documentos o de matrícula y el asesor no los brindó: 'NO' (nunca 'NA' con texto 'no se brinda').
+- Si el contexto ameritaba otros beneficios y no los brindó: 'NO'.
+- 'SI' en seguro si indica el costo y/o que se exonera con SIS/EsSalud/EPS/particular.
+
 No penalizar si la conversación no requiere brindar esta información o si el contexto de la atención no genera una oportunidad razonable para hacerlo.
 
-<<<END>>>
+<<<END>>> 
 
-<<<INFORMACION_COMPLEMENTARIA_CLASIFICACION>>>
+<<<INFORMACION_COMPLEMENTARIA_CLASIFICACION>>> 
 
 Identificar todas las clasificaciones de incumplimiento detectadas en el atributo INFORMACION_COMPLEMENTARIA.
 
@@ -294,43 +378,45 @@ Registrar únicamente las clasificaciones que correspondan a información que de
 
 Clasificaciones disponibles:
 
-- NO_BRINDA_INFORMACION_CORRECTA_DE_BENEFICIOS_UTP
-  (Calidad educativa, empleabilidad, infraestructura)
-
+- NO_BRINDA_INFORMACION_CORRECTA_DE_BENEFICIOS_UTP  (Calidad educativa, empleabilidad, infraestructura)
 - NO_BRINDA_INFORMACION_SOBRE_SEGURO_ESTUDIANTIL
-
 - NO_BRINDA_INFORMACION_SOBRE_PLAZO_DE_ENTREGA_DE_DOCUMENTOS
-
 - NO_BRINDA_INFORMACION_SOBRE_PLAZO_DE_PAGO_DE_MATRICULA
-
-- NO_BRINDA_INFORMACION_SOBRE_OTROS_BENEFICIOS_UTP
-  (Buses, eventos temporales, clases grabadas, talleres culturales u otros beneficios institucionales)
+- NO_BRINDA_INFORMACION_SOBRE_OTROS_BENEFICIOS_UTP  (Buses, eventos temporales, clases grabadas, talleres culturales u otros beneficios institucionales)
 
 Si la conversación no requería brindar determinada información o no existió una oportunidad razonable para hacerlo, no registrar la clasificación correspondiente.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ITEM: SONDEO
 ##################################################
 
-<<<MOTIVACION>>>
+<<<MOTIVACION>>> 
 
-No aplica si:
+No aplica ('NA') SOLO si:
 
 - La atención fue interrumpida abruptamente por el prospecto.
 - La consulta es realizada por una persona distinta al prospecto o a un familiar directo.
+- Gestión sin oportunidad de inscripción nueva (regla 5c): alumno/cambio de carrera, Beca 18 fuera de admisión, maestría derivada, solo trámite administrativo.
 
 Validar que el asesor:
 
 - Identifique la motivación del prospecto para estudiar.
 - Brinde acompañamiento una vez conocida la motivación.
 
+MARCACIÓN (sondeo_motivacion_marcacion):
+- 'SI' si el asesor sondea/identifica la motivación (metas, por qué estudiar, qué lo motiva) CON evidencia en el audio.
+- 'NO' si debió sondear y NO hay evidencia de sondeo. Si la descripción dice 'no se realiza la pregunta' / 'no explora la motivación' → marcación OBLIGATORIA 'NO' (nunca 'NA').
+- 'NA' SOLO en las excepciones de 'No aplica' arriba, o si el asesor preguntó y el prospecto no respondió / la atención se cortó.
+- PROHIBIDO usar 'NA' como sustituto de 'NO' cuando simplemente no hubo sondeo.
+- PROHIBIDO 'SI' sin pregunta o identificación explícita de motivación en la transcripción.
+
 Si el asesor realiza la consulta, pero el prospecto no responde, la conversación se desvía o la atención finaliza, calificar como 'NA'.
 
-<<<END>>>
+<<<END>>> 
 
-<<<IDENTIFICA_CAMPUS>>>
+<<<IDENTIFICA_CAMPUS>>> 
 
 No aplica cuando el interés del prospecto corresponde exclusivamente a modalidad virtual.
 
@@ -338,80 +424,73 @@ Validar que el asesor identifique o confirme el campus de preferencia del prospe
 
 Como referencia, puede identificar la ubicación del prospecto para orientar la sede o campus más conveniente.
 
-<<<END>>>
+<<<END>>> 
 
-<<<SONDEO_POR_INTERES>>>
+<<<SONDEO_POR_INTERES>>> 
 
 Validar que el asesor adapte el sondeo al perfil e interés del prospecto.
 
-Para ello debe:
+Para ello debe (según contexto; no exige checklist completo):
 
-- Identificar la edad del prospecto para determinar el rango etario.
+- Identificar la edad del prospecto para determinar el rango etario cuando aplique.
 - Explorar información relacionada con la carrera de interés.
 - Explorar información relacionada con la modalidad de estudio.
 - Consultar si actualmente trabaja cuando corresponda según el rango etario.
+
+MARCACIÓN (sondea_interes_postulante_marcacion):
+- 'SI' si hay evidencia de sondeo de interés. CUMPLE con CUALQUIERA de estas evidencias (parafraseo válido):
+  - 'cómo le puedo ayudar' / 'cuál es la consulta' / motivo de la visita.
+  - Confirmar carrera de interés o '¿estás seguro de la carrera o tienes otra opción?'.
+  - Explorar modalidad, horario, campus o turno (ej. '¿le gustaría estudiar fines de semana?', sábado/domingo, 80/20, nocturno, diurno).
+  - Explorar situación (colegio, certificado, DNI, ingreso directo) alineada a la consulta.
+- PROHIBIDO 'NO' con texto 'no sondea el interés' si el asesor confirmó la carrera y/o preguntó modalidad/horario/turno (ej. fines de semana, un día a la semana, nocturno).
+- 'NO' solo si debió sondear y NO hay ninguna evidencia de las anteriores.
+- 'NA' SOLO por excepciones de la pauta (interrupción del prospecto, no elegible, gestión solo derivación sin perfil a sondear, etc.).
+- PROHIBIDO: marcar 'NA' con textos como 'No aplica para este tipo de evaluación' o 'No se evidencia sondeo' cuando el atributo sí aplica a Counter.
 
 RANGOS_ETARIOS
 
 - <= 18 años
 - 19 a 23 años
-- > = 24 años
+- >= 24 años
 
 RANGO <= 18
-
 SONDEO_CARRERA
-
 - Carrera de interés.
 - Cursos o áreas de mayor interés.
 - Proyección profesional.
 - Relación con Intercorp o Fuerzas Armadas.
 - Motivación para estudiar la carrera.
-
 SONDEO_MODALIDAD
-
 - Edad.
 - Rendimiento académico.
 - Informar que la modalidad presencial permite hasta un 20% de clases virtuales.
-
 RANGO 19 A 23
-
 SONDEO_CARRERA
-
 - Estudios previos o en curso.
 - Situación laboral.
 - Relación con Intercorp o Fuerzas Armadas.
 - Motivación para estudiar la carrera.
 
 SONDEO_MODALIDAD
-
 - Edad.
 - Horario laboral.
 
 RANGO >= 24
-
 SONDEO_CARRERA
-
 - Estudios previos o en curso.
 - Posibilidad de convalidación.
 - Situación laboral.
 - Relación con Fuerzas Armadas.
 - Motivación para estudiar la carrera.
 
-SONDEO_MODALIDAD
-
-- Edad.
-- Horario laboral.
-
 PADRE_DE_FAMILIA
-
 SONDEO_CARRERA
-
 - Carrera de interés del hijo o hija.
 - Áreas o cursos en los que destacaba.
 - Relación con Intercorp o Fuerzas Armadas.
 
 SONDEO_MODALIDAD
-
 - Edad del hijo o hija.
 - Rendimiento académico.
 - Informar turnos disponibles del campus más cercano.
@@ -419,9 +498,9 @@ SONDEO_MODALIDAD
 
 Las preguntas son referenciales y pueden ser parafraseadas.
 
-<<<END>>>
+<<<END>>> 
 
-<<<SONDEO_CLASIFICACION>>>
+<<<SONDEO_CLASIFICACION>>> 
 
 Identificar todas las clasificaciones de incumplimiento detectadas en el atributo SONDEO.
 
@@ -436,13 +515,13 @@ Clasificaciones disponibles:
 
 La clasificación NO_PREGUNTA_SI_LABORA_ACTUALMENTE aplica únicamente para los rangos etarios de 19 a 23 años y >= 24 años.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ITEM: ARGUMENTARIO_DE_VENTA
 ##################################################
 
-<<<ARGUMENTARIO_DE_VENTA>>>
+<<<ARGUMENTARIO_DE_VENTA>>> 
 
 No aplica si:
 
@@ -463,49 +542,49 @@ El argumentario debe:
 - Explicar el proceso de convalidación únicamente cuando corresponda.
 - Incluir el argumento de empleabilidad.
 
+INFO FUERA DEL PROCESO COMERCIAL (OBLIGATORIO):
+- Si el asesor brinda información que NO compete al área comercial / proceso de admisión Counter
+  (ejemplo: costo de titulación, trámites académicos internos ajenos a la venta, datos inventados
+  o no oficiales del proceso comercial), debe marcarse como incumplimiento.
+- Usar informacion_falsa_marcacion = 'NO' cuando haya intención engañosa, O marcar 'NO' en el
+  subatributo info_correcta_* / brinda_informacion_correcta correspondiente y mencionarlo en resumen_evaluacion.
+- No ignorar estos hallazgos: SÍ son error de evaluación.
+
 Argumento de empleabilidad de referencia:
 
 - La UTP se encuentra entre las universidades cuyos egresados son preferidos por las empresas.
 
-<<<END>>>
+<<<END>>> 
 
-<<<VALIDACION_INFORMACION_ARGUMENTARIO>>>
+<<<VALIDACION_INFORMACION_ARGUMENTARIO>>> 
 
 Utilizando la información oficial de la carrera de interés del prospecto, validar que la información brindada por el asesor sea correcta, completa y consistente.
 
 Validar cuando corresponda:
 
 BENEFICIOS_UTP
-
 - Calidad educativa.
 - Empleabilidad.
 - Infraestructura.
 
 BECAS
-
-DESCUENTOS
-
-CONVENIOS
-
-PROCESO_DE_CONVALIDACION
-
+- DESCUENTOS
+- CONVENIOS
+- PROCESO_DE_CONVALIDACION
 - Validar únicamente cuando el prospecto solicite información sobre convalidación o cuando corresponda según su perfil.
 
 CARRERA_CAMPUS_MODALIDAD_Y_TURNOS
-
 INVERSION
-
 - Considerar valores sin descuentos.
 
 ARGUMENTO_DE_EMPLEABILIDAD
-
 Considerar como válida la información que el asesor brinde verbalmente o mediante referencias al brochure físico utilizado durante la atención.
 
 No penalizar cuando el prospecto no genere una oportunidad razonable para brindar determinada información o cuando el tipo de atención no lo requiera.
 
-<<<END>>>
+<<<END>>> 
 
-<<<ARGUMENTARIO_DE_VENTA_CLASIFICACION>>>
+<<<ARGUMENTARIO_DE_VENTA_CLASIFICACION>>> 
 
 Identificar todas las clasificaciones de incumplimiento detectadas en el atributo ARGUMENTARIO_DE_VENTA.
 
@@ -524,13 +603,13 @@ Clasificaciones disponibles:
 
 Si ninguna clasificación aplica, registrar 'null'.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ITEM: REBATE
 ##################################################
 
-<<<REBATE>>>
+<<<REBATE>>> 
 
 No aplica si:
 
@@ -538,53 +617,47 @@ No aplica si:
 - El prospecto se molesta y finaliza la atención.
 - El prospecto no brinda oportunidad razonable para desarrollar el rebate.
 
+REGLA OBLIGATORIA — TODAS LAS OBJECIONES:
+- Identifica TODAS las objeciones relevantes del prospecto (hasta 3 en objecion_cliente_1..3_texto).
+- NO te quedes solo con la primera objeción: la objeción principal puede no ser la primera.
+- rebate_marcacion = 'SI' SOLO si CADA objeción identificada tiene un rebate correspondiente
+  (rebate_asesor_1..3_texto). Si alguna objeción queda sin rebate → rebate_marcacion = 'NO'.
+- Si no hubo objeciones reales (solo consultas informativas) → rebate_marcacion = 'NA'.
+
 Validar que el asesor:
 
-- Identifique la objeción presentada por el prospecto.
-- Aborde la objeción de manera adecuada.
+- Identifique cada objeción presentada por el prospecto.
+- Aborde cada objeción de manera adecuada.
 - Ofrezca alternativas o soluciones cuando corresponda.
 - Adapte su respuesta a la situación específica del prospecto.
 
 No toda consulta requiere un rebate formal. Si el prospecto únicamente realiza consultas o solicita información adicional, ser flexible en la evaluación.
 
 OBJECION: VOY_A_EVALUARLO
-
 - Explora las dudas o motivos que generan la postergación de la decisión.
-
 OBJECION: OTRAS_INSTITUCIONES
-
 - Identifica qué instituciones está evaluando el prospecto.
 - Comprende los criterios de comparación.
-
 OBJECION: UNIVERSIDAD_NACIONAL
-
 - Destaca la alta competencia de ingreso.
 - Resalta la posibilidad de iniciar estudios sin postergaciones.
-
 OBJECION: CONVERSARE_CON_MIS_PADRES
-
 - Identifica las inquietudes existentes.
 - Intenta involucrar a los padres en la decisión.
 - Solicita contacto o coordina seguimiento cuando corresponda.
-
 OBJECION: ES_CARO
-
-- Reforza el valor de la inversión.
+- Reforzar el valor de la inversión.
 - Destaca empleabilidad, beneficios y alternativas disponibles.
-
 OBJECION: PROXIMO_PROCESO
-
 - Explica las ventajas de iniciar oportunamente.
 - Resalta el impacto de postergar la decisión.
-
 OBJECION: HORARIOS_COMPLEJOS
-
 - Explica las modalidades disponibles.
 - Informa la disponibilidad de clases grabadas u opciones de flexibilidad.
 
-<<<END>>>
+<<<END>>> 
 
-<<<REBATE_EFECTIVO>>>
+<<<REBATE_EFECTIVO>>> 
 
 No aplica si:
 
@@ -592,63 +665,97 @@ No aplica si:
 - El prospecto se molesta y finaliza la atención.
 - El prospecto no brinda oportunidad razonable para desarrollar el rebate.
 
-Validar que la respuesta brindada por el asesor responda directamente a la objeción presentada.
+NO basta con que el asesor 'rebata' algo: debes medir si el rebate fue ACORDE a la objeción.
+
+Validar pareja por pareja (objeción N ↔ rebate N):
 
 Se considera efectivo cuando:
 
-- El rebate aborda la misma temática de la objeción.
+- El rebate aborda la misma temática de ESA objeción.
 - La respuesta es coherente con la situación planteada.
 - Presenta argumentos, alternativas o soluciones alineadas a la necesidad del prospecto.
 
-Se considera no efectivo cuando:
+Se considera no efectivo (rebate_efectivo_marcacion = 'NO') cuando:
 
-- No responde a la objeción planteada.
-- Utiliza argumentos genéricos que no guardan relación con la objeción.
+- No responde a la objeción planteada (aunque sí haya 'hablado' o insistido).
+- Utiliza argumentos genéricos que no guarden relación con la objeción.
 - Se limita únicamente a generar sentido de urgencia.
 - No presenta alternativas o soluciones cuando corresponda.
+- Rebatió solo la primera objeción y dejó otras sin respuesta alineada.
 
-<<<END>>>
+rebate_efectivo_marcacion = 'SI' solo si TODOS los rebates requeridos son efectivos respecto a su objeción.
+
+<<<END>>> 
 
 ##################################################
 ITEM: CIERRE
 ##################################################
 
-<<<CIERRE>>>
+<<<CIERRE>>> 
 
 Se califica como 'NA' en los siguientes casos:
 
-- El prospecto es alumno y busca reingreso.
+- El prospecto es alumno y busca reingreso / cambio de carrera / trámite académico (no inscripción nueva).
 - El prospecto ya se encuentra inscrito.
+- La consulta es Beca 18, maestría u otro canal al que solo se deriva (sin oportunidad de inscripción Counter).
 - El prospecto interrumpe o finaliza la atención sin brindar oportunidad para realizar el pre-cierre, siempre que el asesor haya intentado rebatir.
 
-Se penaliza si:
+Se penaliza (cierre_comercial_marcacion = 'NO') si:
 
-- El asesor acepta reprogramar sin intentar realizar un cierre.
+- El asesor acepta reprogramar sin intentar realizar un cierre de inscripción.
 - El asesor interrumpe o finaliza la atención.
+- El 'cierre' es inválido (ver lista abajo).
+- La descripción dice que no hubo cierre y aun así se usa 'NA' o 'SI' (debe ser 'NO' si la venta aplicaba).
 
-Validar los siguientes componentes:
+NO son cierre comercial válido (marcar 'NO', no 'SI'):
+- Preguntas abiertas sin pedir concretar inscripción/pago.
+- Agendar una siguiente comunicación / 'te escribo luego' / 'hablamos después'.
+- Quedarse a la espera de la confirmación del postulante sin intentar cerrar.
+- Reprogramar o dejar seguimiento sin intento explícito de inscripción.
+- Solo orientar carreras/modalidad/empleabilidad sin pedir inscripción, matrícula, pago o vacante.
 
-PRE_CIERRE
+SÍ es cierre válido: intención explícita de concretar inscripción o pago (ej. medio de pago,
+inscribirse ahora, reservar vacante, confirmar monto a pagar hoy, beneficio que vence y pedir decisión/contacto para gestionar inscripción).
 
-- Consulta al prospecto qué medio de pago utilizará para realizar la inscripción.
+Evidencias que CUMPLEN cierre comercial ('SI') — PROHIBIDO marcar 'NO' si aparecen:
+- Pedir confirmar la inscripción ahora / 'sí me voy a inscribir'.
+- Mencionar que el beneficio/descuento vence pronto (ej. 'en 30 minutos') y que debe confirmar ahora.
+- Solicitar número de mamá/papá/contacto para llamar y cerrar la decisión o gestionar el pago/inscripción.
+- Ayudar con el proceso de pago e inscripción en el mismo acto.
 
-CIERRE_COMERCIAL
+Validar los siguientes componentes (campos separados en el JSON):
 
-- Realiza intentos de cierre luego de abordar las objeciones identificadas.
+PRE_CIERRE (pre_cierre_marcacion)
+- NO se limita a preguntar el medio de pago.
+- CUMPLE ('SI') con CUALQUIERA de estas evidencias (parafraseo válido):
+  - Consulta qué medio de pago usará (efectivo, tarjeta, Yape, transferencia, agente BCP, etc.).
+  - Pregunta si pagará / se inscribirá ahora o si cuenta con el monto / efectivo ('¿el pago lo van a hacer ahora?', '¿solo cuenta con efectivo?').
+  - Explica cómo pagar matrícula/inscripción pendiente y pide voucher (agente, Yape, banca móvil).
+  - Solicita datos o contacto para activar vacante / completar inscripción.
+  - Confirma pasos inmediatos previos al pago (ficha, DNI, acompañante que paga).
+- PROHIBIDO 'NO' por 'no se realiza pre-cierre' si preguntó si pagan ahora, si tienen efectivo o explicó el canal de pago de matrícula/inscripción.
+- 'NO' si la inscripción nueva / pago pendiente aplicaba y no hay ninguna de esas acciones. Si el comentario dice 'no se realiza pre-cierre' sin evidencia en contra → 'NO' (nunca 'NA').
+- 'NA' solo si aplica la lista de NA de <<<CIERRE>>> (sin oportunidad de inscripción/pago).
+
+CIERRE_COMERCIAL (cierre_comercial_marcacion)
+- Realiza intentos de cierre LUEGO de abordar las objeciones identificadas.
 - Existe intención explícita de concretar la inscripción.
 - Es deseable realizar cierres posteriores a los rebates efectuados.
 - Como referencia, se esperan 2 rebates y 2 intentos de cierre cuando la atención lo permita.
+- 'SI' solo con evidencia en audio de pedir inscripción/pago/vacante.
+
+RESUMEN_DE_VENTA (resumen_venta_marcacion)
+- Validar según <<<RESUMEN_DE_VENTA>>> cuando haya venta o promesa de pago.
 
 RESUMEN_DE_VENTA
-
 - Aplica únicamente cuando la venta o inscripción se concreta.
-- Si el prospecto no decide inscribirse pese a los esfuerzos realizados por el asesor, este componente no se evalúa.
+- Si el prospecto no decide inscribirse pese a los esfuerzos realizados por el asesor, este componente no se evalúa ('NA').
 - Validar según las reglas definidas en <<<RESUMEN_DE_VENTA>>>.
 - Si se detectó una venta durante la atención, el resumen de venta debe utilizarse como cierre.
 
-<<<END>>>
+<<<END>>> 
 
-<<<RESUMEN_DE_VENTA>>>
+<<<RESUMEN_DE_VENTA>>> 
 
 Aplica únicamente cuando exista una venta o inscripción concretada.
 
@@ -657,7 +764,6 @@ Validar que el asesor realice una lectura o confirmación verbal de la inscripci
 Confirmar cuando corresponda:
 
 DATOS_ACADEMICOS
-
 - Carrera.
 - Subgrado y turno.
 - Campus (presencial o semipresencial).
@@ -666,7 +772,6 @@ DATOS_ACADEMICOS
 - Tipo de ingreso.
 
 DATOS_DE_CONVALIDACION
-
 - Universidad o instituto de procedencia.
 - Carrera de procedencia.
 - Año de egreso.
@@ -674,7 +779,6 @@ DATOS_DE_CONVALIDACION
 Validar únicamente cuando corresponda.
 
 DATOS_PERSONALES
-
 - Nombres y apellidos.
 - Tipo de documento.
 - Número de documento.
@@ -682,9 +786,14 @@ DATOS_PERSONALES
 
 No es necesario que el asesor siga literalmente un contrato verbal o speech específico. Lo importante es que valide de manera estructurada la información relevante de la inscripción antes de finalizar la atención.
 
-<<<END>>>
+MARCACIÓN (resumen_venta_marcacion):
+- 'SI' solo si confirma de forma estructurada los datos aplicables (académicos + personales mínimos: nombre y documento, más carrera/modalidad/campus o turno según el caso).
+- 'NO' si hay venta/inscripción pero el resumen es incompleto, genérico o no se identifican en el audio las validaciones anteriores. PROHIBIDO 'SI' cuando la transcripción no evidencia el resumen.
+- 'NA' si no hubo venta concretada.
 
-<<<CIERRE_CLASIFICACION>>>
+<<<END>>> 
+
+<<<CIERRE_CLASIFICACION>>> 
 
 Identificar todas las clasificaciones de incumplimiento detectadas en el atributo CIERRE.
 
@@ -698,18 +807,19 @@ Clasificaciones disponibles:
 
 Si ninguna clasificación aplica, registrar 'null'.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ITEM: SENTIDO_DE_URGENCIA
 ##################################################
 
-<<<SENTIDO_DE_URGENCIA>>>
+<<<SENTIDO_DE_URGENCIA>>> 
 
-No aplica si:
+No aplica ('NA') si:
 
 - El prospecto ya se encuentra inscrito.
 - El prospecto cursa cuarto de secundaria o un grado inferior.
+- Gestión sin oportunidad de inscripción nueva (regla 5c): alumno/cambio de carrera, Beca 18, maestría derivada, solo orientación sin oferta a cerrar.
 
 Validar que el asesor aplique sentido de urgencia durante la atención.
 
@@ -723,13 +833,18 @@ El sentido de urgencia debe estar orientado a resaltar uno o más de los siguien
 
 No es necesario utilizar frases específicas. Se permite el parafraseo siempre que el mensaje principal de urgencia se mantenga.
 
-<<<END>>>
+MARCACIÓN:
+- 'SI' solo con evidencia en audio (descuentos, fechas límite, cupos, 'hoy', beneficio que vence).
+- 'NO' si la inscripción nueva aplicaba y no hay urgencia.
+- PROHIBIDO 'SI' si la transcripción no menciona descuentos, vencimientos, cupos ni decisión inmediata.
+
+<<<END>>> 
 
 ##################################################
 CLASIFICACIONES Y ANALISIS FINALES
 ##################################################
 
-<<<MOTIVACION_DEL_PROSPECTO>>>
+<<<MOTIVACION_DEL_PROSPECTO>>> 
 
 Analizar la atención y clasificar la principal motivación del prospecto.
 
@@ -737,24 +852,20 @@ Opciones:
 
 - TRABAJO
   Mejora de remuneración, empleabilidad o acceso a nuevas oportunidades laborales.
-
 - PRESTIGIO
   Desarrollo profesional y reconocimiento en el ámbito laboral.
-
 - ESTATUS
   Crecimiento profesional, reconocimiento personal y mejora de calidad de vida.
-
 - AUTORREALIZACION_DESARROLLO_PERSONAL
   Cumplimiento de metas personales y desarrollo profesional.
-
 - CONTRIBUCION_A_LA_SOCIEDAD
   Interés por generar impacto positivo o contribuir a la sociedad.
 
 Seleccionar únicamente una motivación.
 
-<<<END>>>
+<<<END>>> 
 
-<<<TIPIFICACION>>>
+<<<TIPIFICACION>>> 
 
 Clasificar el resultado final de la atención.
 
@@ -762,18 +873,16 @@ Opciones:
 
 - RA
   El prospecto continúa evaluando alternativas o aún no toma una decisión.
-
 - DS
   El prospecto no se inscribirá, ya se encuentra inscrito en otra institución, está fuera del país, no desea continuar o ya completó su inscripción.
-
 - SI
   El prospecto decidió inscribirse o realizó un compromiso de inscripción o pago.
 
 Seleccionar únicamente una tipificación.
 
-<<<END>>>
+<<<END>>> 
 
-<<<ATRIBUTO_PRINCIPAL>>>
+<<<ATRIBUTO_PRINCIPAL>>> 
 
 Clasificar el principal atributo de valor utilizado por el asesor durante la atención.
 
@@ -787,32 +896,36 @@ Opciones:
 
 Seleccionar únicamente un atributo.
 
-<<<END>>>
+<<<END>>> 
 
-<<<SEGUNDO_NUMERO_DE_CONTACTO>>>
+<<<SEGUNDO_NUMERO_DE_CONTACTO>>> 
 
 Aplica únicamente cuando la tipificación sea:
-
 - RA
 - SI
 
 Validar si el asesor solicitó o registró un segundo número de contacto.
 
 Si no aplica o no se obtuvo, registrar:
-
 NA
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ITEM: INFORMACION_FALSA
 ##################################################
 
-<<<INFORMACION_FALSA>>>
+<<<INFORMACION_FALSA>>> 
 
 Detectar si existe intención maliciosa del asesor al brindar información o realizar promesas con el objetivo de concretar una inscripción.
 
 Este atributo evalúa la INTENCIÓN del asesor y no los errores involuntarios.
+
+Además, si el asesor brinda información que NO compete al proceso comercial Counter
+(ej. costo de titulación u otros datos ajenos al área), márcalo como hallazgo negativo
+en informacion_falsa_marcacion = 'NO' cuando sea engañoso/deliberado, o en el subatributo
+info_correcta_* / brinda_informacion_correcta = 'NO' y explícalo en resumen_evaluacion.
+Nunca ignores información fuera de proceso.
 
 Considerar:
 
@@ -820,16 +933,15 @@ Considerar:
 - Una información incorrecta por sí sola NO implica información falsa.
 - Debe existir evidencia de que el asesor intentó influir en la decisión del prospecto mediante información falsa, engañosa o deliberadamente inexacta.
 - Debe existir evidencia de promesas realizadas con conocimiento de que no podrán cumplirse.
-- Si existe duda razonable sobre la intención del asesor, no penalizar.
 
 Criterios de evaluación:
 
-- '1': No se detecta intención maliciosa.
-- '0': Se detecta intención maliciosa.
+- 'SI': No se detecta intención maliciosa ni info fuera de proceso engañosa.
+- 'NO': Se detecta intención maliciosa o info fuera de proceso usada para influir.
 
-<<<END>>>
+<<<END>>> 
 
-<<<INFORMACION_FALSA_CLASIFICACION>>>
+<<<INFORMACION_FALSA_CLASIFICACION>>> 
 
 Identificar todas las clasificaciones de incumplimiento detectadas.
 
@@ -841,16 +953,15 @@ Clasificaciones disponibles:
 Registrar únicamente las clasificaciones sustentadas por evidencia clara de intención maliciosa.
 
 Si no aplica ninguna clasificación, registrar:
+NA
 
-null
-
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ITEM: ACTITUD_COMERCIAL
 ##################################################
 
-<<<ACTITUD_COMERCIAL>>>
+<<<ACTITUD_COMERCIAL>>> 
 
 Evaluar el desempeño general del asesor durante toda la atención.
 
@@ -863,9 +974,9 @@ Considerar:
 - EMPATIA: Comprende y responde adecuadamente a las necesidades o preocupaciones del prospecto.
 - TECNICISMO: Evita términos técnicos innecesarios o difíciles de comprender.
 
-<<<END>>>
+<<<END>>> 
 
-<<<ACTITUD_COMERCIAL_CLASIFICACION>>>
+<<<ACTITUD_COMERCIAL_CLASIFICACION>>> 
 
 Identificar todas las clasificaciones de incumplimiento detectadas.
 
@@ -880,24 +991,22 @@ Clasificaciones disponibles:
 
 Si no aplica ninguna clasificación, registrar 'null'.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 MOTIVO DE NO VENTA
 ##################################################
 
-<<<MOTIVO_NO_VENTA>>>
+<<<MOTIVO_NO_VENTA>>> 
 
 Determinar el origen principal por el cual no se concretó la venta.
 
 Seleccionar EXACTAMENTE UNA opción:
-
 - AGENTE
 - CLIENTE
 - PROCESO
 
 Si se concretó una venta o inscripción, asignar:
-
 NA
 
 REGLA CRÍTICA
@@ -905,7 +1014,6 @@ REGLA CRÍTICA
 Antes de asignar el motivo de no venta al CLIENTE, evaluar obligatoriamente el desempeño del AGENTE.
 
 Si existe incumplimiento en cualquiera de los siguientes atributos obligatorios, el motivo de no venta deberá asignarse a AGENTE:
-
 - SALUDO
 - MOTIVACION
 - SONDEO
@@ -919,32 +1027,26 @@ Si existe incumplimiento en cualquiera de los siguientes atributos obligatorios,
 Solo podrá asignarse CLIENTE cuando el asesor haya cumplido satisfactoriamente los atributos anteriores.
 
 CAUSAS ATRIBUIBLES AL AGENTE
-
-HABILIDADES_COMERCIALES
-
-- No aplica motivación.
-- No realiza sondeo.
-- No desarrolla adecuadamente el argumentario.
-- Brinda información incorrecta o incompleta.
-- No realiza rebate o el rebate no es efectivo.
-- No realiza cierre.
-- No aplica sentido de urgencia.
-
-HABILIDADES_BLANDAS
-
-- Falta de empatía.
-- Falta de escucha activa.
-- Mala actitud frente al prospecto.
-- Falta de concentración durante la atención.
+- HABILIDADES_COMERCIALES
+  - No aplica motivación.
+  - No realiza sondeo.
+  - No desarrolla adecuadamente el argumentario.
+  - Brinda información incorrecta o incompleta.
+  - No realiza rebate o el rebate no es efectivo.
+  - No realiza cierre.
+  - No aplica sentido de urgencia.
+- HABILIDADES_BLANDAS
+  - Falta de empatía.
+  - Falta de escucha activa.
+  - Mala actitud frente al prospecto.
+  - Falta de concentración durante la atención.
 
 OTROS
-
 - Tipificación incorrecta.
 - No cumple el proceso.
 - Interrumpe o finaliza la atención sin completar la gestión.
 
 CAUSAS ATRIBUIBLES AL CLIENTE
-
 Aplica únicamente cuando el asesor cumplió satisfactoriamente los atributos obligatorios.
 
 Ejemplos:
@@ -967,7 +1069,6 @@ Ejemplos:
 - Evalúa otras instituciones.
 
 CAUSAS ATRIBUIBLES AL PROCESO
-
 - Pertenece a UTP.
 - Ya es alumno.
 - Recién inscrito.
@@ -982,9 +1083,9 @@ CAUSAS ATRIBUIBLES AL PROCESO
 
 Determinar el motivo principal de mayor peso dentro de la atención.
 
-<<<END>>>
+<<<END>>> 
 
-<<<SUBMOTIVO_NO_VENTA>>>
+<<<SUBMOTIVO_NO_VENTA>>> 
 
 Determinar el submotivo de no venta de mayor peso.
 
@@ -993,13 +1094,28 @@ La clasificación depende obligatoriamente del valor asignado en <<<MOTIVO_NO_VE
 Seleccionar EXACTAMENTE UNA opción.
 
 SI MOTIVO_NO_VENTA = AGENTE
-
 - HABILIDADES_COMERCIALES
-- HABILIDADES_BLANDAS
-- OTROS
+  - MOTIVACION
+  - SONDEO
+  - ARGUMENTARIO
+  - INFORMACION_INCORRECTA
+  - REBATE
+  - REBATE_EFECTIVO
+  - CIERRE
+  - SENTIDO_DE_URGENCIA
 
-SI MOTIVO_NO_VENTA = PROCESO
+SI MOTIVO_NO_VENTA = HABILIDADES_BLANDAS
+- ACTITUD_FRENTE_AL_PROSPECTO
+- CONCENTRACION
+- EMPATIA
+- ESCUCHA_ACTIVA
 
+SI MOTIVO_NO_VENTA = OTROS
+- INTERRUPCION_DE_ATENCION
+- NO_CUMPLE_PROCESO
+- TIPIFICACION
+
+PROCESO
 - BECA_18
 - CARRERA_NO_DISPONIBLE
 - CONVALIDACION
@@ -1011,7 +1127,6 @@ SI MOTIVO_NO_VENTA = PROCESO
 - OTROS
 
 SI MOTIVO_NO_VENTA = CLIENTE
-
 - CONVERSARA_CON_SU_HIJO
 - CONVERSARA_CON_SUS_PADRES
 - FINALIZA_LA_ATENCION
@@ -1025,27 +1140,20 @@ SI MOTIVO_NO_VENTA = CLIENTE
 - INDECISO
 - OTROS
 
-Si MOTIVO_NO_VENTA = NA, asignar:
-
+SI MOTIVO_NO_VENTA = NA, asignar:
 NA
 
-<<<END>>>
+<<<END>>> 
 
-<<<DETALLE_SUBMOTIVO_NO_VENTA>>>
+<<<SUBMOTIVO_NO_VENTA>>> 
 
-Determinar el detalle específico del submotivo de no venta de mayor peso.
+Determinar el submotivo de no venta de mayor peso.
 
-La clasificación depende obligatoriamente de:
-
-- <<<MOTIVO_NO_VENTA>>>
-- <<<SUBMOTIVO_NO_VENTA>>>
+La clasificación depende obligatoriamente del valor asignado en <<<MOTIVO_NO_VENTA>>>.
 
 Seleccionar EXACTAMENTE UNA opción.
 
-AGENTE
-
-SI SUBMOTIVO_NO_VENTA = HABILIDADES_COMERCIALES
-
+SI MOTIVO_NO_VENTA = AGENTE
 - MOTIVACION
 - SONDEO
 - ARGUMENTARIO
@@ -1055,147 +1163,52 @@ SI SUBMOTIVO_NO_VENTA = HABILIDADES_COMERCIALES
 - CIERRE
 - SENTIDO_DE_URGENCIA
 
-SI SUBMOTIVO_NO_VENTA = HABILIDADES_BLANDAS
-
+SI MOTIVO_NO_VENTA = HABILIDADES_BLANDAS
 - ACTITUD_FRENTE_AL_PROSPECTO
 - CONCENTRACION
 - EMPATIA
 - ESCUCHA_ACTIVA
 
-SI SUBMOTIVO_NO_VENTA = OTROS
-
+SI MOTIVO_NO_VENTA = OTROS
 - INTERRUPCION_DE_ATENCION
 - NO_CUMPLE_PROCESO
 - TIPIFICACION
 
 PROCESO
-
-SI SUBMOTIVO_NO_VENTA = BECA_18
-
-- INFORMACION_DE_BECA18
-
-SI SUBMOTIVO_NO_VENTA = CARRERA_NO_DISPONIBLE
-
-- CARRERA_NO_DICTADA_EN_UTP
-- CARRERA_TECNICA
+- BECA_18
+- CARRERA_NO_DISPONIBLE
+- CONVALIDACION
+- ESCOLAR
+- HORARIO_NO_DISPONIBLE
+- MODALIDAD_NO_DISPONIBLE
+- PERTENECE_A_UTP
 - POSTGRADO
+- OTROS
 
-SI SUBMOTIVO_NO_VENTA = CONVALIDACION
-
-- AUN_NO_TRAMITA_DOCUMENTOS
-- NO_CUMPLE_REQUISITOS
-
-SI SUBMOTIVO_NO_VENTA = ESCOLAR
-
-- INFORMACION
-- NO_CUMPLE_REQUISITOS
-
-SI SUBMOTIVO_NO_VENTA = HORARIO_NO_DISPONIBLE
-
-- TRABAJO
-- ESTUDIO
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = MODALIDAD_NO_DISPONIBLE
-
-- CARRERA_NO_DISPONIBLE_EN_MODALIDAD_REQUERIDA
-
-SI SUBMOTIVO_NO_VENTA = PERTENECE_A_UTP
-
-- INFORMACION_NO_COMERCIAL
-- RECIEN_INSCRITO
-- YA_ES_ALUMNO
-
-SI SUBMOTIVO_NO_VENTA = POSTGRADO
-
-- CURSOS
-- DIPLOMADOS
-- MAESTRIA
-- ESPECIALIZACION
-- NO_ESPECIFICA
-
-CLIENTE
-
-SI SUBMOTIVO_NO_VENTA = CONVERSARA_CON_SU_HIJO
-
-- CONFIRMAR_CARRERA_DE_INTERES
-- NO_CONOCE_DNI_DE_SU_HIJO
-- INFORMAR_BENEFICIOS
-
-SI SUBMOTIVO_NO_VENTA = CONVERSARA_CON_SUS_PADRES
-
-- NO_SERA_RESPONSABLE_DEL_PAGO
-- INDECISO
-
-SI SUBMOTIVO_NO_VENTA = FINALIZA_LA_ATENCION
-
-- DESCONFIANZA
-- CLIENTE_OCUPADO
-- CLIENTE_NO_MUESTRA_INTERES
-- NO_HUBO_CONTINUIDAD
-
-SI SUBMOTIVO_NO_VENTA = ELIGIO_OTRA_INSTITUCION
-
-- MAS_ECONOMICA
-- MAYORES_BENEFICIOS
-- MEJOR_CONVALIDACION
-- MENOR_DISTANCIA
-- MENORES_REQUISITOS
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = EVALUA_CONVALIDACION
-
-- QUIERE_RESPUESTA_DE_CONVALIDACION
-- AUN_NO_TRAMITA_DOCUMENTOS
-- NO_CUMPLE_REQUISITOS
-
-SI SUBMOTIVO_NO_VENTA = EVALUA_HORARIOS
-
-- ESTUDIO
-- TRABAJO
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = MOTIVOS_ECONOMICOS
-
-- LE_PARECE_CARO
-- SIN_DINERO_PARA_INSCRIBIRSE
-- SIN_PRESUPUESTO_PARA_LA_CARRERA
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = CLIENTE_OCUPADO
-
-- ESTUDIO
-- TRABAJO
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = PROXIMO_PROCESO
-
-- MOTIVOS_DE_SALUD
+SI MOTIVO_NO_VENTA = CLIENTE
+- CONVERSARA_CON_SU_HIJO
+- CONVERSARA_CON_SUS_PADRES
+- FINALIZA_LA_ATENCION
+- ELIGIO_OTRA_INSTITUCION
+- EVALUA_CONVALIDACION
+- EVALUA_HORARIOS
 - MOTIVOS_ECONOMICOS
-- VIAJE
-- TRABAJO
-- ESTUDIOS
-- NO_ESPECIFICA
+- CLIENTE_OCUPADO
+- PROXIMO_PROCESO
+- NO_DESEA_CONTINUAR
+- INDECISO
+- OTROS
 
-SI SUBMOTIVO_NO_VENTA = NO_DESEA_CONTINUAR
-
-- NO_INTERESADO
-- PERDIO_INTERES
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = INDECISO
-
-- NO_DEFINIO_CARRERA
-- REQUIERE_MAS_TIEMPO
-- NO_ESPECIFICA
-
-Si SUBMOTIVO_NO_VENTA = NA, asignar:
-
+SI MOTIVO_NO_VENTA = NA, asignar:
 NA
 
-<<<END>>>
+<<<END>>> 
 
-<<<OBSERVACIONES>>>
+##################################################
+ITEM: OBSERVACIONES
+##################################################
+
+<<<OBSERVACIONES>>> 
 
 Registrar información complementaria relevante sobre la no venta que no haya quedado reflejada en:
 
@@ -1206,16 +1219,15 @@ Registrar información complementaria relevante sobre la no venta que no haya qu
 Incluir submotivos secundarios detectados, factores contribuyentes o hallazgos relevantes de la atención.
 
 Si no aplica, asignar:
-
 NA
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 CARRERA Y MODALIDAD DE INTERÉS
 ##################################################
 
-<<<CARRERA_INTERES_UTP>>>
+<<<CARRERA_INTERES_UTP>>> 
 
 Identificar la carrera de interés principal del prospecto o de la persona por la cual consulta.
 
@@ -1225,62 +1237,57 @@ Reglas:
 - Si se mencionan varias carreras, seleccionar la de mayor interés.
 - Si no se identifica una carrera válida, registrar 'NA'.
 
-<<<END>>>
+<<<END>>> 
 
-<<<CARRERA_DE_INTERES_NO_ENCONTRADA>>>
+<<<CARRERA_DE_INTERES_NO_ENCONTRADA>>> 
 
 Registrar la carrera de interés cuando no exista en la oferta académica UTP.
 
 Formato:
-
 - minúsculas
 - sin tildes
 - palabras unidas por guión bajo (_)
 - omitir conectores (de, del, la, las, el, los)
 
 Ejemplo:
-
 ingenieria_naval
 
-<<<END>>>
+<<<END>>> 
 
-<<<MODALIDAD_DESEADA>>>
+<<<MODALIDAD_DESEADA>>> 
 
 Registrar la modalidad deseada para la carrera no encontrada.
 
 Valores válidos:
-
 - presencial
 - semiPresencial
 - virtual
 
 Si no se identifica, registrar 'NA'.
 
-<<<END>>>
+<<<END>>> 
 
-<<<SEDE_DESEADA>>>
+<<<SEDE_DESEADA>>> 
 
 Registrar la sede deseada para la carrera no encontrada.
 
 Formato:
-
 - minúsculas
 - sin tildes
 - palabras unidas por guión bajo (_)
 
 Ejemplo:
-
 lima_norte
 
 Si no se identifica, registrar 'NA'.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 RESUMEN DE EVALUACION
 ##################################################
 
-<<<RESUMEN_EVALUACION>>>
+<<<RESUMEN_EVALUACION>>> 
 
 Redactar un resumen de la evaluación con los hallazgos más relevantes identificados durante la atención.
 
@@ -1290,13 +1297,11 @@ Reglas:
 - No utilizar expresiones como 'el asesor' o 'el agente'.
 - Describir directamente la situación observada.
 - Para cada hallazgo relevante indicar:
-
   - Qué ocurrió.
   - Por qué falló, cuando corresponda.
   - Oportunidad de mejora.
 
 Incluir:
-
 - Principales fortalezas identificadas.
 - Principales oportunidades de mejora.
 - Todos los rebates identificados en <<<REBATE>>>, indicando si fueron efectivos o no efectivos.
@@ -1308,13 +1313,13 @@ Ejemplos de estilo:
 - 'Se brinda información incompleta sobre la inversión. Como oportunidad de mejora, validar y comunicar todos los conceptos económicos correspondientes.'
 - 'No se sondea la motivación del prospecto al inicio de la atención. Como oportunidad de mejora, explorar objetivos e intereses antes de desarrollar el argumentario.'
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 ESTILO DEL ASESOR
 ##################################################
 
-<<<ESTILO_DEL_ASESOR>>>
+<<<ESTILO_DEL_ASESOR>>> 
 
 Clasificar el estilo predominante del asesor durante toda la atención.
 
@@ -1333,17 +1338,20 @@ Reglas:
 - Si ninguna encaja perfectamente, elegir la más cercana.
 - No agregar texto adicional.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 SECUENCIA DE LA ATENCION
 ##################################################
 
-<<<SECUENCIA_ATENCION>>>
+<<<SECUENCIA_ATENCION>>> 
 
-Registrar el segundo aproximado en que ocurre cada evento dentro del audio.
+Registrar el segundo en que ocurre cada evento, usando el [MM:SS] del bloque donde inicia.
+
+Conversión OBLIGATORIA: [MM:SS] → minutos*60 + segundos (entero). Ejemplos: [00:01] = 1; [00:15] = 15; [01:23] = 83; [10:05] = 605.
 
 Si el evento no ocurre, registrar 0.
+Si la transcripción no trae [MM:SS], estima solo si es evidente; si no, 0.
 
 "T_SALUDO": segundo en que ocurre el saludo,
 "T_SONDEO": segundo en que ocurre el sondeo principal,
@@ -1368,25 +1376,24 @@ Si el evento no ocurre, registrar 0.
 
 Reglas:
 
-- Respetar el orden cronológico del audio.
-- Registrar valores enteros aproximados.
+- Respetar el orden cronológico de los [MM:SS].
+- T_* debe coincidir con el timestamp del bloque (no inventes segundos).
 - Si el evento no ocurre, asignar 0.
 - MAYOR_REBATE considera todos los rebates detectados, independientemente de si fueron efectivos o no.
 
-<<<END>>>
+<<<END>>> 
 
 ##################################################
 CARRERAS DE INTERÉS
 ##################################################
 
-<<<CARRERAS_DE_INTERES>>>
+<<<CARRERAS_DE_INTERES>>> 
 
 Identificar las carreras de interés mencionadas por el prospecto.
 
 Usar únicamente valores de la lista oficial en formato snake_case. Si una carrera no existe en la lista oficial, omitirla.
 
 Lista de carreras válidas:
-
 administracion_empresa
 administracion_negocios_internacionales
 administracion_hotelera_turismo
@@ -1400,6 +1407,8 @@ comunicacion_publicidad
 contabilidad
 derecho
 diseño_digital_publicitario
+diseño_profesional_interiores
+diseño_profesional_grafico
 diseño_profesional_interiores
 diseño_profesional_grafico
 economia
@@ -1431,26 +1440,24 @@ obstetricia_bioquimica
 psicologia
 terapia_fisica
 
-<<<END>>>
+<<<END>>> 
 
-<<<FLAG_VARIAS_CARRERAS>>>
+<<<FLAG_VARIAS_CARRERAS>>> 
 
 Determinar el valor del indicador utilizando el resultado de <<<CARRERAS_DE_INTERES>>>.
 
-Asignar '1' cuando:
+Asignar 'SI' cuando:
 
 - <<<CARRERAS_DE_INTERES>>> contiene dos o más carreras.
 - <<<CARRERAS_DE_INTERES>>> contiene una sola carrera y no existe información específica para dicha carrera en los datos disponibles.
 
-Asignar '0' cuando:
+Asignar 'NO' cuando:
 
 - <<<CARRERAS_DE_INTERES>>> contiene una sola carrera y existe información específica para dicha carrera en los datos disponibles.
 
-<<<END>>>
-
+<<<END>>> 
 
 Puedes utilizar la siguiente informacion para evaluar lo relacionado a argumentario de venta:
-
 Informacion de las carreras de interes del cliente:
 
 En caso el postulante corte la llamada, abandone la interacción, impida al asesor continuar la gestión o no brinde oportunidad razonable para completar algún punto de evaluación, se considera que el asesor no incumplió dicho atributo y la marcación será "NA".
@@ -1466,11 +1473,9 @@ Todas las descripciones (*_descripcion) deben ser EXTREMADAMENTE CORTAS: máximo
 Sé directo y concreto. No escribas justificaciones largas ni explicaciones extensas.
 
 Ejemplo correcto:
-
-"Asesor se presentó correctamente mencionando su nombre y UTP. (1)"
+"Asesor se presentó correctamente mencionando su nombre y UTP. (SI)"
 
 Ejemplo incorrecto:
-
 Oraciones largas con detalles, explicaciones o justificaciones extensas.
 
 Mantén siempre el JSON completo.
@@ -1483,140 +1488,181 @@ IMPORTANTE PARA EL FORMATO DE RESPUESTA
 
 2. NO devuelvas texto adicional antes o después del JSON.
 
-3. NO uses bloques de código ni formato Markdown para envolver la respuesta (por ejemplo: `json o `).
+3. NO uses bloques de código ni formato Markdown para envolver la respuesta (por ejemplo: ```json o ```).
 
 4. Devuelve únicamente el JSON crudo iniciando con [ y finalizando con ].
 
-5. Asegúrate de escapar cualquier comilla doble (") que pueda invalidar el JSON. No incluyas saltos de línea ni caracteres inválidos dentro de los campos de texto. Utiliza una sola línea por campo.
+5. Asegúrate de escapar cualquier comilla doble ("") que pueda invalidar el JSON. No incluyas saltos de línea ni caracteres inválidos dentro de los campos de texto. Utiliza una sola línea por campo.
 
-6. Para los campos *_marcacion devuelve obligatoriamente:
+6. Para los campos *_marcacion devuelve obligatoriamente (STRING):
 
-   * 1
-   * 0
+   * "SI"
+   * "NO"
    * "NA"
 
-   No uses formatos como:
-
-   * "1 | 0 | NA"
-   * "Cumple"
-   * "No cumple"
+   No uses 1/0 numéricos ni formatos como:
+   - "1 | 0 | NA"
+   - "Cumple"
+   - true/false
 
 7. Los atributos de "clasificacion" o "carreras_interes" deben ser estrictamente ARREGLOS DE STRINGS EN FORMATO JSON. Ejemplo: ["clasificacion1", "clasificacion2"]. Si no identificaste la clasificación, devuelve un arreglo vacío []. NO LOS RETORNES COMO TEXTO.
 
 8. Mantén siempre el JSON completo y respeta el tipo de dato definido para cada campo.
 
-9. Los campos de secuencia de conversación deben devolverse obligatoriamente como números enteros. Si un evento no ocurre, devuelve 0.
+9. Los campos de secuencia de conversación (T_*) y MAYOR_REBATE deben devolverse como números enteros. Si un evento no ocurre, devuelve 0. NUNCA uses texto en esos campos.
 
-10. Si un atributo no aplica según las reglas de la pauta, devuelve una descripción terminada en (NA) y una marcación igual a "NA".
+10. Si un atributo no aplica según las reglas de la pauta, devuelve una descripción terminada en (NA) y una marcación igual a "NA". No uses NA cuando el atributo aplica y simplemente no se cumplió (eso es "NO") ni cuando se cumplió (eso es "SI").
 
 11. Evalúa únicamente información presente en la conversación y en el contexto proporcionado. No realices inferencias externas ni supongas acciones no evidenciadas.
 
 12. Todos los campos deben respetar estrictamente el tipo de dato definido en el formato de salida.
 
-ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves y reemplaza las explicaciones con tus conclusiones en base a la conversación evaluada):
+13. NUNCA omitas claves del JSON. Incluye siempre rebates/objeciones, pre_cierre, resumen_venta, subatributos Counter nuevos, T_* y MAYOR_REBATE. En *_marcacion usa "SI"/"NO"/"NA"; en T_* usa enteros.
+
+14. NO incluyas claves de Admisión retiradas de Counter: empatia_*, actitud_comercial_*, sigue_flujo_gestion_*, ofrece_qr_*, valida_datos_postulante_*, T_OFRECE_QR.
+
+15. Coherencia: si la descripción dice que no se cumplió → marcacion "NO". Si dice que no aplica / sin oportunidad → "NA". "SI" solo con evidencia en audio.
+
+16. pre_cierre: no exige solo medio de pago; vale preguntar si paga ahora, si tiene efectivo/monto, pedir contacto/datos para vacante. Omisión con venta aplicable → "NO" (no "NA").
+
+17. resumen_venta: con venta concretada, resumen incompleto o sin evidencia → "NO". No marques "SI" si el audio no valida los datos.
+
+18. Si hubo inversión/costos: info_seguro_estudiantil no puede ser "NA"; usa "SI" o "NO".
+
+19. Gestión alumno / Beca 18 / maestría / sin inscripción nueva: pre_cierre, cierre_comercial, sentido_de_urgencia y sondeo_motivacion en "NA" (no "NO").
+
+20. escucha_activa: pedir repetir información ya dicha → "NO".
+
+21. saludo: si el audio tiene 'mi nombre es …' / saludo de bienvenida → "SI". PROHIBIDO "NO" por 'no se presenta' cuando la transcripción sí muestra la presentación (ignora ruido STT de mayúsculas).
+
+22. sondeo interés: 'cómo le puedo ayudar' / 'cuál es la consulta' / '¿seguro de la carrera?' / '¿fines de semana?' / nocturno-diurno-80/20 → "SI". PROHIBIDO "NO" por 'no sondea' si esas preguntas están en el audio.
+
+23. Pronabec / otro canal / traslado con indicación de no usar Counter regular: atributos comerciales de inscripción Counter en "NA" (no penalices por no cerrar por el conducto incorrecto).
+
+24. cierre_comercial: pedir confirmar inscripción ahora + beneficio que vence / pedir contacto de mamá-papá para cerrar → "SI". PROHIBIDO "NO" por 'no hay cierre' si eso está en el audio.
+
+25. pre_cierre: '¿pagan ahora?' / '¿tienen efectivo?' / explicar agente-Yape-voucher de matrícula → "SI". PROHIBIDO "NO" si esas preguntas o instrucciones de pago están en el audio.
+
+26. timestamps: [MM:SS] = inicio de bloque de voz, NO hablante. T_* = minutos*60+segundos de ese bloque. PROHIBIDO dejar todos los T_* en 0 si la transcripción sí trae [MM:SS] y el evento ocurrió.
+
+27. deja_en_espera: hueco < 15 s → "SI". Hueco >= 30 s sin aviso previo → "NO". Hueco >= 30 s con aviso razonable ('un momento', 'voy a consultar') → "SI". PROHIBIDO "NO" por muchos bloques [MM:SS].
+
+28. saludo: busca presentación en bloques tempranos ([00:00]–[00:40]). Si está, "SI".
+
+ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves. Los T_* y MAYOR_REBATE son ENTEROS):
 
 [
 {
-"tipo_contacto": "La definición se encuentra en <<<TIPO_CONTACTO>>>. Ejemplo: PRIMER_CONTACTO o SEGUIMIENTO.",
-
-"gestion_principal": "La definición se encuentra en <<<GESTION_PRINCIPAL>>>. Ejemplo: DOCUMENTOS_REGULAR, DOCUMENTOS_CONVALIDACION, PAGO_MATRICULA o RECORDATORIO_EXAMEN.",
-
-"saludo_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SALUDO>>>. Si cumple marcar 1.",
-"saludo_marcacion": 1,
-
-"despedida_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<DESPEDIDA>>>. Si cumple marcar 1.",
-"despedida_marcacion": 1,
-
-"aclara_duda_cliente_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<ACLARA_DUDA_DEL_CLIENTE>>>. Si cumple marcar 1.",
-"aclara_duda_cliente_marcacion": 1,
-
-"presenta_vacio_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SE_PRESENTA_VACIO_AL_INICIO_Y_DURANTE_LA_LLAMADA>>>. Si cumple marcar 1.",
-"presenta_vacio_marcacion": 1,
-
-"deja_en_espera_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<DEJA_AL_PROSPECTO_EN_ESPERA_DE_MANERA_INJUSTIFICADA>>>. Si cumple marcar 1.",
-"deja_en_espera_marcacion": 1,
-
-"empatia_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<EMPATIA>>>. Si cumple marcar 1.",
-"empatia_marcacion": 1,
-
-"actitud_comercial_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<ACTITUD_COMERCIAL>>>. Si cumple marcar 1.",
-"actitud_comercial_marcacion": 1,
-
-"lenguaje_grosero_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<LENGUAJE_GROSERO>>>. Si cumple marcar 1.",
-"lenguaje_grosero_marcacion": 1,
-
-"sigue_flujo_gestion_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SIGUE_FLUJO_DE_GESTION_EN_LLAMADA>>>. Si cumple marcar 1.",
-"sigue_flujo_gestion_marcacion": 1,
-
-"brinda_informacion_correcta_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<BRINDA_INFORMACION_CORRECTA>>>. Si cumple marcar 1.",
-"brinda_informacion_correcta_marcacion": 1,
-
-"ofrece_qr_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<OFRECE_ENVIO_DE_QR>>>. Si cumple marcar 1.",
-"ofrece_qr_marcacion": 1,
-
-"valida_datos_postulante_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<VALIDA_DATOS_CON_EL_POSTULANTE>>>. Si cumple marcar 1.",
-"valida_datos_postulante_marcacion": 1,
-
-"sondea_interes_postulante_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SONDEA_DE_ACUERDO_AL_INTERES_DEL_POSTULANTE>>>. Si cumple marcar 1.",
-"sondea_interes_postulante_marcacion": 1,
-
-"rebate_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<AGENTE_NO_REBATE>>>. Si cumple marcar 1.",
-"rebate_marcacion": 1,
-
-"rebate_efectivo_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<REBATE_NO_EFECTIVO>>>. Si cumple marcar 1.",
-"rebate_efectivo_marcacion": 1,
-
-"cierre_comercial_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<CIERRE_COMERCIAL>>>. Si cumple marcar 1.",
-"cierre_comercial_marcacion": 1,
-
-"sentido_urgencia_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<SENTIDO_DE_URGENCIA>>>. Si cumple marcar 1.",
-"sentido_urgencia_marcacion": 1,
-
-"afecta_imagen_negocio_descripcion": "Justificación breve y concreta. Lo que se espera está en <<<COMENTARIOS_NEGATIVOS_DE_LA_UNIVERSIDAD_O_SUS_EMPLEADOS>>>. Si cumple marcar 1.",
-"afecta_imagen_negocio_marcacion": 1,
-
-"tipificacion_segun_casuistica": "La definición se encuentra en <<<TIPIFICACION_SEGUN_CASUISTICA>>>. Ejemplo: DOCUMENTOS_REGULAR.",
-
-"carreras_interes": ["Lista de carreras identificadas según <<<CARRERAS_DE_INTERES>>>. Ejemplo de valor: ingenieria_sistemas_informatica. Usa arreglo vacío [] si no hay."],
-
-"resultado_final_llamada": "Resultado final de la gestión según <<<RESULTADO_FINAL_LLAMADA>>>. Debe contener únicamente uno de los valores definidos en dicho atributo.",
-"conclusion_final_llamada": "Descripción breve del desenlace de la gestión según <<<CONCLUSION_FINAL_LLAMADA>>>.",
-
-"objecion_cliente_1_texto": "Resumen de la primera objeción identificada según <<<OBJECION_CLIENTE_1_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"rebate_asesor_1_texto": "Resumen del primer rebate identificado según <<<REBATE_ASESOR_1_TEXTO>>>. Debe devolver 'NA' si no existe.",
-
-"objecion_cliente_2_texto": "Resumen de la segunda objeción identificada según <<<OBJECION_CLIENTE_2_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"rebate_asesor_2_texto": "Resumen del segundo rebate identificado según <<<REBATE_ASESOR_2_TEXTO>>>. Debe devolver 'NA' si no existe.",
-
-"objecion_cliente_3_texto": "Resumen de la tercera objeción identificada según <<<OBJECION_CLIENTE_3_TEXTO>>>. Debe devolver 'NA' si no existe.",
-"rebate_asesor_3_texto": "Resumen del tercer rebate identificado según <<<REBATE_ASESOR_3_TEXTO>>>. Debe devolver 'NA' si no existe.",
-
-"resumen_evaluacion": "La definición se encuentra en <<<RESUMEN_EVALUACION>>>.",
-
-"T_SALUDO": "Momento del saludo según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_VALIDACION_DATOS": "Momento de validación de datos según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_SONDEO": "Momento del sondeo principal según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_ACLARA_DUDA": "Momento en que se atiende una consulta relevante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_OBJECION_CLIENTE_1": "Momento de la primera objeción del postulante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_REBATE_1": "Momento del primer rebate del asesor según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_CIERRE_1": "Momento del primer cierre posterior al rebate según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_OBJECION_CLIENTE_2": "Momento de la segunda objeción del postulante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_REBATE_2": "Momento del segundo rebate del asesor según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_CIERRE_2": "Momento del segundo cierre posterior al rebate según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_OBJECION_CLIENTE_3": "Momento de la tercera objeción del postulante según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_REBATE_3": "Momento del tercer rebate del asesor según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_CIERRE_3": "Momento del tercer cierre posterior al rebate según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no hay.",
-"T_SENTIDO_DE_URGENCIA": "Momento del sentido de urgencia según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_CIERRE": "Momento del cierre principal según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_DESPEDIDA": "Momento de la despedida según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_OFRECE_QR": "Momento en que el asesor ofrece QR según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"T_COMENTARIO_NEGATIVO_UTP": "Momento en que el asesor realiza comentarios negativos sobre UTP según <<<SECUENCIA_CONVERSACION>>>. Número entero, 0 si no ocurre.",
-"MAYOR_REBATE": "1 si se detectan 4 o más rebates durante la interacción; 0 en caso contrario."
+"tipo_contacto": "PRIMER_CONTACTO",
+"gestion_principal": "DOCUMENTOS_REGULAR",
+"saludo_descripcion": "Justificación breve. (SI)",
+"saludo_marcacion": "SI",
+"despedida_descripcion": "Justificación breve. (SI)",
+"despedida_marcacion": "SI",
+"aclara_duda_cliente_descripcion": "Justificación breve. (SI)",
+"aclara_duda_cliente_marcacion": "SI",
+"presenta_vacio_descripcion": "Sin demora injustificada. (SI)",
+"presenta_vacio_marcacion": "SI",
+"deja_en_espera_descripcion": "Justificación breve. (SI)",
+"deja_en_espera_marcacion": "SI",
+"lenguaje_grosero_descripcion": "Justificación breve. (SI)",
+"lenguaje_grosero_marcacion": "SI",
+"tono_sarcastico_despectivo_descripcion": "Justificación breve. (SI)",
+"tono_sarcastico_despectivo_marcacion": "SI",
+"confronta_prospecto_descripcion": "Justificación breve. (SI)",
+"confronta_prospecto_marcacion": "SI",
+"tono_seguridad_descripcion": "Justificación breve. (SI)",
+"tono_seguridad_marcacion": "SI",
+"escucha_activa_descripcion": "Justificación breve. (SI)",
+"escucha_activa_marcacion": "SI",
+"brinda_informacion_correcta_descripcion": "Justificación breve. (SI)",
+"brinda_informacion_correcta_marcacion": "SI",
+"info_seguro_estudiantil_descripcion": "Justificación breve. (NA)",
+"info_seguro_estudiantil_marcacion": "NA",
+"plazo_entrega_documentos_descripcion": "Justificación breve. (NA)",
+"plazo_entrega_documentos_marcacion": "NA",
+"plazo_pago_matricula_descripcion": "Justificación breve. (NA)",
+"plazo_pago_matricula_marcacion": "NA",
+"otros_beneficios_descripcion": "Justificación breve. (NA)",
+"otros_beneficios_marcacion": "NA",
+"sondeo_motivacion_descripcion": "Justificación breve. (SI)",
+"sondeo_motivacion_marcacion": "SI",
+"sondea_interes_postulante_descripcion": "Justificación breve. (SI)",
+"sondea_interes_postulante_marcacion": "SI",
+"info_correcta_completa_sondeo_descripcion": "Justificación breve. (SI)",
+"info_correcta_completa_sondeo_marcacion": "SI",
+"info_correcta_becas_descripcion": "Justificación breve. (NA)",
+"info_correcta_becas_marcacion": "NA",
+"info_correcta_descuentos_descripcion": "Justificación breve. (NA)",
+"info_correcta_descuentos_marcacion": "NA",
+"info_correcta_convenios_descripcion": "Justificación breve. (NA)",
+"info_correcta_convenios_marcacion": "NA",
+"info_correcta_convalidacion_descripcion": "Justificación breve. (NA)",
+"info_correcta_convalidacion_marcacion": "NA",
+"info_correcta_carrera_campus_modalidad_turnos_descripcion": "Justificación breve. (SI)",
+"info_correcta_carrera_campus_modalidad_turnos_marcacion": "SI",
+"info_correcta_inversion_descripcion": "Justificación breve. (SI)",
+"info_correcta_inversion_marcacion": "SI",
+"rebate_descripcion": "Todas las objeciones rebatidas. (SI)",
+"rebate_marcacion": "SI",
+"rebate_efectivo_descripcion": "Rebates acordes a cada objeción. (SI)",
+"rebate_efectivo_marcacion": "SI",
+"pre_cierre_descripcion": "Justificación breve. (SI)",
+"pre_cierre_marcacion": "SI",
+"cierre_comercial_descripcion": "Cierre con intención de inscripción. (SI)",
+"cierre_comercial_marcacion": "SI",
+"resumen_venta_descripcion": "Justificación breve. (NA)",
+"resumen_venta_marcacion": "NA",
+"sentido_urgencia_descripcion": "Justificación breve. (SI)",
+"sentido_urgencia_marcacion": "SI",
+"afecta_imagen_negocio_descripcion": "Justificación breve. (SI)",
+"afecta_imagen_negocio_marcacion": "SI",
+"informacion_falsa_descripcion": "Sin info falsa ni fuera de proceso. (SI)",
+"informacion_falsa_marcacion": "SI",
+"tipificacion_segun_casuistica": "DOCUMENTOS_REGULAR",
+"carreras_interes": [],
+"resultado_final_llamada": "NA",
+"conclusion_final_llamada": "Resumen breve del desenlace.",
+"objecion_cliente_1_texto": "NA",
+"rebate_asesor_1_texto": "NA",
+"objecion_cliente_2_texto": "NA",
+"rebate_asesor_2_texto": "NA",
+"objecion_cliente_3_texto": "NA",
+"rebate_asesor_3_texto": "NA",
+"resumen_evaluacion": "Resumen breve de la evaluación.",
+"T_SALUDO": 0,
+"T_VALIDACION_DATOS": 0,
+"T_SONDEO": 0,
+"T_ACLARA_DUDA": 0,
+"T_OBJECION_CLIENTE_1": 0,
+"T_REBATE_1": 0,
+"T_CIERRE_1": 0,
+"T_OBJECION_CLIENTE_2": 0,
+"T_REBATE_2": 0,
+"T_CIERRE_2": 0,
+"T_OBJECION_CLIENTE_3": 0,
+"T_REBATE_3": 0,
+"T_CIERRE_3": 0,
+"T_SENTIDO_DE_URGENCIA": 0,
+"T_CIERRE": 0,
+"T_DESPEDIDA": 0,
+"T_COMENTARIO_NEGATIVO_UTP": 0,
+"MAYOR_REBATE": 0
 }
 ]
 
+--- IDENTIDAD ASESOR (ANCLA DE LA ATENCION PRINCIPAL) ---
+Nombre: {{asesor_nombre}}
+Usuario: {{asesor_usuario}}
+Código: {{asesor_codigo}}
+
 --- TRANSCRIPCION A EVALUAR ---
 {{transcripcion}}
+
+INSTRUCCION FINAL:
+Antes de puntuar, identifica el hilo principal asesor-prospecto usando el nombre del asesor del ticket.
+Descarta voces de fondo o de counters vecinos. No penalices por audio ajeno.
+Usa [MM:SS] para T_* (segundos enteros) y para medir esperas: solo huecos >= 30 s sin aviso cuentan como espera injustificada.
 ''' AS prompt_text,
     CURRENT_TIMESTAMP() AS updated_at
 ) AS S
@@ -1633,8 +1679,10 @@ SELECT
   prompt_name,
   updated_at,
   LENGTH(prompt_text) AS chars,
-  STRPOS(prompt_text, 'Canal Counter') > 0 AS tiene_pauta_counter,
-  STRPOS(prompt_text, 'saludo_marcacion') > 0 AS tiene_formato_salida,
+  STRPOS(prompt_text, 'tienen efectivo') > 0 AS pre_cierre_efectivo,
+  STRPOS(prompt_text, 'beneficio/descuento vence') > 0 AS cierre_vence,
+  STRPOS(prompt_text, '[MM:SS]') > 0 AS timestamps_mmss,
+  STRPOS(prompt_text, 'Hueco >= 30 s') > 0 AS espera_30s,
   STRPOS(prompt_text, '{{transcripcion}}') > 0 AS tiene_placeholder
 FROM `prd-utpbi-data-operation.raw_queue_smart.sys_prompts`
 WHERE prompt_name = 'canal_counter_prompt';

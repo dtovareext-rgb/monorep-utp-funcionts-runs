@@ -15,7 +15,8 @@
 --   0) DELETE hist raw/prd del día
 --   1) Metadata candidatos → tmp_queuesmart_mp3_audios
 --   2) Loop: external table del lote → ML.TRANSCRIBE → INSERT hist raw
---   3) Speaker tags (si hay) + copia a hist prd
+--   3) Reconstruir transcripcion con [MM:SS] por pausa (>= 0.8s) desde words.startOffset
+--   4) Speaker tags (si hay) + copia a hist prd
 -- Etapa 2 (Gemini): Cloud Workflows → sp_queuesmart_audio_analisis_ia
 --
 --   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(
@@ -284,14 +285,14 @@ BEGIN
       """, external_table, conexion, v_uris);
       EXECUTE IMMEDIATE v_sql;
 
-      -- Chirp (sin diarization_config: BQ ML no lo soporta en recognition_config)
+      -- Chirp + word time offsets (sin diarization: BQ ML no lo soporta en recognition_config)
       EXECUTE IMMEDIATE FORMAT(
       """CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_stt_batch AS
          SELECT uri, transcripts, ml_transcribe_result, ml_transcribe_status
          FROM ML.TRANSCRIBE(
            MODEL `prd-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`,
            TABLE %s,
-           recognition_config => JSON '{\"language_codes\":[\"es-US\"],\"model\":\"chirp\",\"auto_decoding_config\":{}}'
+           recognition_config => JSON '{\"language_codes\":[\"es-US\"],\"model\":\"chirp\",\"auto_decoding_config\":{},\"features\":{\"enable_word_time_offsets\":true}}'
          )""", external_table);
 
       INSERT INTO tmp_queuesmart_mp3_stt_results
@@ -394,7 +395,104 @@ BEGIN
     END WHILE;
 
     -- ---------------------------------------------------------------------------
-    -- 3. Reconstruir speakers (si el JSON trae tags; con chirp suele quedar NULL)
+    -- 3. Reconstruir transcripcion con [MM:SS] por pausa (>= 0.8s entre palabras)
+    --    Si el JSON no trae startOffset, se deja el transcripts plano del INSERT.
+    -- ---------------------------------------------------------------------------
+    CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_timed_tx AS
+    WITH flat_words AS (
+      SELECT
+        s.uri,
+        JSON_VALUE(w, '$.word') AS word,
+        SAFE_CAST(
+          REGEXP_EXTRACT(
+            COALESCE(JSON_VALUE(w, '$.startOffset'), JSON_VALUE(w, '$.start_offset')),
+            r'^([0-9]+(?:\.[0-9]+)?)'
+          ) AS FLOAT64
+        ) AS start_sec,
+        SAFE_CAST(
+          REGEXP_EXTRACT(
+            COALESCE(JSON_VALUE(w, '$.endOffset'), JSON_VALUE(w, '$.end_offset')),
+            r'^([0-9]+(?:\.[0-9]+)?)'
+          ) AS FLOAT64
+        ) AS end_sec,
+        result_ord,
+        word_ord
+      FROM tmp_queuesmart_mp3_stt_results AS s
+      CROSS JOIN UNNEST(JSON_QUERY_ARRAY(TO_JSON_STRING(s.ml_transcribe_result), '$.results')) AS result WITH OFFSET AS result_ord
+      CROSS JOIN UNNEST(JSON_QUERY_ARRAY(result, '$.alternatives[0].words')) AS w WITH OFFSET AS word_ord
+      WHERE s.ml_transcribe_result IS NOT NULL
+        AND JSON_VALUE(w, '$.word') IS NOT NULL
+    ),
+    with_prev AS (
+      SELECT
+        uri,
+        word,
+        start_sec,
+        end_sec,
+        result_ord,
+        word_ord,
+        LAG(end_sec) OVER (
+          PARTITION BY uri
+          ORDER BY result_ord, word_ord
+        ) AS prev_end_sec
+      FROM flat_words
+      WHERE start_sec IS NOT NULL
+    ),
+    segments AS (
+      SELECT
+        uri,
+        word,
+        start_sec,
+        result_ord,
+        word_ord,
+        COUNTIF(
+          prev_end_sec IS NULL
+          OR start_sec - prev_end_sec >= 0.8
+        ) OVER (
+          PARTITION BY uri
+          ORDER BY result_ord, word_ord
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS segment_id
+      FROM with_prev
+    ),
+    segment_text AS (
+      SELECT
+        uri,
+        segment_id,
+        MIN(start_sec) AS segment_start_sec,
+        MIN(result_ord * 100000 + word_ord) AS segment_ord,
+        STRING_AGG(word, ' ' ORDER BY result_ord, word_ord) AS text
+      FROM segments
+      GROUP BY uri, segment_id
+    )
+    SELECT
+      uri,
+      STRING_AGG(
+        CONCAT(
+          '[',
+          FORMAT(
+            '%02d:%02d',
+            DIV(CAST(FLOOR(segment_start_sec) AS INT64), 60),
+            MOD(CAST(FLOOR(segment_start_sec) AS INT64), 60)
+          ),
+          '] ',
+          text
+        ),
+        '\n'
+        ORDER BY segment_ord
+      ) AS transcripcion
+    FROM segment_text
+    GROUP BY uri;
+
+    UPDATE `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw` AS t
+    SET transcripcion = f.transcripcion
+    FROM tmp_queuesmart_mp3_timed_tx AS f
+    WHERE t.gcs_uri = f.uri
+      AND t.gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios)
+      AND f.transcripcion IS NOT NULL;
+
+    -- ---------------------------------------------------------------------------
+    -- 4. Reconstruir speakers (si el JSON trae tags; con chirp suele quedar NULL)
     -- ---------------------------------------------------------------------------
     CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_speaker_tx AS
     WITH flat_words AS (
