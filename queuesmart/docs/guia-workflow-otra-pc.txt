@@ -144,7 +144,7 @@ Ver ejecución:
   gcloud scheduler jobs create http queuesmart-daily-pipeline-sched \
     --project=prd-utpbi-data-operation \
     --location=us-central1 \
-    --schedule="0 3 * * *" \
+    --schedule="0 2 * * *" \
     --time-zone="America/Lima" \
     --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/queuesmart-daily-pipeline/executions" \
     --http-method=POST \

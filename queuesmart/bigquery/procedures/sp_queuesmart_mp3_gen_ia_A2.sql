@@ -5,6 +5,9 @@
 -- Input:     raw_queue_smart.queuesmart_mp3_enriched (BOTH / GCS_ONLY)
 -- SP + hist: adf_speech_analytics (US)
 -- STT:       adf_speech_analytics.speech-to-text-v2  (ML.TRANSCRIBE / Chirp)
+-- Límite BQ: ML.TRANSCRIBE no procesa audios > 30 min (Chirp+timestamps ~20 min).
+--   Audios largos vienen partidos en GCS como stem_s01.flac, stem_s02.flac (18 min c/u).
+--   Este SP transcribe cada segmento y fusiona transcripcion por source_file_name.
 -- Conexión:  US.utp_gen_ia_process
 --
 -- Técnica anti-timeout:
@@ -395,35 +398,76 @@ BEGIN
     END WHILE;
 
     -- ---------------------------------------------------------------------------
-    -- 3. Reconstruir transcripcion con [MM:SS] por pausa (>= 0.8s entre palabras)
-    --    Si el JSON no trae startOffset, se deja el transcripts plano del INSERT.
+    -- 3. Aplanar words desde JSON Chirp
+    --    Estructura real ML.TRANSCRIBE:
+    --      $.results['gs://...'].inline_result.transcript.results[]
+    --    (no $.results[] plano — por eso antes no salían [MM:SS])
     -- ---------------------------------------------------------------------------
-    CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_timed_tx AS
-    WITH flat_words AS (
+    CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_stt_words AS
+    WITH catalog_seg AS (
+      SELECT
+        gcs_uri,
+        segment_offset_seconds
+      FROM `prd-utpbi-data-operation.raw_queue_smart.hist_queesmart_mp3_catalog`
+      WHERE fecha_audio = v_fecha_proceso
+    ),
+    stt_payload AS (
       SELECT
         s.uri,
-        JSON_VALUE(w, '$.word') AS word,
-        SAFE_CAST(
-          REGEXP_EXTRACT(
-            COALESCE(JSON_VALUE(w, '$.startOffset'), JSON_VALUE(w, '$.start_offset')),
-            r'^([0-9]+(?:\.[0-9]+)?)'
-          ) AS FLOAT64
-        ) AS start_sec,
-        SAFE_CAST(
-          REGEXP_EXTRACT(
-            COALESCE(JSON_VALUE(w, '$.endOffset'), JSON_VALUE(w, '$.end_offset')),
-            r'^([0-9]+(?:\.[0-9]+)?)'
-          ) AS FLOAT64
-        ) AS end_sec,
-        result_ord,
-        word_ord
+        COALESCE(c.segment_offset_seconds, 0) AS segment_offset_seconds,
+        COALESCE(
+          JSON_QUERY_ARRAY(
+            s.ml_transcribe_result,
+            CONCAT("$['results']['", s.uri, "'].inline_result.transcript.results")
+          ),
+          JSON_QUERY_ARRAY(
+            s.ml_transcribe_result,
+            CONCAT("$['results']['", s.uri, "'].transcript.results")
+          ),
+          JSON_QUERY_ARRAY(s.ml_transcribe_result, '$.results')
+        ) AS stt_results
       FROM tmp_queuesmart_mp3_stt_results AS s
-      CROSS JOIN UNNEST(JSON_QUERY_ARRAY(TO_JSON_STRING(s.ml_transcribe_result), '$.results')) AS result WITH OFFSET AS result_ord
-      CROSS JOIN UNNEST(JSON_QUERY_ARRAY(result, '$.alternatives[0].words')) AS w WITH OFFSET AS word_ord
+      LEFT JOIN catalog_seg AS c
+        ON c.gcs_uri = s.uri
       WHERE s.ml_transcribe_result IS NOT NULL
-        AND JSON_VALUE(w, '$.word') IS NOT NULL
-    ),
-    with_prev AS (
+    )
+    SELECT
+      p.uri,
+      p.segment_offset_seconds,
+      JSON_VALUE(w, '$.word') AS word,
+      SAFE_CAST(
+        REGEXP_EXTRACT(
+          COALESCE(JSON_VALUE(w, '$.startOffset'), JSON_VALUE(w, '$.start_offset')),
+          r'^([0-9]+(?:\.[0-9]+)?)'
+        ) AS FLOAT64
+      ) + p.segment_offset_seconds AS start_sec,
+      SAFE_CAST(
+        REGEXP_EXTRACT(
+          COALESCE(JSON_VALUE(w, '$.endOffset'), JSON_VALUE(w, '$.end_offset')),
+          r'^([0-9]+(?:\.[0-9]+)?)'
+        ) AS FLOAT64
+      ) + p.segment_offset_seconds AS end_sec,
+      COALESCE(
+        SAFE_CAST(JSON_VALUE(w, '$.speakerLabel') AS INT64),
+        SAFE_CAST(JSON_VALUE(w, '$.speaker_label') AS INT64),
+        SAFE_CAST(JSON_VALUE(w, '$.speakerTag') AS INT64),
+        SAFE_CAST(JSON_VALUE(w, '$.speaker_tag') AS INT64)
+      ) AS speaker_tag,
+      result_ord,
+      word_ord
+    FROM stt_payload AS p
+    CROSS JOIN UNNEST(COALESCE(p.stt_results, [])) AS result WITH OFFSET AS result_ord
+    CROSS JOIN UNNEST(
+      COALESCE(JSON_QUERY_ARRAY(result, '$.alternatives[0].words'), [])
+    ) AS w WITH OFFSET AS word_ord
+    WHERE JSON_VALUE(w, '$.word') IS NOT NULL;
+
+    -- ---------------------------------------------------------------------------
+    -- 3b. Reconstruir transcripcion con [MM:SS] por pausa (>= 0.8s entre palabras)
+    --    Si no hay words en JSON, se conserva el transcripts plano del INSERT.
+    -- ---------------------------------------------------------------------------
+    CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_timed_tx AS
+    WITH with_prev AS (
       SELECT
         uri,
         word,
@@ -435,7 +479,7 @@ BEGIN
           PARTITION BY uri
           ORDER BY result_ord, word_ord
         ) AS prev_end_sec
-      FROM flat_words
+      FROM tmp_queuesmart_mp3_stt_words
       WHERE start_sec IS NOT NULL
     ),
     segments AS (
@@ -497,21 +541,13 @@ BEGIN
     CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_speaker_tx AS
     WITH flat_words AS (
       SELECT
-        s.uri,
-        COALESCE(
-          SAFE_CAST(JSON_VALUE(w, '$.speakerLabel') AS INT64),
-          SAFE_CAST(JSON_VALUE(w, '$.speaker_label') AS INT64),
-          SAFE_CAST(JSON_VALUE(w, '$.speakerTag') AS INT64),
-          SAFE_CAST(JSON_VALUE(w, '$.speaker_tag') AS INT64)
-        ) AS speaker_tag,
-        JSON_VALUE(w, '$.word') AS word,
+        uri,
+        speaker_tag,
+        word,
         result_ord,
         word_ord
-      FROM tmp_queuesmart_mp3_stt_results AS s
-      CROSS JOIN UNNEST(JSON_QUERY_ARRAY(TO_JSON_STRING(s.ml_transcribe_result), '$.results')) AS result WITH OFFSET AS result_ord
-      CROSS JOIN UNNEST(JSON_QUERY_ARRAY(result, '$.alternatives[0].words')) AS w WITH OFFSET AS word_ord
-      WHERE s.ml_transcribe_result IS NOT NULL
-        AND JSON_VALUE(w, '$.word') IS NOT NULL
+      FROM tmp_queuesmart_mp3_stt_words
+      WHERE speaker_tag IS NOT NULL
     ),
     with_prev AS (
       SELECT
@@ -525,7 +561,6 @@ BEGIN
           ORDER BY result_ord, word_ord
         ) AS prev_speaker
       FROM flat_words
-      WHERE speaker_tag IS NOT NULL
     ),
     turns AS (
       SELECT
@@ -569,7 +604,13 @@ BEGIN
       AND f.transcripcion_con_hablantes IS NOT NULL;
 
     DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd`
-    WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios);
+    WHERE process_date = v_fecha_proceso
+      AND (
+        gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios)
+        OR source_file_name IN (
+          SELECT DISTINCT source_file_name FROM tmp_queuesmart_mp3_audios
+        )
+      );
 
     INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd` (
       process_date,
@@ -604,6 +645,66 @@ BEGIN
       observaciones,
       load_date
     )
+    WITH base AS (
+      SELECT *
+      FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw`
+      WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios)
+    ),
+    keyed AS (
+      SELECT
+        *,
+        COALESCE(
+          NULLIF(TRIM(source_file_name), ''),
+          REGEXP_REPLACE(file_name, r'_s\d+\.', '.')
+        ) AS stt_parent_key,
+        SAFE_CAST(REGEXP_EXTRACT(file_name, r'_s(\d+)\.') AS INT64) AS segment_ord
+      FROM base
+    ),
+    merged AS (
+      SELECT
+        stt_parent_key,
+        ANY_VALUE(process_date) AS process_date,
+        MIN(gcs_uri) AS gcs_uri,
+        ANY_VALUE(source_file_name) AS source_file_name,
+        ANY_VALUE(file_name) AS file_name,
+        ANY_VALUE(audio) AS audio,
+        ANY_VALUE(recordid) AS recordid,
+        ANY_VALUE(rowid) AS rowid,
+        ANY_VALUE(codagencia) AS codagencia,
+        ANY_VALUE(campus_code) AS campus_code,
+        ANY_VALUE(type_code) AS type_code,
+        ANY_VALUE(correlative) AS correlative,
+        SUM(file_size_bytes) AS file_size_bytes,
+        SUM(duration_seconds) AS duration_seconds,
+        ANY_VALUE(match_status) AS match_status,
+        ANY_VALUE(asesornombre) AS asesornombre,
+        ANY_VALUE(asesorusuario) AS asesorusuario,
+        ANY_VALUE(asesorcodigo) AS asesorcodigo,
+        ANY_VALUE(ndoc) AS ndoc,
+        ANY_VALUE(nombresusuario) AS nombresusuario,
+        ANY_VALUE(numcelular) AS numcelular,
+        ANY_VALUE(clientetipo) AS clientetipo,
+        ANY_VALUE(`database`) AS `database`,
+        STRING_AGG(
+          NULLIF(TRIM(transcripcion), ''),
+          '\n'
+          ORDER BY segment_ord NULLS FIRST, gcs_uri
+        ) AS transcripcion,
+        STRING_AGG(
+          NULLIF(TRIM(transcripcion_con_hablantes), ''),
+          '\n'
+          ORDER BY segment_ord NULLS FIRST, gcs_uri
+        ) AS transcripcion_con_hablantes,
+        ANY_VALUE(resumen) AS resumen,
+        ANY_VALUE(intencion) AS intencion,
+        ANY_VALUE(idioma) AS idioma,
+        ANY_VALUE(tono) AS tono,
+        ANY_VALUE(entidades) AS entidades,
+        ANY_VALUE(observaciones) AS observaciones,
+        MAX(load_date) AS load_date
+      FROM keyed
+      GROUP BY stt_parent_key
+    )
     SELECT
       process_date,
       gcs_uri,
@@ -636,8 +737,8 @@ BEGIN
       entidades,
       observaciones,
       load_date
-    FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw`
-    WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_mp3_audios);
+    FROM merged
+    WHERE NULLIF(TRIM(transcripcion), '') IS NOT NULL;
 
     SELECT FORMAT(
       'STT QueeSmart OK fecha %s: %d audios en %d lotes',

@@ -80,7 +80,12 @@ BEGIN
           fecha_audio,
           campus_code,
           type_code,
-          correlative
+          correlative,
+          IF(
+            REGEXP_CONTAINS(LOWER(file_name), r'_s\d+\.'),
+            file_name,
+            '__mono__'
+          )
         ORDER BY
           CASE WHEN LOWER(file_name) LIKE '%.flac' THEN 0 ELSE 1 END,
           fecha_procesamiento DESC
