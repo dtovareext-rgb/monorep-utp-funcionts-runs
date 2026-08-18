@@ -478,10 +478,50 @@ BEGIN
 
     -- ---------------------------------------------------------------------------
     -- 3b. Reconstruir transcripcion con [MM:SS] por pausa (>= 0.8s entre palabras)
-    --    Si no hay words en JSON, se conserva el transcripts plano del INSERT.
+    --    El TEXTO sigue result_ord/word_ord (orden Chirp), no start_offset.
+    --    Chirp a veces pone start_offset basura en palabras cortas (en/de/con/lo)
+    --    p.ej. 11s en medio de un bloque a 323s. Eso partía bloques y pintaba [00:11].
+    --    Si el tiempo retrocede >0.3s vs el max previo, se clampea hacia adelante.
     -- ---------------------------------------------------------------------------
     CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_timed_tx AS
-    WITH with_prev AS (
+    WITH raw_words AS (
+      SELECT
+        uri,
+        word,
+        start_sec,
+        end_sec,
+        result_ord,
+        word_ord,
+        MAX(GREATEST(start_sec, COALESCE(end_sec, start_sec))) OVER (
+          PARTITION BY uri
+          ORDER BY result_ord, word_ord
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS prev_max_end
+      FROM tmp_queuesmart_mp3_stt_words
+      WHERE start_sec IS NOT NULL
+    ),
+    cleaned AS (
+      SELECT
+        uri,
+        word,
+        result_ord,
+        word_ord,
+        CASE
+          WHEN prev_max_end IS NOT NULL AND start_sec < prev_max_end - 0.3
+            THEN prev_max_end
+          ELSE start_sec
+        END AS start_sec,
+        GREATEST(
+          CASE
+            WHEN prev_max_end IS NOT NULL AND start_sec < prev_max_end - 0.3
+              THEN prev_max_end
+            ELSE start_sec
+          END,
+          COALESCE(end_sec, start_sec)
+        ) AS end_sec
+      FROM raw_words
+    ),
+    with_prev AS (
       SELECT
         uri,
         word,
@@ -493,8 +533,7 @@ BEGIN
           PARTITION BY uri
           ORDER BY result_ord, word_ord
         ) AS prev_end_sec
-      FROM tmp_queuesmart_mp3_stt_words
-      WHERE start_sec IS NOT NULL
+      FROM cleaned
     ),
     segments AS (
       SELECT
@@ -517,7 +556,7 @@ BEGIN
       SELECT
         uri,
         segment_id,
-        MIN(start_sec) AS segment_start_sec,
+        ARRAY_AGG(start_sec ORDER BY result_ord, word_ord LIMIT 1)[OFFSET(0)] AS segment_start_sec,
         MIN(result_ord * 100000 + word_ord) AS segment_ord,
         STRING_AGG(word, ' ' ORDER BY result_ord, word_ord) AS text
       FROM segments
