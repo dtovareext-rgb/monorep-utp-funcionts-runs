@@ -113,7 +113,7 @@ Ejemplo día completo (ingesta + 3 SPs):
     --location=us-central1 \
     --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
     --data='{
-      "process_date": "2026-08-04",
+      "process_date": "2026-08-06",
       "project_id": "prd-utpbi-data-operation",
       "job_name": "prd-utpbi-s3-to-gcs-micro-batch",
       "gcs_bucket": "prd-utp-stg-queuesmart",
@@ -141,7 +141,7 @@ Ver ejecución:
 6) SCHEDULER (una vez al día)
 ================================================================================
 
-  gcloud scheduler jobs create http queuesmart-daily-pipeline-sched \
+  gcloud scheduler jobs create http prd-sch-queuesmart-daily-pipeline \
     --project=prd-utpbi-data-operation \
     --location=us-central1 \
     --schedule="0 2 * * *" \
@@ -152,7 +152,12 @@ Ver ejecución:
     --message-body='{}' \
     --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
 
-Body vacío → el workflow calcula “ayer” Lima.
+Body vacío → el workflow calcula ayer calendario America/Lima (UTC-5):
+  - 18-ago 02:00 Lima → process_date = 2026-08-17
+  - Audios: nombres *-20260817-* en S3 → carpeta GCS 2026-08-17/
+  - SPs: consolidate / gen_ia / analisis con DATE '2026-08-17'
+
+Para reprocesar un día fijo, pasa process_date en el body del Scheduler o en gcloud workflows run.
 
 IMPORTANTE: desactivar / no usar el Scheduler viejo que disparaba el Job directo.
 

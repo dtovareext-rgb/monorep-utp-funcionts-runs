@@ -44,8 +44,9 @@ main:
             steps:
               - compute_yesterday:
                   assign:
-                    # Aprox: UTC-5 (Lima sin DST). Para precisión fina, pasar process_date desde Scheduler.
-                    - process_date: ${text.substring(time.format(sys.now() - 18000), 0, 10)}
+                    # Lima = UTC-5 (sin DST). sys.now()-18000 ≈ reloj Lima; -86400 = ayer calendario.
+                    # Ej: 18-ago 02:00 Lima → process_date = 2026-08-17
+                    - process_date: ${text.substring(time.format(sys.now() - 104400), 0, 10)}
 
     - log_start:
         call: sys.log

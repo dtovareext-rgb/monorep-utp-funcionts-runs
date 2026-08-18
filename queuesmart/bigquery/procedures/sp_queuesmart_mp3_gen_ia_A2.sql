@@ -401,8 +401,32 @@ BEGIN
     -- 3. Aplanar words desde JSON Chirp
     --    Estructura real ML.TRANSCRIBE:
     --      $.results['gs://...'].inline_result.transcript.results[]
-    --    (no $.results[] plano — por eso antes no salían [MM:SS])
+    --    JSON_QUERY_ARRAY exige json_path CONSTANTE (no CONCAT con uri).
+    --    La UDF JS abre el objeto keyed por URI.
     -- ---------------------------------------------------------------------------
+    CREATE TEMP FUNCTION qs_chirp_stt_results(ml_result JSON, uri STRING)
+    RETURNS ARRAY<JSON>
+    LANGUAGE js AS r"""
+      if (ml_result == null) return [];
+      var results = ml_result.results;
+      if (results == null) return [];
+      if (Array.isArray(results)) return results;
+      var entry = (uri && results[uri]) ? results[uri] : null;
+      if (!entry) {
+        var keys = Object.keys(results);
+        if (keys.length === 0) return [];
+        entry = results[keys[0]];
+      }
+      if (!entry) return [];
+      var nested = null;
+      if (entry.inline_result && entry.inline_result.transcript && entry.inline_result.transcript.results) {
+        nested = entry.inline_result.transcript.results;
+      } else if (entry.transcript && entry.transcript.results) {
+        nested = entry.transcript.results;
+      }
+      return Array.isArray(nested) ? nested : [];
+    """;
+
     CREATE OR REPLACE TEMP TABLE tmp_queuesmart_mp3_stt_words AS
     WITH catalog_seg AS (
       SELECT
@@ -415,17 +439,7 @@ BEGIN
       SELECT
         s.uri,
         COALESCE(c.segment_offset_seconds, 0) AS segment_offset_seconds,
-        COALESCE(
-          JSON_QUERY_ARRAY(
-            s.ml_transcribe_result,
-            CONCAT("$['results']['", s.uri, "'].inline_result.transcript.results")
-          ),
-          JSON_QUERY_ARRAY(
-            s.ml_transcribe_result,
-            CONCAT("$['results']['", s.uri, "'].transcript.results")
-          ),
-          JSON_QUERY_ARRAY(s.ml_transcribe_result, '$.results')
-        ) AS stt_results
+        qs_chirp_stt_results(s.ml_transcribe_result, s.uri) AS stt_results
       FROM tmp_queuesmart_mp3_stt_results AS s
       LEFT JOIN catalog_seg AS c
         ON c.gcs_uri = s.uri
