@@ -153,6 +153,11 @@ main:
                       query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_onemarketer_whatsapp_gen_ia`(DATE ''" + process_date + "'');"}'
                       useLegacySql: false
                       priority: INTERACTIVE
+                  labels:
+                    producto: onemarketer
+                    etapa: stt
+                    servicio: chirp
+                    pipeline: onemarketer-daily
                   jobReference:
                     location: ${bq_location}
                 # STT por lotes puede pasar de 30 min; default del conector = 1800s
@@ -223,6 +228,11 @@ main:
                       query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_onemarketer_caso_conversacion_ia`(DATE ''" + process_date + "'', NULL);"}'
                       useLegacySql: false
                       priority: INTERACTIVE
+                  labels:
+                    producto: onemarketer
+                    etapa: gemini
+                    servicio: flash-2-5
+                    pipeline: onemarketer-daily
                   jobReference:
                     location: ${bq_location}
                 connector_params:

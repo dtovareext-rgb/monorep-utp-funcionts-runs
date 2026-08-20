@@ -294,6 +294,11 @@ main:
                       query: '${"CALL `" + project_id + ".raw_queue_smart.sp_queuesmart_mp3_consolidate`(DATE ''" + process_date + "'');"}'
                       useLegacySql: false
                       priority: INTERACTIVE
+                  labels:
+                    producto: queuesmart
+                    etapa: consolidate
+                    servicio: bq
+                    pipeline: queuesmart-daily
                   jobReference:
                     location: ${bq_location}
                 connector_params:
@@ -373,6 +378,11 @@ main:
                       query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(DATE ''" + process_date + "'');"}'
                       useLegacySql: false
                       priority: INTERACTIVE
+                  labels:
+                    producto: queuesmart
+                    etapa: stt
+                    servicio: chirp
+                    pipeline: queuesmart-daily
                   jobReference:
                     location: ${bq_location}
                 # STT por lotes (~200 audios) puede pasar de 30 min; default conector = 1800s
@@ -446,6 +456,11 @@ main:
                       query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_audio_analisis_ia`(DATE ''" + process_date + "'', NULL);"}'
                       useLegacySql: false
                       priority: INTERACTIVE
+                  labels:
+                    producto: queuesmart
+                    etapa: gemini
+                    servicio: flash-2-5
+                    pipeline: queuesmart-daily
                   jobReference:
                     location: ${bq_location}
                 connector_params:

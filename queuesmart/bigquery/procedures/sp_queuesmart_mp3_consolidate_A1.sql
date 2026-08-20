@@ -27,6 +27,9 @@ BEGIN
   DECLARE start_date DATE;
   DECLARE v_load_date DATETIME;
 
+  -- Labels de costo: heredan a jobs hijos del SP.
+  SET @@query_label = 'producto:queuesmart,etapa:consolidate,servicio:bq';
+
   SET start_date = DATE_SUB(p_fecha_proceso, INTERVAL 3 DAY);
   SET v_load_date = DATETIME(CURRENT_TIMESTAMP(), 'America/Lima');
 

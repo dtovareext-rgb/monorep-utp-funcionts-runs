@@ -24,6 +24,9 @@ BEGIN
   DECLARE v_prompt_updated_at TIMESTAMP;
   DECLARE v_caso_count INT64;
 
+  -- Labels de costo: heredan a jobs hijos (AI.GENERATE_TABLE / Flash 2.5).
+  SET @@query_label = 'producto:onemarketer,etapa:gemini,servicio:flash-2-5';
+
   SET v_effective_prompt = IFNULL(NULLIF(TRIM(v_prompt_name), ''), 'canal_escrito_prompt');
 
   SET (v_sys_prompt, v_prompt_updated_at) = (

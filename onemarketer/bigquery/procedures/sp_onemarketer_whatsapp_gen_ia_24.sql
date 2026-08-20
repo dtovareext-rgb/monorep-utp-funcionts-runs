@@ -47,6 +47,9 @@ BEGIN
   DECLARE v_batch_num INT64 DEFAULT 0;
   DECLARE v_batch_count INT64;
 
+  -- Labels de costo: heredan a jobs hijos (ML.TRANSCRIBE por lote).
+  SET @@query_label = 'producto:onemarketer,etapa:stt,servicio:chirp';
+
   SET v_fecha_proceso_str = FORMAT_DATE('%Y-%m-%d', v_fecha_proceso);
   SET external_table = '`prd-utpbi-data-operation.adf_speech_analytics.tmp_utp_external_table_onemarketer_whatsapp`';
   SET conexion = '`prd-utpbi-data-operation.US.utp_gen_ia_process`';

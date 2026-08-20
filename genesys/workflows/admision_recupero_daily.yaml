@@ -1,0 +1,254 @@
+# =============================================================================
+# Cloud Workflows — Admisión Recupero (campaña hasta 2026-08-28)
+# =============================================================================
+#
+# Orden:
+#   1) raw_genesys_audios.sp_utpbi_genesys_end_processing_admision_recupero
+#   2) raw_genesys_audios.sp_utpbi_do_ia_speech_admision_recupero
+#
+# process_date: DATE del SP. Default = ayer America/Lima (6:30 del 28 → 2026-08-27).
+# Corte: si hoy Lima > 2026-08-28, no llama SPs (éxito con skipped).
+#
+# Deploy:
+#   gcloud workflows deploy admision-recupero-daily \
+#     --project=prd-utpbi-data-operation \
+#     --location=us-central1 \
+#     --source=genesys/workflows/admision_recupero_daily.yaml \
+#     --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+#
+# Scheduler 6:30 America/Lima (el YAML no tiene cron):
+#   gcloud scheduler jobs create http prd-sch-admision-recupero-daily \
+#     --project=prd-utpbi-data-operation \
+#     --location=us-central1 \
+#     --schedule="30 6 * * *" \
+#     --time-zone="America/Lima" \
+#     --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/admision-recupero-daily/executions" \
+#     --http-method=POST \
+#     --oauth-service-account-email=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+#     --headers="Content-Type=application/json" \
+#     --message-body='{}'
+# =============================================================================
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
+          - bq_location: ${default(map.get(args, "bq_location"), "US")}
+          - process_date: ${default(map.get(args, "process_date"), null)}
+          - end_date: ${default(map.get(args, "end_date"), "2026-08-28")}
+          - lima_today: ${text.substring(time.format(sys.now() - 18000), 0, 10)}
+          - started_at: ${sys.now()}
+          - skipped: false
+          - skip_reason: ""
+          - sp_results: {}
+
+    - resolve_process_date:
+        switch:
+          - condition: ${process_date != null}
+            next: gate_end_date
+          - condition: true
+            steps:
+              - compute_yesterday:
+                  assign:
+                    # 18000 = UTC-5 (hoy Lima) + 86400 = ayer Lima
+                    - process_date: ${text.substring(time.format(sys.now() - 104400), 0, 10)}
+
+    - gate_end_date:
+        switch:
+          - condition: ${lima_today > end_date}
+            steps:
+              - mark_expired:
+                  assign:
+                    - skipped: true
+                    - skip_reason: '${"fuera de ventana: lima_today=" + lima_today + " end_date=" + end_date}'
+              - log_expired:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: '${"admision-recupero SKIP " + skip_reason}'
+              - jump_expired:
+                  next: finalize
+          - condition: true
+            next: log_start
+
+    - log_start:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"admision-recupero START process_date=" + process_date + " lima_today=" + lima_today}'
+
+    # -------------------------------------------------------------------------
+    # 1) Cierre de procesamiento Genesys
+    # -------------------------------------------------------------------------
+    - sp_end_processing:
+        steps:
+          - log_sp1_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_utpbi_genesys_end_processing_admision_recupero(" + process_date + ")"}'
+          - call_sp1:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_genesys_audios.sp_utpbi_genesys_end_processing_admision_recupero`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  labels:
+                    producto: admision-recupero
+                    etapa: end-processing
+                    pipeline: admision-recupero-daily
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 3600
+              result: sp1_job
+          - wait_sp1:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp1:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp1_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp1_status
+          - check_sp1:
+              switch:
+                - condition: ${sp1_status.status.state == "DONE"}
+                  next: sp1_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp1:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp1:
+                        next: poll_sp1
+          - sp1_done_check:
+              switch:
+                - condition: ${"errorResult" in sp1_status.status}
+                  steps:
+                    - log_sp1_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP end_processing FAILED: " + string(default(map.get(map.get(sp1_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp1:
+                        raise:
+                          message: "sp_utpbi_genesys_end_processing_admision_recupero falló"
+                          error: ${sp1_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp1_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP end_processing OK"
+                    - mark_sp1:
+                        assign:
+                          - sp_results["end_processing"]: "ok"
+
+    # -------------------------------------------------------------------------
+    # 2) Speech / Gen IA (solo si el SP 1 terminó OK)
+    # -------------------------------------------------------------------------
+    - sp_speech:
+        steps:
+          - log_sp2_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_utpbi_do_ia_speech_admision_recupero(" + process_date + ")"}'
+          - call_sp2:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_genesys_audios.sp_utpbi_do_ia_speech_admision_recupero`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  labels:
+                    producto: admision-recupero
+                    etapa: speech-ia
+                    pipeline: admision-recupero-daily
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 14400
+              result: sp2_job
+          - wait_sp2:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp2:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp2_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp2_status
+          - check_sp2:
+              switch:
+                - condition: ${sp2_status.status.state == "DONE"}
+                  next: sp2_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp2:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp2:
+                        next: poll_sp2
+          - sp2_done_check:
+              switch:
+                - condition: ${"errorResult" in sp2_status.status}
+                  steps:
+                    - log_sp2_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP do_ia_speech FAILED: " + string(default(map.get(map.get(sp2_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp2:
+                        raise:
+                          message: "sp_utpbi_do_ia_speech_admision_recupero falló"
+                          error: ${sp2_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp2_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP do_ia_speech OK"
+                    - mark_sp2:
+                        assign:
+                          - sp_results["do_ia_speech"]: "ok"
+
+    - finalize:
+        assign:
+          - ended_at: ${sys.now()}
+          - elapsed_seconds: ${ended_at - started_at}
+          - summary:
+              process_date: ${process_date}
+              lima_today: ${lima_today}
+              end_date: ${end_date}
+              skipped: ${skipped}
+              skip_reason: ${skip_reason}
+              sps: ${sp_results}
+              elapsed_seconds: ${elapsed_seconds}
+
+    - log_summary:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"admision-recupero DONE process_date=" + string(process_date) + " skipped=" + string(skipped) + " elapsed_s=" + string(elapsed_seconds)}'
+
+    - return_summary:
+        return: ${summary}

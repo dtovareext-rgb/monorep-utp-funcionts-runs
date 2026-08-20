@@ -34,10 +34,17 @@ Contrato JSON para `sp_queuesmart_audio_analisis_ia` / prompt `canal_counter_pro
 
 ## Reglas clave de marcación
 
-- **Rebate**: todas las objeciones relevantes deben rebatirse (no solo la 1ª).
-- **Rebate efectivo**: cada rebate acorde a su objeción (no basta “hubo rebate”).
-- **Cierre**: no válido = pregunta abierta / agendar / quedar a la espera.
-- **presenta_vacio**: sin demora → `SI` (no `NA`).
+- **Rebate**: solo objeciones reales (resistencia a inscribirse/pagar). Consulta informativa ≠ objeción. Si no hay objeción, `NA` (no rellenar 1..3).
+- **Rebate efectivo**: cada rebate acorde a su objeción; `NA` si rebate es `NA`.
+- **Cierre**: no válido = pregunta abierta / agendar / quedar a la espera. No copiar `SI` del ejemplo.
+- **Saludo**: sin evidencia en el audio → `NO` (castigo). `NA` solo en retoma explícita (no aplica re-saludar). No inventar `SI`.
+- **Espera**: si `[MM:SS]` retrocede (STT), no restar huecos. Reloj monótono: &lt;15 s → `SI`; ≥30 s sin aviso → `NO`.
+- **T_\***: entero del bloque; nunca mayor que el `[MM:SS]` máximo.
+- **tipo_contacto**: `PRIMER_CONTACTO` | `SEGUIMIENTO` (inferir; no copiar el ejemplo).
+- **gestion_principal**: `INFORMACION_CARRERA` | `DOCUMENTOS_REGULAR` | `DOCUMENTOS_CONVALIDACION` | `PAGO_MATRICULA` | `RECORDATORIO_EXAMEN`.
+- **tipificacion / resultado_final_llamada**: solo `RA` | `DS` | `SI`.
+- **plazo documentos**: default `NA`. `NO` solo si se habló de entregar documentos y no dio plazo.
+- **presenta_vacio**: sin demora → `SI` (no `NA`), salvo grabación que arranca en gestión.
 - **sondeo**: sin evidencia cuando aplica → `NO` (no `NA`).
 
 Fuente completa: `queuesmart/prompts/canal_counter_prompt_completo.txt`

@@ -1,4 +1,19 @@
-##################################################
+-- =============================================================================
+-- UPSERT canal_counter_prompt (MERGE — sin dummy)
+-- Fuente: prompts/canal_counter_prompt_completo.txt
+-- Dataset: raw_queue_smart.sys_prompts
+-- Lote QA: refuerzo 2026-08-18 (reloj STT, saludo NO si no hay evidencia, consulta!=objecion, T_MAX)
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   --project_id=prd-utpbi-data-operation \
+--   < queuesmart/bigquery/sqls/update_sys_prompts_canal_counter_4.sql
+-- =============================================================================
+
+MERGE `prd-utpbi-data-operation.raw_queue_smart.sys_prompts` AS T
+USING (
+  SELECT
+    'canal_counter_prompt' AS prompt_name,
+    '''##################################################
 ROL Y CONTEXTO
 ##################################################
 
@@ -1721,3 +1736,26 @@ Antes de puntuar: (1) identifica el hilo principal asesor-prospecto (nombre del 
 (4) Consulta informativa no es objeción. No rellenes objecion_1..3.
 (5) T_* <= [MM:SS] máximo. Saludo: sin evidencia en el texto = NO (castigo). NA solo si es retoma explícita.
 Usa [MM:SS] para T_* (segundos enteros). Solo huecos >= 30 s sin aviso, con reloj monótono, cuentan como espera injustificada.
+''' AS prompt_text,
+    CURRENT_TIMESTAMP() AS updated_at
+) AS S
+ON T.prompt_name = S.prompt_name
+WHEN MATCHED THEN
+  UPDATE SET
+    prompt_text = S.prompt_text,
+    updated_at = S.updated_at
+WHEN NOT MATCHED THEN
+  INSERT (prompt_name, prompt_text, updated_at)
+  VALUES (S.prompt_name, S.prompt_text, S.updated_at);
+
+SELECT
+  prompt_name,
+  updated_at,
+  LENGTH(prompt_text) AS chars,
+  STRPOS(prompt_text, 'RELOJ DESORDENADO') > 0 AS reloj_desordenado,
+  STRPOS(prompt_text, 'eso se CASTIGA') > 0 AS saludo_no_castiga,
+  STRPOS(prompt_text, 'consulta informativa') > 0 AS consulta_no_objecion,
+  STRPOS(prompt_text, 'T_MAX') > 0 AS t_max,
+  STRPOS(prompt_text, '{{transcripcion}}') > 0 AS tiene_placeholder
+FROM `prd-utpbi-data-operation.raw_queue_smart.sys_prompts`
+WHERE prompt_name = 'canal_counter_prompt';
