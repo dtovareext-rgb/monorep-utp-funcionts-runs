@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY config/ config/
-COPY config_loader.py dates.py gcs_copy.py manifest.py prepare.py worker.py main.py ./
+COPY config_loader.py dates.py gcs_copy.py secrets_loader.py manifest.py prepare.py worker.py main.py ./
 
 ENV CONFIG_PATH=/app/config/config.json
 ENV PYTHONUNBUFFERED=1

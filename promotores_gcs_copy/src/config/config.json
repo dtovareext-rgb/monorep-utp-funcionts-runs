@@ -31,5 +31,10 @@
   "batch": {
     "max_files": 5000,
     "min_object_size_bytes": 1
+  },
+  "secrets": {
+    "source": "secret_manager",
+    "secret_resource": "projects/prd-utpbi-data-operation/secrets/PromotoresSourceSa",
+    "version": "latest"
   }
 }

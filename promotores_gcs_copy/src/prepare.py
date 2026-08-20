@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from dates import dest_object_name, resolve_process_date, source_list_prefix
-from gcs_copy import list_source_objects, storage_client
+from gcs_copy import list_source_objects, source_storage_client, storage_client
 from manifest import write_manifest
 
 
@@ -24,7 +24,7 @@ def collect_candidates(config: dict[str, Any], process_date: str) -> tuple[list[
     max_files = int(batch_cfg.get("max_files", 5000))
 
     list_prefix = source_list_prefix(src_cfg.get("prefix", ""), process_date, sync_cfg)
-    src_client = storage_client(src_cfg["project_id"])
+    src_client = source_storage_client(config)
     raw = list_source_objects(src_client, src_cfg["bucket_name"], list_prefix, min_size)
     dest_prefix = dest_cfg.get("destination_prefix", "")
     src_prefix = src_cfg.get("prefix", "")

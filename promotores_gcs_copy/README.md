@@ -2,7 +2,7 @@
 
 Cloud Run Job **GCS → GCS entre proyectos**, mismo patrón prepare/worker que `qs_s3_to_gcs`.
 
-No usa S3, ffmpeg ni BigQuery. Copia con **rewrite** (server-side).
+No usa S3, ffmpeg ni BigQuery. Origen: SA JSON (Secret Manager). Destino: SA del Job.
 
 ## Flujo
 
@@ -44,14 +44,31 @@ Orquesta el workflow `workflows/daily_pipeline.yaml` (prepare → lee count → 
 `date_folder`: lista `gs://origen/{prefix}/{YYYY-MM-DD}/`.  
 Si el origen usa `YYYYMMDD`, pon `gcs_date_folder_format`: `"%Y%m%d"`.
 
+## Credenciales del origen (JSON)
+
+No subas el JSON al repo ni lo pongas en `GOOGLE_APPLICATION_CREDENTIALS` del Job (eso también firmaría el destino).
+
+Súbelo a Secret Manager en **nuestro** proyecto y el Job lo usa solo para leer origen:
+
+```bash
+gcloud secrets create PromotoresSourceSa \
+  --project=prd-utpbi-data-operation \
+  --replication-policy=automatic \
+  --data-file=EL_JSON_QUE_TE_DIERON.json
+
+gcloud secrets add-iam-policy-binding PromotoresSourceSa \
+  --project=prd-utpbi-data-operation \
+  --member="serviceAccount:genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+Con JSON, la copia es stream (lee con esa SA, escribe con la SA del Job). `rewrite` solo aplica si el origen se accede con ADC (IAM cross-project).
+
 ## IAM
 
-La SA del Job (vive en el proyecto destino) necesita:
-
-- **Destino:** `roles/storage.objectAdmin` en el bucket destino
-- **Origen (otro proyecto):** `roles/storage.objectViewer` (o `objectAdmin`) en el bucket origen
-
-El script de deploy solo otorga el IAM del destino.
+- **Destino:** SA del Job = `roles/storage.objectAdmin`
+- **Secret:** SA del Job = `roles/secretmanager.secretAccessor` sobre `PromotoresSourceSa`
+- **Origen:** ya viene en el JSON; no hace falta IAM extra en el otro proyecto
 
 ## Deploy (Cloud Build)
 
