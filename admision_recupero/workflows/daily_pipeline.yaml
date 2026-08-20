@@ -3,26 +3,26 @@
 # =============================================================================
 #
 # Orden:
-#   1) raw_genesys_audios.sp_utpbi_genesys_end_processing_admision_recupero
-#   2) raw_genesys_audios.sp_utpbi_do_ia_speech_admision_recupero
+#   1) raw_genesys_audios.sp_utpbi_genesys_end_processing_admision_recupero(v_fecha_proceso)
+#   2) raw_genesys_audios.sp_utpbi_do_ia_speech_admision_recupero(v_fecha_proceso)
 #
-# process_date: DATE del SP. Default = ayer America/Lima (6:30 del 28 → 2026-08-27).
+# process_date: único argumento DATE. Default = ayer America/Lima (6:30 del 28 → 2026-08-27).
 # Corte: si hoy Lima > 2026-08-28, no llama SPs (éxito con skipped).
 #
-# Deploy:
-#   gcloud workflows deploy admision-recupero-daily \
+# Deploy (desde esta carpeta, daily_pipeline.yaml en cwd):
+#   gcloud workflows deploy prd-utpbi-admision-recupero-daily \
 #     --project=prd-utpbi-data-operation \
 #     --location=us-central1 \
-#     --source=genesys/workflows/admision_recupero_daily.yaml \
+#     --source=daily_pipeline.yaml \
 #     --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
 #
 # Scheduler 6:30 America/Lima (el YAML no tiene cron):
-#   gcloud scheduler jobs create http prd-sch-admision-recupero-daily \
+#   gcloud scheduler jobs create http prd-sch-admision-recupero \
 #     --project=prd-utpbi-data-operation \
 #     --location=us-central1 \
 #     --schedule="30 6 * * *" \
 #     --time-zone="America/Lima" \
-#     --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/admision-recupero-daily/executions" \
+#     --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/prd-utpbi-admision-recupero-daily/executions" \
 #     --http-method=POST \
 #     --oauth-service-account-email=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
 #     --headers="Content-Type=application/json" \
@@ -39,6 +39,9 @@ main:
           - process_date: ${default(map.get(args, "process_date"), null)}
           - end_date: ${default(map.get(args, "end_date"), "2026-08-28")}
           - lima_today: ${text.substring(time.format(sys.now() - 18000), 0, 10)}
+          # Workflows no compara string con >; YYYY-MM-DD → YYYYMMDD int
+          - lima_today_num: ${int(text.replace_all(lima_today, "-", ""))}
+          - end_date_num: ${int(text.replace_all(end_date, "-", ""))}
           - started_at: ${sys.now()}
           - skipped: false
           - skip_reason: ""
@@ -57,7 +60,7 @@ main:
 
     - gate_end_date:
         switch:
-          - condition: ${lima_today > end_date}
+          - condition: ${lima_today_num > end_date_num}
             steps:
               - mark_expired:
                   assign:
