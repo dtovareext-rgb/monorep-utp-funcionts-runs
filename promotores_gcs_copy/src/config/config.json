@@ -1,0 +1,35 @@
+{
+  "source": {
+    "project_id": "REPLACE_SOURCE_PROJECT",
+    "bucket_name": "REPLACE_SOURCE_BUCKET",
+    "prefix": ""
+  },
+  "dest": {
+    "project_id": "prd-utpbi-data-operation",
+    "bucket_name": "REPLACE_DEST_BUCKET",
+    "destination_prefix": "promotores/",
+    "state_object": "state/gcs_copy_last_sync.json",
+    "region": "us-central1",
+    "cloud_run_job_name": "prd-utpbi-promotores-gcs-copy",
+    "service_account_email": "genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com",
+    "scheduler_name": "prd-sch-promotores-gcs-copy",
+    "schedule": "0 6 * * *",
+    "schedule_timezone": "America/Lima"
+  },
+  "job": {
+    "role": "worker",
+    "manifest_prefix": "state/manifests",
+    "max_parallelism": 10
+  },
+  "sync": {
+    "mode": "daily_yesterday",
+    "timezone": "America/Lima",
+    "layout": "date_folder",
+    "gcs_date_folder_format": "%Y-%m-%d",
+    "skip_if_exists_in_dest": true
+  },
+  "batch": {
+    "max_files": 5000,
+    "min_object_size_bytes": 1
+  }
+}
