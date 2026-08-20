@@ -1,0 +1,430 @@
+# =============================================================================
+# Cloud Workflows — Pipeline diario Genesys Admisión
+#
+# 1) end_processing (CRM + prompt) — una vez
+# 2) COUNT audios >= 60s (fecha_descarga)
+# 3) init: DELETE hist IA del día
+# 4) loop: do_ia_batch(offset, batch_size) — clasif + PECUF + PECNEG
+# 5) PRD al final
+#
+# Args opcionales:
+#   process_date     YYYY-MM-DD (default: ayer America/Lima)
+#   batch_size       default 20
+#   start_offset     default 0 (reproceso desde un lote)
+#   skip_init        true = no borrar hist del día (reanudar)
+#   skip_end_processing  true = no rearmar CRM/prompt
+#
+# Deploy:
+#   gcloud workflows deploy genesys-admision-daily \
+#     --location=us-central1 \
+#     --source=genesys/workflows/daily_pipeline.yaml \
+#     --project=prd-utpbi-data-operation \
+#     --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+#
+# Run:
+#   gcloud workflows run genesys-admision-daily --location=us-central1 --data='{}'
+#   gcloud workflows run genesys-admision-daily --location=us-central1 \
+#     --data='{"process_date":"2026-08-18","batch_size":20}'
+#
+# Reanudar si falló el lote offset=40:
+#   {"process_date":"2026-08-18","start_offset":40,"skip_init":true,"skip_end_processing":true}
+#
+# Scheduler 7:00 America/Lima → procesa ayer (body {}):
+#   gcloud scheduler jobs create http prd-sch-genesys-admision-daily \
+#     --project=prd-utpbi-data-operation \
+#     --location=us-central1 \
+#     --schedule="0 7 * * *" \
+#     --time-zone="America/Lima" \
+#     --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/genesys-admision-daily/executions" \
+#     --http-method=POST \
+#     --oauth-service-account-email=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+#     --message-body='{}'
+# =============================================================================
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
+          - bq_location: ${default(map.get(args, "bq_location"), "US")}
+          - batch_size: ${int(default(map.get(args, "batch_size"), 20))}
+          - start_offset: ${int(default(map.get(args, "start_offset"), 0))}
+          - skip_init: ${default(map.get(args, "skip_init"), false)}
+          - skip_end_processing: ${default(map.get(args, "skip_end_processing"), false)}
+          - process_date: ${default(map.get(args, "process_date"), null)}
+          - started_at: ${sys.now()}
+          - batches_ok: 0
+          - sp_results: {}
+
+    - resolve_process_date:
+        switch:
+          - condition: ${process_date != null}
+            next: log_start
+          - condition: true
+            steps:
+              - compute_yesterday:
+                  assign:
+                    # Lima = UTC-5. sys.now()-18000 ≈ Lima; -86400 = ayer.
+                    - process_date: ${text.substring(time.format(sys.now() - 104400), 0, 10)}
+
+    - log_start:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"genesys admision START process_date=" + process_date + " batch_size=" + string(batch_size) + " start_offset=" + string(start_offset)}'
+
+    - maybe_end_processing:
+        switch:
+          - condition: ${skip_end_processing == true}
+            next: count_ia
+          - condition: true
+            next: sp_end_processing
+
+    - sp_end_processing:
+        steps:
+          - log_ep:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_utpbi_genesys_end_processing_admision_v2(" + process_date + ")"}'
+          - call_ep:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_admision
+                    sp: end_processing_v2
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_genesys_audios.sp_utpbi_genesys_end_processing_admision_v2`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 3600
+              result: ep_job
+          - wait_ep:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_ep:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${ep_job.jobReference.jobId}
+                location: ${bq_location}
+              result: ep_status
+          - check_ep:
+              switch:
+                - condition: ${ep_status.status.state == "DONE"}
+                  next: ep_done
+                - condition: true
+                  steps:
+                    - sleep_ep:
+                        call: sys.sleep
+                        args:
+                          seconds: 10
+                    - loop_ep:
+                        next: poll_ep
+          - ep_done:
+              switch:
+                - condition: ${"errorResult" in ep_status.status}
+                  steps:
+                    - log_ep_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"end_processing FAILED: " + string(default(map.get(map.get(ep_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_ep:
+                        raise:
+                          message: "sp_utpbi_genesys_end_processing_admision_v2 falló"
+                          error: ${ep_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_ep_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "end_processing OK"
+                    - mark_ep:
+                        assign:
+                          - sp_results["end_processing"]: "ok"
+
+    - count_ia:
+        call: googleapis.bigquery.v2.jobs.query
+        args:
+          projectId: ${project_id}
+          body:
+            query: '${"SELECT COUNT(*) AS n FROM `" + project_id + ".raw_genesys_audios.genesys_audios_admision_prompt_raw` WHERE fecha_descarga = DATE ''" + process_date + "'' AND audio_duracion_segundos >= 60 AND uri IS NOT NULL"}'
+            useLegacySql: false
+            location: ${bq_location}
+            timeoutMs: 60000
+            labels:
+              pipeline: genesys_admision
+              sp: count_ia
+        result: count_job
+
+    - parse_count:
+        assign:
+          - ia_count: ${int(count_job.rows[0].f[0].v)}
+
+    - log_count:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"Candidatos IA (>=60s) = " + string(ia_count) + " process_date=" + process_date}'
+
+    - maybe_skip_ia:
+        switch:
+          - condition: ${ia_count == 0}
+            steps:
+              - log_empty:
+                  call: sys.log
+                  args:
+                    severity: WARNING
+                    text: "Sin audios >= 60s — se omite IA y PRD"
+              - mark_empty:
+                  assign:
+                    - sp_results["ia"]: "skipped_empty"
+              - skip_to_end:
+                  next: finalize
+          - condition: true
+            next: maybe_init
+
+    - maybe_init:
+        switch:
+          - condition: ${skip_init == true}
+            next: init_loop
+          - condition: true
+            next: sp_init
+
+    - sp_init:
+        steps:
+          - log_init:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: do_ia_speech_admision_init(" + process_date + ")"}'
+          - call_init:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_admision
+                    sp: do_ia_init
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_genesys_audios.sp_utpbi_do_ia_speech_admision_init`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 600
+              result: init_job
+          - wait_init:
+              call: sys.sleep
+              args:
+                seconds: 3
+          - poll_init:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${init_job.jobReference.jobId}
+                location: ${bq_location}
+              result: init_status
+          - check_init:
+              switch:
+                - condition: ${init_status.status.state == "DONE"}
+                  next: init_done
+                - condition: true
+                  steps:
+                    - sleep_init:
+                        call: sys.sleep
+                        args:
+                          seconds: 5
+                    - loop_init:
+                        next: poll_init
+          - init_done:
+              switch:
+                - condition: ${"errorResult" in init_status.status}
+                  steps:
+                    - raise_init:
+                        raise:
+                          message: "sp_utpbi_do_ia_speech_admision_init falló"
+                          error: ${init_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - mark_init:
+                        assign:
+                          - sp_results["init"]: "ok"
+
+    - init_loop:
+        assign:
+          - offset: ${start_offset}
+
+    - loop_batches:
+        switch:
+          - condition: ${offset < ia_count}
+            next: sp_batch
+          - condition: true
+            next: sp_prd
+
+    - sp_batch:
+        steps:
+          - log_batch:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP batch offset=" + string(offset) + " size=" + string(batch_size) + " of " + string(ia_count)}'
+          - call_batch:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_admision
+                    sp: do_ia_batch
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_genesys_audios.sp_utpbi_do_ia_speech_admision_batch`(DATE ''" + process_date + "'', " + string(offset) + ", " + string(batch_size) + ");"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 7200
+              result: batch_job
+          - wait_batch:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_batch:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${batch_job.jobReference.jobId}
+                location: ${bq_location}
+              result: batch_status
+          - check_batch:
+              switch:
+                - condition: ${batch_status.status.state == "DONE"}
+                  next: batch_done
+                - condition: true
+                  steps:
+                    - sleep_batch:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_poll_batch:
+                        next: poll_batch
+          - batch_done:
+              switch:
+                - condition: ${"errorResult" in batch_status.status}
+                  steps:
+                    - log_batch_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"IA batch FAILED offset=" + string(offset) + " — reanudar con start_offset=" + string(offset) + " skip_init=true skip_end_processing=true"}'
+                    - raise_batch:
+                        raise:
+                          message: "sp_utpbi_do_ia_speech_admision_batch falló"
+                          offset: ${offset}
+                          error: ${batch_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - bump:
+                        assign:
+                          - offset: ${offset + batch_size}
+                          - batches_ok: ${batches_ok + 1}
+                          - sp_results["batches_ok"]: ${batches_ok}
+                    - next_batch:
+                        next: loop_batches
+
+    - sp_prd:
+        steps:
+          - log_prd:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: do_ia_speech_admision_prd(" + process_date + ")"}'
+          - call_prd:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_admision
+                    sp: do_ia_prd
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_genesys_audios.sp_utpbi_do_ia_speech_admision_prd`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 1800
+              result: prd_job
+          - wait_prd:
+              call: sys.sleep
+              args:
+                seconds: 3
+          - poll_prd:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${prd_job.jobReference.jobId}
+                location: ${bq_location}
+              result: prd_status
+          - check_prd:
+              switch:
+                - condition: ${prd_status.status.state == "DONE"}
+                  next: prd_done
+                - condition: true
+                  steps:
+                    - sleep_prd:
+                        call: sys.sleep
+                        args:
+                          seconds: 8
+                    - loop_prd:
+                        next: poll_prd
+          - prd_done:
+              switch:
+                - condition: ${"errorResult" in prd_status.status}
+                  steps:
+                    - raise_prd:
+                        raise:
+                          message: "sp_utpbi_do_ia_speech_admision_prd falló"
+                          error: ${prd_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - mark_prd:
+                        assign:
+                          - sp_results["prd"]: "ok"
+
+    - finalize:
+        assign:
+          - ended_at: ${sys.now()}
+          - elapsed_seconds: ${ended_at - started_at}
+          - summary:
+              process_date: ${process_date}
+              ia_count: ${default(ia_count, 0)}
+              batch_size: ${batch_size}
+              batches_ok: ${batches_ok}
+              sps: ${sp_results}
+              elapsed_seconds: ${elapsed_seconds}
+
+    - log_summary:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"genesys admision OK process_date=" + string(process_date) + " ia_count=" + string(default(ia_count, 0)) + " batches_ok=" + string(batches_ok) + " elapsed_s=" + string(elapsed_seconds)}'
+
+    - return_summary:
+        return: ${summary}
