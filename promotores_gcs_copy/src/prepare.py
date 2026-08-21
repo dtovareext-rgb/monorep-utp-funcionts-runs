@@ -37,6 +37,7 @@ def collect_candidates(config: dict[str, Any], process_date: str) -> tuple[list[
                 "key": item["key"],
                 "size": item["size"],
                 "file_name": item["file_name"],
+                "content_type": item.get("content_type"),
                 "dest_key": dest_key,
                 "src_uri": f"gs://{src_cfg['bucket_name']}/{item['key']}",
                 "dst_uri": f"gs://{dest_cfg['bucket_name']}/{dest_key}",

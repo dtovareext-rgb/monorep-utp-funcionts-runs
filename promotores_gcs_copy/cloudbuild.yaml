@@ -18,7 +18,8 @@
 #   _LOCATION=us-central1
 #   _SOURCE_DIR=promotores_gcs_copy/src
 #
-# IAM: SA del job = objectAdmin en destino; objectViewer en bucket origen (otro proyecto).
+# IAM: SA del job = objectAdmin en destino; secretAccessor en PromotoresSourceSa;
+#       bigquery.dataEditor en raw_cita_promotor + jobUser en el proyecto.
 substitutions:
   _LOCATION: 'us-central1'
   _SOURCE_DIR: 'promotores_gcs_copy/src'
@@ -28,8 +29,8 @@ substitutions:
   _MAX_RETRIES: '1'
   _PARALLELISM: '10'
   _CONFIG_PATH: '/app/config/config.json'
-  _SOURCE_PREFIX: ''
-  _DEST_PREFIX: 'promotores/'
+  _SOURCE_PREFIX: 'audios'
+  _DEST_PREFIX: 'audios/'
 
 steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'

@@ -7,14 +7,17 @@ No usa S3, ffmpeg ni BigQuery. Origen: SA JSON (Secret Manager). Destino: SA del
 ## Flujo
 
 ```
-Proyecto A  gs://origen/{prefix}/{YYYY-MM-DD}/archivo
+Origen   gs://citapromotor-utp.firebasestorage.app/audios/{DD-MM-YYYY}/{uuid}/{uuid}.m4a
                     │
             prepare (lista) → manifiesto en destino
                     │
-            worker  (1 task = 1 objeto, rewrite)
+            worker  (1 task = 1 objeto, stream copy)
                     ▼
-Proyecto B  gs://destino/{destination_prefix}/{YYYY-MM-DD}/archivo
+Destino  gs://prd-utp-stg-citapromotor-9bd1430535b8/audios/{DD-MM-YYYY}/{uuid}/{uuid}.m4a
 ```
+
+`SYNC_PROCESS_DATE` interno = `YYYY-MM-DD` (ayer Lima).
+Carpeta en GCS = `gcs_date_folder_format` `%d-%m-%Y` → ej. 22-ago 04:00 Lima → procesa `2026-08-21` → lista `audios/21-08-2026/`.
 
 Roles:
 
@@ -36,13 +39,13 @@ Orquesta el workflow `workflows/daily_pipeline.yaml` (prepare → lee count → 
 | `SOURCE_PREFIX` | Prefijo opcional en origen |
 | `DEST_PROJECT_ID` / `GCP_PROJECT_ID` | Proyecto del Job y destino |
 | `DEST_BUCKET_NAME` / `GCP_BUCKET_NAME` | Bucket destino (manifiesto + copias) |
-| `DEST_PREFIX` | Prefijo destino (default `promotores/`) |
+| `DEST_PREFIX` | Prefijo destino (default `audios/`) |
 | `SYNC_PROCESS_DATE` | `YYYY-MM-DD` (si no, ayer Lima) |
 | `SYNC_MODE` | `daily_yesterday` o `backfill_all` |
 | `SYNC_LAYOUT` | `date_folder` (default) o `flat` |
 
-`date_folder`: lista `gs://origen/{prefix}/{YYYY-MM-DD}/`.  
-Si el origen usa `YYYYMMDD`, pon `gcs_date_folder_format`: `"%Y%m%d"`.
+`date_folder`: lista `gs://origen/{prefix}/{carpeta-fecha}/`.  
+Cita Promotor usa `dd-mm-yyyy` → `"gcs_date_folder_format": "%d-%m-%Y"`.
 
 ## Credenciales del origen (JSON)
 
@@ -69,6 +72,25 @@ Con JSON, la copia es stream (lee con esa SA, escribe con la SA del Job). `rewri
 - **Destino:** SA del Job = `roles/storage.objectAdmin`
 - **Secret:** SA del Job = `roles/secretmanager.secretAccessor` sobre `PromotoresSourceSa`
 - **Origen:** ya viene en el JSON; no hace falta IAM extra en el otro proyecto
+- **BigQuery:** SA del Job = `roles/bigquery.dataEditor` en `raw_cita_promotor` + `roles/bigquery.jobUser` en el proyecto
+
+## Catálogo BigQuery
+
+Tras cada copia (o skip si ya estaba en GCS), el worker hace **ffprobe** (solo metadata)
+e inserta una fila en:
+
+`prd-utpbi-data-operation.raw_cita_promotor.hist_cita_promotor_audio_catalog`
+
+Campos de audio: `duration_seconds`, `audio_codec`, `sample_rate_hz`, `channels`, `format_name`, `bit_rate`.
+Dedup por `gcs_uri`. DDL: `bigquery/tables/hist_cita_promotor_audio_catalog.sql`
+
+```bash
+bq mk --location=US --dataset prd-utpbi-data-operation:raw_cita_promotor
+bq query --use_legacy_sql=false --location=US --project_id=prd-utpbi-data-operation \
+  < promotores_gcs_copy/bigquery/tables/hist_cita_promotor_audio_catalog.sql
+```
+
+(El Job también puede crear dataset/tabla en runtime vía `ensure_table` si tiene permisos.)
 
 ## Deploy (Cloud Build)
 

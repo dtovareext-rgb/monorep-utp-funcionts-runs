@@ -22,7 +22,7 @@ main:
           - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
           - location: ${default(map.get(args, "location"), "us-central1")}
           - job_name: ${default(map.get(args, "job_name"), "prd-utpbi-promotores-gcs-copy")}
-          - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "")}
+          - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-citapromotor-9bd1430535b8")}
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests")}
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
           - process_date: ${default(map.get(args, "process_date"), null)}
@@ -53,7 +53,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"promotores-gcs-copy START process_date=" + process_date + " job=" + job_name}'
+          text: '${"promotores-gcs-copy START process_date=" + process_date + " job=" + job_name + " bucket=" + gcs_bucket}'
 
     - run_prepare_job:
         call: googleapis.run.v1.namespaces.jobs.run

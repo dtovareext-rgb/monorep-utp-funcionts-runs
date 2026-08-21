@@ -18,7 +18,7 @@ El destino sigue con la SA del Job:
 gcloud secrets create PromotoresSourceSa \
   --project=prd-utpbi-data-operation \
   --replication-policy=automatic \
-  --data-file=EL_JSON_QUE_TE_DIERON.json
+  --data-file=citapromotor-utp-9bd1430535b8.json
 
 
 2) Dar acceso a la SA del Job

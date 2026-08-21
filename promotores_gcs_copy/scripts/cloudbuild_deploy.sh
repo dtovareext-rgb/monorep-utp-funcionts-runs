@@ -79,8 +79,11 @@ if [[ -n "${_DEST_PREFIX}" ]]; then
   ENV_VARS+=",DEST_PREFIX=${_DEST_PREFIX}"
 fi
 
-echo "=== Habilitando APIs ==="
+echo "IAM origen: con JSON en Secret Manager no hace falta objectViewer a genesys."
+echo "IAM BigQuery: dataEditor en raw_cita_promotor + jobUser en el proyecto para ${_SERVICE_ACCOUNT}"
+
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com storage.googleapis.com \
+  secretmanager.googleapis.com bigquery.googleapis.com \
   --project="${_PROJECT_ID}" --quiet
 
 if gcloud storage buckets describe "gs://${_DEST_BUCKET_NAME}" --project="${_PROJECT_ID}" &>/dev/null; then
@@ -97,9 +100,6 @@ gcloud storage buckets add-iam-policy-binding "gs://${_DEST_BUCKET_NAME}" \
   --member="serviceAccount:${_SERVICE_ACCOUNT}" \
   --role="roles/storage.objectAdmin" \
   --quiet
-
-echo "IAM origen: en el proyecto ${_SOURCE_PROJECT_ID} otorga objectViewer"
-echo "  a ${_SERVICE_ACCOUNT} sobre gs://${_SOURCE_BUCKET_NAME} (no se hace desde este script)."
 
 # shellcheck disable=SC2088
 echo "=== gcloud run jobs deploy ${_JOB_NAME} ==="
