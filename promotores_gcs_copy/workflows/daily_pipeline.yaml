@@ -4,7 +4,18 @@
 #
 # 1) Job role=prepare (1 task) → manifiesto en bucket destino
 # 2) Lee count del meta
-# 3) Job role=worker (tasks=count) → rewrite 1 objeto por task
+# 3) Job role=worker (tasks=count) → copia + catálogo BQ
+# 4) SP raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor(process_date)
+#
+# Args opcionales:
+#   process_date   YYYY-MM-DD (default: ayer Lima)
+#   skip_ingest    true = solo SP gen_ia (sin prepare/worker)
+#
+# Solo SP últimos 3 días (ej. 22–24 ago):
+#   for d in 2026-08-22 2026-08-23 2026-08-24; do
+#     gcloud workflows run prd-utpbi-promotores-gcs-copy --location=us-central1 \
+#       --data="{\"process_date\":\"$d\",\"skip_ingest\":true}"
+#   done
 #
 # Deploy:
 #   gcloud workflows deploy prd-utpbi-promotores-gcs-copy \
@@ -21,13 +32,16 @@ main:
         assign:
           - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
           - location: ${default(map.get(args, "location"), "us-central1")}
+          - bq_location: ${default(map.get(args, "bq_location"), "US")}
           - job_name: ${default(map.get(args, "job_name"), "prd-utpbi-promotores-gcs-copy")}
           - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-citapromotor-9bd1430535b8")}
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests")}
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
           - process_date: ${default(map.get(args, "process_date"), null)}
+          - skip_ingest: ${default(map.get(args, "skip_ingest"), false)}
           - started_at: ${sys.now()}
           - ingest_summary: {}
+          - sp_results: {}
 
     - resolve_process_date:
         switch:
@@ -53,7 +67,14 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"promotores-gcs-copy START process_date=" + process_date + " job=" + job_name + " bucket=" + gcs_bucket}'
+          text: '${"promotores-gcs-copy START process_date=" + process_date + " skip_ingest=" + string(skip_ingest) + " job=" + job_name}'
+
+    - maybe_skip_ingest:
+        switch:
+          - condition: ${skip_ingest == true}
+            next: sp_gen_ia
+          - condition: true
+            next: run_prepare_job
 
     - run_prepare_job:
         call: googleapis.run.v1.namespaces.jobs.run
@@ -188,7 +209,79 @@ main:
                     message: "Copia parcial"
                     ingest: ${ingest_summary}
           - condition: true
-            next: finalize
+            next: sp_gen_ia
+
+    - sp_gen_ia:
+        steps:
+          - log_sp:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_utpbi_gen_ia_cita_promotor(" + process_date + ")"}'
+          - call_sp:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: cita_promotor
+                    sp: gen_ia
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 14400
+              result: sp_job
+          - wait_sp:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp_status
+          - check_sp:
+              switch:
+                - condition: ${sp_status.status.state == "DONE"}
+                  next: sp_done
+                - condition: true
+                  steps:
+                    - sleep_sp:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp:
+                        next: poll_sp
+          - sp_done:
+              switch:
+                - condition: ${"errorResult" in sp_status.status}
+                  steps:
+                    - log_sp_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP gen_ia FAILED: " + string(default(map.get(map.get(sp_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp:
+                        raise:
+                          message: "sp_utpbi_gen_ia_cita_promotor falló"
+                          error: ${sp_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP gen_ia OK"
+                    - mark_sp:
+                        assign:
+                          - sp_results["gen_ia"]: "ok"
 
     - finalize:
         assign:
@@ -196,7 +289,14 @@ main:
           - summary:
               process_date: ${process_date}
               ingest: ${ingest_summary}
+              sps: ${sp_results}
               elapsed_seconds: ${elapsed_seconds}
+
+    - log_summary:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"promotores-gcs-copy OK process_date=" + string(process_date) + " elapsed_s=" + string(elapsed_seconds)}'
 
     - return_summary:
         return: ${summary}
