@@ -73,8 +73,7 @@ Con impersonate (si aplica):
 
   bq query --use_legacy_sql=false --location=US \
     --project_id=prd-utpbi-data-operation \
-    --impersonate_service_account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
-    < queuesmart/bigquery/procedures/sp_queuesmart_mp3_consolidate_A1.sql
+    < backfill_tickets_nulls_hoy.sql
 
 Verificar que ya no hay CALL anidados:
 
@@ -113,7 +112,7 @@ Ejemplo día completo (ingesta + 3 SPs):
     --location=us-central1 \
     --impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
     --data='{
-      "process_date": "2026-08-07",
+      "process_date": "2026-08-05",
       "project_id": "prd-utpbi-data-operation",
       "job_name": "prd-utpbi-s3-to-gcs-micro-batch",
       "gcs_bucket": "prd-utp-stg-queuesmart",

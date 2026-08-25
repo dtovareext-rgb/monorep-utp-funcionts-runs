@@ -9,6 +9,7 @@ Archivos clave
   onemarketer/workflows/daily_pipeline.yaml
   onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia_24.sql
   onemarketer/bigquery/procedures/sp_onemarketer_caso_conversacion_ia_23.sql
+  onemarketer/bigquery/procedures/sp_onemarketer_backfill_atenciones.sql
   onemarketer/src/   (Cloud Function ETL)
 
 SA Workflow: genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
@@ -23,6 +24,7 @@ BQ location (SPs Gen IA): US
 
 A) Cloud Workflow orquesta el día completo:
    ETL (Cloud Function) → sp_onemarketer_whatsapp_gen_ia → sp_onemarketer_caso_conversacion_ia
+   → sp_onemarketer_backfill_atenciones (skill/channel; reporteAtenciones ~2 días tarde)
 
 B) SP gen_ia:
    - ML.TRANSCRIBE por LOTES de 25 (anti-timeout)
@@ -68,7 +70,7 @@ Verificar: el SP NO debe terminar con CALL sp_onemarketer_caso_conversacion_ia.
   gcloud workflows deploy onemarketer-daily-pipeline \
     --project=prd-utpbi-data-operation \
     --location=us-central1 \
-    --source=onemarketer/workflows/daily_pipeline.yaml \
+    --source=daily_pipeline.yaml \
     --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
 
 
@@ -145,3 +147,42 @@ Medir 1–2 semanas:
   - ¿Quedan medios pendientes por max_files_per_run=500?
   - ¿Timeout / errores frecuentes en la CF?
 Si sí → diseñar Job prepare/worker (como qs_s3_to_gcs). Si no → quedarse así.
+
+
+================================================================================
+8) BACKFILL reporteAtenciones (skill tardío)
+================================================================================
+
+reporteAtenciones suele cargar fecha_evento con ~2 días de lag (ej. job del 25
+con fecha_evento 23). Gemini no espera esa tabla: inserta el hist y el backfill
+pega después por idcase = SAFE_CAST(id_case AS INT64).
+
+Columnas nuevas en hist raw/prd:
+  skill, channel, category_description, agent_open, agent_close,
+  start_time, end_time, time_wait_operator
+  asesor_user  ← reporte_chats.user (último operador/asesor <> robot;
+                 si no hay humano, NULL — p.ej. fuera de horario)
+
+Desplegar (una vez ALTER + SP, luego workflow):
+
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    --impersonate_service_account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    < onemarketer/bigquery/sqls/alter_hist_caso_atenciones_cols.sql
+
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    --impersonate_service_account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    < onemarketer/bigquery/procedures/sp_onemarketer_backfill_atenciones.sql
+
+  gcloud workflows deploy onemarketer-daily-pipeline ...
+
+One-shot (todos los skill NULL, sin ventana 14 días):
+
+  bq query --use_legacy_sql=false --location=US \
+    --project_id=prd-utpbi-data-operation \
+    --impersonate_service_account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+    < onemarketer/bigquery/sqls/backfill_atenciones_skill_nulls_hoy.sql
+
+El SP diario mira process_date − 14 días: actualiza skill NULL (atenciones)
+y asesor_user NULL (chats, mismo día). Lo de solo-bot queda asesor_user NULL.

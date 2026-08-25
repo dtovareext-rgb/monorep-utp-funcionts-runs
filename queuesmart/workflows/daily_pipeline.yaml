@@ -5,8 +5,9 @@
 # Orquesta:
 #   1) Job S3→GCS (prepare + worker)
 #   2) SP consolidate
-#   3) SP gen_ia (ML.TRANSCRIBE por lotes de 25 — anti-timeout)
-#   4) SP analisis Gemini
+#   3) SP backfill tickets tardíos (database NULL — quitar cuando el proveedor entregue al día)
+#   4) SP gen_ia (ML.TRANSCRIBE por lotes de 25 — anti-timeout)
+#   5) SP analisis Gemini
 #
 # invoke_downstream_sps: true (default) → consolidate + gen_ia + analisis
 #
@@ -350,6 +351,83 @@ main:
                     - mark_sp1:
                         assign:
                           - sp_results["consolidate"]: "ok"
+
+    # -------------------------------------------------------------------------
+    # 4b) SP backfill tickets tardíos (después de consolidate; sin CALL anidado)
+    # -------------------------------------------------------------------------
+    - sp_backfill_tickets:
+        steps:
+          - log_sp1b_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_queuesmart_mp3_backfill_tickets(" + process_date + ")"}'
+          - call_sp1b:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".raw_queue_smart.sp_queuesmart_mp3_backfill_tickets`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  labels:
+                    producto: queuesmart
+                    etapa: backfill-tickets
+                    servicio: bq
+                    pipeline: queuesmart-daily
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 3600
+              result: sp1b_job
+          - wait_sp1b:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp1b:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp1b_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp1b_status
+          - check_sp1b:
+              switch:
+                - condition: ${sp1b_status.status.state == "DONE"}
+                  next: sp1b_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp1b:
+                        call: sys.sleep
+                        args:
+                          seconds: 10
+                    - loop_sp1b:
+                        next: poll_sp1b
+          - sp1b_done_check:
+              switch:
+                - condition: ${"errorResult" in sp1b_status.status}
+                  steps:
+                    - log_sp1b_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP backfill_tickets FAILED: " + string(default(map.get(map.get(sp1b_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp1b:
+                        raise:
+                          message: "sp_queuesmart_mp3_backfill_tickets falló"
+                          error: ${sp1b_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp1b_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP backfill_tickets OK"
+                    - mark_sp1b:
+                        assign:
+                          - sp_results["backfill_tickets"]: "ok"
 
     - maybe_downstream:
         switch:

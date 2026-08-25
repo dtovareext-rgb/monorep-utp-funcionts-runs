@@ -116,7 +116,18 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_onem
   actitud_comercial_descripcion STRING,
   afecta_imagen_negocio_score STRING,
   afecta_imagen_negocio_descripcion STRING,
-  load_date DATETIME
+  load_date DATETIME,
+  -- reporteAtenciones (backfill por idcase; llega ~2 días tarde)
+  skill STRING,
+  channel STRING,
+  category_description STRING,
+  agent_open STRING,
+  agent_close STRING,
+  start_time TIMESTAMP,
+  end_time TIMESTAMP,
+  time_wait_operator STRING,
+  -- reporte_chats.user (último operador/asesor distinto de robot)
+  asesor_user STRING
 )
 PARTITION BY process_date
 OPTIONS (

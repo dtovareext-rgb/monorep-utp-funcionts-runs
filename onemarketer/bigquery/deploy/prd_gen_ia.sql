@@ -23,9 +23,16 @@
 -- bq query --use_legacy_sql=false --location=US \
 --   < onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia_24.sql
 --
+-- -- Columnas skill/channel desde reporteAtenciones (idempotente):
+-- bq query --use_legacy_sql=false --location=US \
+--   < onemarketer/bigquery/sqls/alter_hist_caso_atenciones_cols.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < onemarketer/bigquery/procedures/sp_onemarketer_backfill_atenciones.sql
+--
 -- Workflow (recomendado):
 --   gcloud workflows deploy onemarketer-daily-pipeline ...
---   (ETL CF → SP STT lotes → SP Gemini)
+--   (ETL CF → SP STT lotes → SP Gemini → SP backfill atenciones)
 --
 -- Manual etapa 1 (STT; ya NO llama etapa 2):
 --   CALL `…sp_onemarketer_whatsapp_gen_ia`(DATE '2026-06-22');

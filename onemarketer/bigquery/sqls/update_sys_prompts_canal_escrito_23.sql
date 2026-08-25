@@ -1,9 +1,12 @@
 -- =============================================================================
 -- MERGE canal_escrito_prompt (idempotente)
--- Lote QA Excel REVISION DE CASOS OM (amarillo) — listo para deploy
+-- Incluye ancla Clasification (HTTPPOST CIERRA CASO) → tipificacion / detalle
 --
 -- bash onemarketer/bigquery/deploy/deploy_canal_escrito_23.sh
+-- o solo el prompt:
 -- bq query --use_legacy_sql=false --location=us-central1 \
+--   --project_id=prd-utpbi-data-operation \
+--   --impersonate_service_account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
 --   < onemarketer/bigquery/sqls/update_sys_prompts_canal_escrito_23.sql
 -- =============================================================================
 
@@ -1224,6 +1227,31 @@ Familias:
   - El caso se cierra por el límite de 4 minutos del canal mientras aún había diálogo.
   En esos casos usa RA (detalle típico: RA_VOLVER_A_ESCRIBIR). `tipificacion_detalle` NUNCA es "NA".
 
+ANCLA OBLIGATORIA — cierre OneMarketer (`Clasification`):
+En el hilo busca `[sistema] HTTPPOST DATA CIERRA CASO` (campo `Clasification`) o `RESPONSE CIERRA CASO`. Ese texto es la tipificación con la que el asesor cerró el caso (equivale a `category_description` de reporteAtenciones). ÚSALO como ancla de `tipificacion` / `tipificacion_detalle`, salvo las excepciones.
+Comparar ignorando mayúsculas, tildes y espacios extra.
+
+Mapeo cerrado (Clasification → familia / detalle):
+- Cliente dejo de escribir / Cliente dejó de escribir → CDE / CDE
+- RA- Volver a escribir / RA Volver a escribir → RA / RA_VOLVER_A_ESCRIBIR
+- Conversacion no concretada / Conversación no concretada → RA / RA_VOLVER_A_ESCRIBIR
+- Cierre Timeout → RA / RA_VOLVER_A_ESCRIBIR
+- Descalificado: 4to de Secundaria (o 4to secundaria) → DS / DS_MENOR_4TO_SECUNDARIA
+- Descalificado: Beca 18 / Beca18 → DS / DS_BECA_18
+- Descalificado: Ya es alumno / Ya es alumno UTP → DS / DS_YA_ES_ALUMNO_UTP
+- Descalificado: Motivos economicos / Motivos económicos → DS / DS_MOTIVOS_ECONOMICOS
+- Descalificado: No hay carrera de interes → DS / DS_NO_HAY_CARRERA_DE_INTERES
+- Descalificado: Por distancias → DS / DS_POR_DISTANCIAS
+- Se inscribirá / SI / Promesa de pago / Inscripción en curso → SI / SI
+- Si Clasification empieza por 'RA-': convierte el resto a un código RA_* del catálogo (espacios y guiones → _). Ej.: 'RA- Conversara con sus padres' → RA_CONVERSARA_CON_SUS_PADRES. Si no calza, RA_VOLVER_A_ESCRIBIR.
+- Si Clasification empieza por 'DS-' o 'Descalificado:': usa el DS_* del catálogo que mejor coincida. Si no calza, DS_PROXIMO_PROCESO_OTROS.
+
+EXCEPCIONES (no copies a ciegas):
+1) SI gana: si hay promesa clara de inscripción/pago, tipifica SI aunque Clasification diga CDE o RA.
+2) PROHIBIDO CDE si Clasification es 'Conversacion no concretada', 'Cierre Timeout', o el hilo tiene 'Closed automatically' / aviso de inactividad de 4 minutos. Usa RA_VOLVER_A_ESCRIBIR.
+3) PROHIBIDO CDE si el cliente volvió a escribir tras despedida/corporativo (regla ya existente).
+4) Si no hay HTTPPOST / Clasification, clasifica solo con el diálogo (prioridad SI > DS > CDE > RA).
+
 Catálogo cerrado de `tipificacion_detalle`:
 
 RA (elige exactamente uno; tipificacion=RA):
@@ -2128,8 +2156,8 @@ Reglas de salida:
 4. Arrays de clasificacion: incluir SOLO incumplimientos; si no hay, usar [].
 5. No inventes atributos fuera del esquema.
 6. resumen_evaluacion debe seguir las reglas de <<<RESUMEN_EVALUACION>>>.
-7. clasificadores.tipificacion es OBLIGATORIO: siempre "RA" o "DS" o "SI" o "CDE". NUNCA null, vacío ni "NA". Si dudas, usa "RA" (o "CDE" si el cliente dejó de escribir).
-8. clasificadores.tipificacion_detalle es OBLIGATORIO: código exacto del catálogo de <<<TIPIFICACION>>> coherente con tipificacion. NUNCA null ni inventar códigos. Si tipificacion=RA y no hay submotivo claro → RA_VOLVER_A_ESCRIBIR. Si tipificacion=SI → SI. Si tipificacion=CDE → CDE. Si tipificacion=DS sin submotivo claro → DS_PROXIMO_PROCESO_OTROS.
+7. clasificadores.tipificacion es OBLIGATORIO: siempre "RA" o "DS" o "SI" o "CDE". NUNCA null, vacío ni "NA". Primero aplica el mapeo de Clasification (HTTPPOST CIERRA CASO) de <<<TIPIFICACION>>>. Si dudas y no hay Clasification, usa "RA".
+8. clasificadores.tipificacion_detalle es OBLIGATORIO: código exacto del catálogo de <<<TIPIFICACION>>> coherente con tipificacion. NUNCA null ni inventar códigos. Si tipificacion=RA y no hay submotivo claro → RA_VOLVER_A_ESCRIBIR. Si tipificacion=SI → SI. Si tipificacion=CDE → CDE. Si tipificacion=DS sin submotivo claro → DS_PROXIMO_PROCESO_OTROS. Clasification 'Conversacion no concretada' o 'Cierre Timeout' → RA_VOLVER_A_ESCRIBIR (NO CDE).
 9. NO analices ni puntúes contenido de bots/sistema/templates/flows (Regla 14-F).
 10. ortografia_y_signos_de_puntuacion: PROHIBIDO basarla en [AUDIO]/STT. Solo texto escrito del asesor. Si no hay texto escrito evaluable → score "NA" con la descripción de audio/texto no evaluable. Si puntúas 0/1, no menciones audio ni transcripción en la descripción.
 11. CDE auténtico: cierre.score="NA" con la frase de abandono y cierre_clasificacion=[]. Si el cliente VOLVIÓ a escribir tras despedida/corporativo: NO es CDE → tipifica RA (detalle no puede ser NA; usa RA_VOLVER_A_ESCRIBIR si no hay otro). cierre SÍ se evalúa: si no retoma el cierre tras la consulta → "0". despedida/corte_intencional/abandono_del_chat NO van en NA por "abandono" en ese escenario.

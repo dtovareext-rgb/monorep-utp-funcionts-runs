@@ -6,6 +6,7 @@
 #   1) Cloud Function ETL (chats + medios + MP3 + OCR)
 #   2) SP gen_ia — STT por lotes de 25
 #   3) SP caso_conversacion — Gemini
+#   4) SP backfill atenciones (skill/channel — reporteAtenciones llega ~2 días tarde)
 #
 # invoke_downstream_sps: true (default) → STT + Gemini tras ETL
 # skip_etl: false (default) → si true, solo corre SPs (reproceso Gen IA)
@@ -284,6 +285,83 @@ main:
                     - mark_sp2:
                         assign:
                           - sp_results["caso_conversacion"]: "ok"
+
+    # -------------------------------------------------------------------------
+    # 4) Backfill reporteAtenciones (skill NULL — quitar cuando el proveedor entregue al día)
+    # -------------------------------------------------------------------------
+    - sp_backfill_atenciones:
+        steps:
+          - log_sp3_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_onemarketer_backfill_atenciones(" + process_date + ")"}'
+          - call_sp3:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_onemarketer_backfill_atenciones`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  labels:
+                    producto: onemarketer
+                    etapa: backfill-atenciones
+                    servicio: bq
+                    pipeline: onemarketer-daily
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 3600
+              result: sp3_job
+          - wait_sp3:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp3:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp3_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp3_status
+          - check_sp3:
+              switch:
+                - condition: ${sp3_status.status.state == "DONE"}
+                  next: sp3_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp3:
+                        call: sys.sleep
+                        args:
+                          seconds: 10
+                    - loop_sp3:
+                        next: poll_sp3
+          - sp3_done_check:
+              switch:
+                - condition: ${"errorResult" in sp3_status.status}
+                  steps:
+                    - log_sp3_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP backfill_atenciones FAILED: " + string(default(map.get(map.get(sp3_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp3:
+                        raise:
+                          message: "sp_onemarketer_backfill_atenciones falló"
+                          error: ${sp3_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp3_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP backfill_atenciones OK"
+                    - mark_sp3:
+                        assign:
+                          - sp_results["backfill_atenciones"]: "ok"
 
     - finalize:
         assign:

@@ -13,6 +13,9 @@
 --   1.2 Enriquecido GCS + tickets (→ queuesmart_mp3_enriched)
 --       join: COALESCE(source_file_name, file_name) = tickets.audio
 --
+-- Tickets tardíos: Cloud Workflows llama sp_queuesmart_mp3_backfill_tickets DESPUÉS
+-- de este SP (no hay CALL anidados).
+--
 -- Ejecutar (diario, después de qs_s3_to_gcs; Cloud Workflows lo invoca):
 --   CALL `prd-utpbi-data-operation.raw_queue_smart.sp_queuesmart_mp3_consolidate`(
 --     DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY)

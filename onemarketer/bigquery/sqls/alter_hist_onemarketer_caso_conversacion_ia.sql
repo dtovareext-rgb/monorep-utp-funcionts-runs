@@ -124,7 +124,16 @@ ALTER TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_caso
   ADD COLUMN IF NOT EXISTS actitud_comercial_descripcion STRING,
   ADD COLUMN IF NOT EXISTS afecta_imagen_negocio_score STRING,
   ADD COLUMN IF NOT EXISTS afecta_imagen_negocio_descripcion STRING,
-  ADD COLUMN IF NOT EXISTS load_date DATETIME;
+  ADD COLUMN IF NOT EXISTS load_date DATETIME,
+  ADD COLUMN IF NOT EXISTS skill STRING,
+  ADD COLUMN IF NOT EXISTS channel STRING,
+  ADD COLUMN IF NOT EXISTS category_description STRING,
+  ADD COLUMN IF NOT EXISTS agent_open STRING,
+  ADD COLUMN IF NOT EXISTS agent_close STRING,
+  ADD COLUMN IF NOT EXISTS start_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS end_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS time_wait_operator STRING,
+  ADD COLUMN IF NOT EXISTS asesor_user STRING;
 
 -- ---------------------------------------------------------------------------
 -- PRD
@@ -232,4 +241,13 @@ ALTER TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_onemarketer_caso
   ADD COLUMN IF NOT EXISTS afecta_imagen_negocio_score STRING,
   ADD COLUMN IF NOT EXISTS afecta_imagen_negocio_descripcion STRING,
   ADD COLUMN IF NOT EXISTS analisis_llm STRING,
-  ADD COLUMN IF NOT EXISTS load_date DATETIME;
+  ADD COLUMN IF NOT EXISTS load_date DATETIME,
+  ADD COLUMN IF NOT EXISTS skill STRING,
+  ADD COLUMN IF NOT EXISTS channel STRING,
+  ADD COLUMN IF NOT EXISTS category_description STRING,
+  ADD COLUMN IF NOT EXISTS agent_open STRING,
+  ADD COLUMN IF NOT EXISTS agent_close STRING,
+  ADD COLUMN IF NOT EXISTS start_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS end_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS time_wait_operator STRING,
+  ADD COLUMN IF NOT EXISTS asesor_user STRING;
