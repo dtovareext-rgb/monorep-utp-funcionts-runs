@@ -40,6 +40,10 @@ CREATE OR REPLACE TABLE `prd-utpbi-data-operation.adf_speech_analytics.hist_queu
   conclusion_final_llamada STRING,
   resumen_evaluacion STRING,
   carreras_interes STRING,
+  motivo_no_venta STRING,
+  submotivo_no_venta STRING,
+  detalle_submotivo_no_venta STRING,
+  observaciones_no_venta STRING,
   -- Atributos (marcacion STRING: SI|NO|NA)
   saludo_marcacion STRING,
   saludo_descripcion STRING,

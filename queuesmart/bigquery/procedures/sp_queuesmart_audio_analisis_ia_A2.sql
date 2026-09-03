@@ -14,6 +14,10 @@
 --
 -- Placeholders: {{transcripcion}} {{transcripcion_con_hablantes}}
 --               {{asesor_nombre}} {{asesor_usuario}} {{asesor_codigo}}
+--               {{info_carreras}} (transversal + lista nombres; fallback título vacío legacy)
+-- Contexto carreras (raw_genesys_audios.detalle_carreras_raw):
+--   - documento_txt transversal (flg_transversar = 'S') en todos los audios
+--   - lista de nombres oficiales (sin fichas completas; Counter no ancla CRM fácil)
 -- Default prompt_name: canal_counter_prompt
 --
 -- CALL:
@@ -29,6 +33,7 @@ BEGIN
   DECLARE v_sys_prompt STRING;
   DECLARE v_prompt_updated_at TIMESTAMP;
   DECLARE v_audio_count INT64;
+  DECLARE v_info_carreras STRING;
 
   -- Labels de costo: heredan a jobs hijos (AI.GENERATE_TABLE / Flash 2.5).
   SET @@query_label = 'producto:queuesmart,etapa:gemini,servicio:flash-2-5';
@@ -59,6 +64,52 @@ BEGIN
     );
     RETURN;
   END IF;
+
+  -- Contexto carreras (mismo catálogo Genesys / OM): transversal siempre + lista de nombres.
+  -- Sin ficha específica: en Counter la carrera sale del audio, no del CRM al armar el prompt.
+  SET v_info_carreras = (
+    SELECT TRIM(CONCAT(
+      'Informacion de las carreras de interes del cliente:',
+      '\n\n',
+      '=== INFORMACION TRANSVERSAL UTP (usar como base de argumentario / beneficios) ===',
+      '\n',
+      COALESCE((
+        SELECT STRING_AGG(
+          REPLACE(REPLACE(documento_txt, '+', ' '), '*', ' '),
+          '\n\n'
+          ORDER BY carrera
+        )
+        FROM `prd-utpbi-data-operation.raw_genesys_audios.detalle_carreras_raw`
+        WHERE flg_transversar = 'S'
+          AND NULLIF(TRIM(documento_txt), '') IS NOT NULL
+      ), '(sin ficha transversal)'),
+      '\n\n',
+      '=== LISTA OFICIAL DE CARRERAS (nombres; no es ficha completa) ===',
+      '\n',
+      COALESCE((
+        SELECT STRING_AGG(carrera, ', ' ORDER BY carrera)
+        FROM (
+          SELECT DISTINCT carrera
+          FROM `prd-utpbi-data-operation.raw_genesys_audios.detalle_carreras_raw`
+          WHERE IFNULL(flg_transversar, 'N') != 'S'
+            AND NULLIF(TRIM(carrera), '') IS NOT NULL
+        )
+      ), '(sin catalogo de nombres)')
+    ))
+  );
+
+  SET v_sys_prompt = CASE
+    WHEN STRPOS(v_sys_prompt, '{{info_carreras}}') > 0 THEN
+      REPLACE(v_sys_prompt, '{{info_carreras}}', IFNULL(v_info_carreras, ''))
+    WHEN STRPOS(v_sys_prompt, 'Informacion de las carreras de interes del cliente:') > 0 THEN
+      REPLACE(
+        v_sys_prompt,
+        'Informacion de las carreras de interes del cliente:',
+        IFNULL(v_info_carreras, 'Informacion de las carreras de interes del cliente:')
+      )
+    ELSE
+      CONCAT(v_sys_prompt, '\n\n', IFNULL(v_info_carreras, ''))
+  END;
 
   CREATE OR REPLACE TEMP TABLE tmp_queuesmart_audio_analisis_input AS
   SELECT
@@ -173,6 +224,10 @@ BEGIN
     conclusion_final_llamada,
     resumen_evaluacion,
     carreras_interes,
+    motivo_no_venta,
+    submotivo_no_venta,
+    detalle_submotivo_no_venta,
+    observaciones_no_venta,
     saludo_marcacion,
     saludo_descripcion,
     despedida_marcacion,
@@ -316,6 +371,23 @@ BEGIN
     JSON_VALUE(evaluacion_json, '$[0].conclusion_final_llamada') AS conclusion_final_llamada,
     JSON_VALUE(evaluacion_json, '$[0].resumen_evaluacion') AS resumen_evaluacion,
     TO_JSON_STRING(JSON_QUERY(evaluacion_json, '$[0].carreras_interes')) AS carreras_interes,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].motivo_no_venta'),
+      JSON_VALUE(evaluacion_json, '$[0].motivo_no_venta.motivo')
+    ) AS motivo_no_venta,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].submotivo_no_venta'),
+      JSON_VALUE(evaluacion_json, '$[0].motivo_no_venta.submotivo')
+    ) AS submotivo_no_venta,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].detalle_submotivo_no_venta'),
+      JSON_VALUE(evaluacion_json, '$[0].motivo_no_venta.detalle')
+    ) AS detalle_submotivo_no_venta,
+    COALESCE(
+      JSON_VALUE(evaluacion_json, '$[0].observaciones_no_venta'),
+      JSON_VALUE(evaluacion_json, '$[0].motivo_no_venta.observaciones'),
+      JSON_VALUE(evaluacion_json, '$[0].observaciones')
+    ) AS observaciones_no_venta,
     CASE
       WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion'), ''))) IN ('1', 'SI', 'SÍ', 'YES', 'TRUE') THEN 'SI'
       WHEN UPPER(TRIM(IFNULL(JSON_VALUE(evaluacion_json, '$[0].saludo_marcacion'), ''))) IN ('0', 'NO', 'FALSE') THEN 'NO'
@@ -758,6 +830,10 @@ BEGIN
     conclusion_final_llamada,
     resumen_evaluacion,
     carreras_interes,
+    motivo_no_venta,
+    submotivo_no_venta,
+    detalle_submotivo_no_venta,
+    observaciones_no_venta,
     saludo_marcacion,
     saludo_descripcion,
     despedida_marcacion,
@@ -876,6 +952,10 @@ BEGIN
     conclusion_final_llamada,
     resumen_evaluacion,
     carreras_interes,
+    motivo_no_venta,
+    submotivo_no_venta,
+    detalle_submotivo_no_venta,
+    observaciones_no_venta,
     saludo_marcacion,
     saludo_descripcion,
     despedida_marcacion,

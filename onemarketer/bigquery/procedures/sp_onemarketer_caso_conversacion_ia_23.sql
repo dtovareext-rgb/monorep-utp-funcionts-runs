@@ -4,6 +4,11 @@
 -- Evalúa la conversación ENTERA por idcase con canal_escrito_prompt.
 -- Parsea el JSON definido en docs/prompt_canal_escrito_formato_salida.txt
 --
+-- Contexto carreras (raw_genesys_audios.detalle_carreras_raw):
+--   - documento_txt transversal (flg_transversar = 'S') en todos los casos
+--   - lista de nombres oficiales (sin fichas completas)
+-- Placeholder en prompt: {{info_carreras}} (fallback: reemplaza el título vacío legacy)
+--
 -- Reglas duras post-LLM (refuerzo del prompt):
 --   - tipificacion/detalle CDE → cierre_score=NA + descripción de abandono + clasificacion []
 --   - ortografía basada en audio/STT o sin texto escrito → score/desc NA
@@ -23,6 +28,7 @@ BEGIN
   DECLARE v_sys_prompt STRING;
   DECLARE v_prompt_updated_at TIMESTAMP;
   DECLARE v_caso_count INT64;
+  DECLARE v_info_carreras STRING;
 
   -- Labels de costo: heredan a jobs hijos (AI.GENERATE_TABLE / Flash 2.5).
   SET @@query_label = 'producto:onemarketer,etapa:gemini,servicio:flash-2-5';
@@ -41,6 +47,39 @@ BEGIN
     SELECT FORMAT('Prompt "%s" no encontrado o vacío en sys_prompts — etapa 2 finaliza.', v_effective_prompt);
     RETURN;
   END IF;
+
+  -- Contexto carreras (mismo catálogo Genesys): transversal siempre + lista de nombres.
+  -- Sin ficha específica: en OM la carrera sale del chat, no del CRM al armar el prompt.
+  SET v_info_carreras = (
+    SELECT TRIM(CONCAT(
+      'Informacion de las carreras de interes del cliente:',
+      '\n\n',
+      '=== INFORMACION TRANSVERSAL UTP (usar como base de argumentario / beneficios) ===',
+      '\n',
+      COALESCE((
+        SELECT STRING_AGG(
+          REPLACE(REPLACE(documento_txt, '+', ' '), '*', ' '),
+          '\n\n'
+          ORDER BY carrera
+        )
+        FROM `prd-utpbi-data-operation.raw_genesys_audios.detalle_carreras_raw`
+        WHERE flg_transversar = 'S'
+          AND NULLIF(TRIM(documento_txt), '') IS NOT NULL
+      ), '(sin ficha transversal)'),
+      '\n\n',
+      '=== LISTA OFICIAL DE CARRERAS (nombres; no es ficha completa) ===',
+      '\n',
+      COALESCE((
+        SELECT STRING_AGG(carrera, ', ' ORDER BY carrera)
+        FROM (
+          SELECT DISTINCT carrera
+          FROM `prd-utpbi-data-operation.raw_genesys_audios.detalle_carreras_raw`
+          WHERE IFNULL(flg_transversar, 'N') != 'S'
+            AND NULLIF(TRIM(carrera), '') IS NOT NULL
+        )
+      ), '(sin catalogo de nombres)')
+    ))
+  );
 
   -- ---------------------------------------------------------------------------
   -- 0. Reproceso por fecha: borra hist del día (permite re-ejecutar limpio)
@@ -61,10 +100,53 @@ BEGIN
     h.audio_transcrito_count,
     h.ocr_count,
     CASE
+      WHEN STRPOS(v_sys_prompt, '{{info_carreras}}') > 0
+        AND STRPOS(v_sys_prompt, '{{conversacion}}') > 0 THEN
+        REPLACE(
+          REPLACE(v_sys_prompt, '{{info_carreras}}', IFNULL(v_info_carreras, '')),
+          '{{conversacion}}',
+          h.conversacion_completa
+        )
+      WHEN STRPOS(v_sys_prompt, '{{info_carreras}}') > 0 THEN
+        CONCAT(
+          REPLACE(v_sys_prompt, '{{info_carreras}}', IFNULL(v_info_carreras, '')),
+          '\n\n--- CONVERSACION A EVALUAR ---\n',
+          h.conversacion_completa
+        )
+      WHEN STRPOS(v_sys_prompt, 'Informacion de las carreras de interes del cliente:') > 0
+        AND STRPOS(v_sys_prompt, '{{conversacion}}') > 0 THEN
+        REPLACE(
+          REPLACE(
+            v_sys_prompt,
+            'Informacion de las carreras de interes del cliente:',
+            IFNULL(v_info_carreras, 'Informacion de las carreras de interes del cliente:')
+          ),
+          '{{conversacion}}',
+          h.conversacion_completa
+        )
+      WHEN STRPOS(v_sys_prompt, 'Informacion de las carreras de interes del cliente:') > 0 THEN
+        CONCAT(
+          REPLACE(
+            v_sys_prompt,
+            'Informacion de las carreras de interes del cliente:',
+            IFNULL(v_info_carreras, 'Informacion de las carreras de interes del cliente:')
+          ),
+          '\n\n--- CONVERSACION A EVALUAR ---\n',
+          h.conversacion_completa
+        )
       WHEN STRPOS(v_sys_prompt, '{{conversacion}}') > 0 THEN
-        REPLACE(v_sys_prompt, '{{conversacion}}', h.conversacion_completa)
+        REPLACE(
+          CONCAT(v_sys_prompt, '\n\n', IFNULL(v_info_carreras, '')),
+          '{{conversacion}}',
+          h.conversacion_completa
+        )
       ELSE
-        CONCAT(v_sys_prompt, '\n\n--- CONVERSACION A EVALUAR ---\n', h.conversacion_completa)
+        CONCAT(
+          v_sys_prompt,
+          '\n\n', IFNULL(v_info_carreras, ''),
+          '\n\n--- CONVERSACION A EVALUAR ---\n',
+          h.conversacion_completa
+        )
     END AS prompt
   FROM `prd-utpbi-data-operation.raw_onemarketer.v_onemarketer_caso_hilo_completo` AS h
   WHERE h.process_date = v_fecha_proceso

@@ -1,0 +1,21 @@
+---
+description: Detección de venta reforzada en prompt Counter QueueSmart (implementado)
+globs: queuesmart/prompts/**,queuesmart/bigquery/sqls/update_sys_prompts*,queuesmart/bigquery/procedures/sp_queuesmart_audio_analisis*
+alwaysApply: false
+---
+
+# QueueSmart Counter — detección de venta (implementado)
+
+Aplicado en `canal_counter_prompt_completo.txt` + `update_sys_prompts_canal_counter_5.sql`.
+
+## Refuerzo activo
+1. Bloque `<<<DETECCION_VENTA>>>` antes de tipificación/cierre/motivo.
+2. VENTA / tipificación `SI` si CUALQUIERA: pago en acto, voucher/comprobante, "ya pagué", inscripción ahora, vacante/ficha, compromiso firme con acción.
+3. NO venta: "lo pienso", "consulto papás", solo malla/precios, "te escribo luego".
+4. Tipificación: venta → obligatorio `SI` (prohibido `RA`). Despedida VENTA CONCRETADA ↔ `SI`.
+5. Resumen: tipif=`SI` → resumen aplica (`SI`/`NO`, nunca `NA` por "no hubo venta").
+6. Coherencia: tipif=`SI` → `motivo_no_venta=NA`; prohibido `RA` + audio con pago/voucher.
+
+## Carreras (mismo patrón OM)
+- Placeholder `{{info_carreras}}` en el prompt.
+- SP `sp_queuesmart_audio_analisis_ia_A2.sql`: transversal (`flg_transversar='S'`) + lista de nombres (sin fichas completas).

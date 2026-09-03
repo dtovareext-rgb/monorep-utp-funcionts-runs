@@ -1,4 +1,19 @@
-##################################################
+-- =============================================================================
+-- UPSERT canal_counter_prompt (MERGE — sin dummy)
+-- Fuente: prompts/canal_counter_prompt_completo.txt
+-- Dataset: raw_queue_smart.sys_prompts
+-- Lote: DETECCION_VENTA + tipificación/resumen/motivo + {{info_carreras}}
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   --project_id=prd-utpbi-data-operation \
+--   < queuesmart/bigquery/sqls/update_sys_prompts_canal_counter_5.sql
+-- =============================================================================
+
+MERGE `prd-utpbi-data-operation.raw_queue_smart.sys_prompts` AS T
+USING (
+  SELECT
+    'canal_counter_prompt' AS prompt_name,
+    '''##################################################
 ROL Y CONTEXTO
 ##################################################
 
@@ -1085,8 +1100,8 @@ Seleccionar EXACTAMENTE UNA opción:
 - PROCESO
 
 COHERENCIA CON TIPIFICACIÓN (OBLIGATORIO):
-- Si tipificacion = SI (<<<DETECCION_VENTA>>> = VENTA) → motivo_no_venta, submotivo_no_venta, detalle_submotivo_no_venta y observaciones_no_venta = NA.
-- Si tipificacion = RA o DS → NO uses NA en motivo_no_venta (elige AGENTE, CLIENTE o PROCESO) ni en submotivo/detalle.
+- Si tipificacion = SI (<<<DETECCION_VENTA>>> = VENTA) → motivo_no_venta = NA y submotivo_no_venta = NA.
+- Si tipificacion = RA o DS → NO uses NA en motivo_no_venta (elige AGENTE, CLIENTE o PROCESO).
 - PROHIBIDO: tipificacion = RA y audio con voucher/pago/inscripción confirmada (corrige tipificación a SI primero).
 
 Si se concretó una venta o inscripción, asignar:
@@ -1177,13 +1192,28 @@ La clasificación depende obligatoriamente del valor asignado en <<<MOTIVO_NO_VE
 Seleccionar EXACTAMENTE UNA opción.
 
 SI MOTIVO_NO_VENTA = AGENTE
-
 - HABILIDADES_COMERCIALES
-- HABILIDADES_BLANDAS
-- OTROS
+  - MOTIVACION
+  - SONDEO
+  - ARGUMENTARIO
+  - INFORMACION_INCORRECTA
+  - REBATE
+  - REBATE_EFECTIVO
+  - CIERRE
+  - SENTIDO_DE_URGENCIA
 
-SI MOTIVO_NO_VENTA = PROCESO
+SI MOTIVO_NO_VENTA = HABILIDADES_BLANDAS
+- ACTITUD_FRENTE_AL_PROSPECTO
+- CONCENTRACION
+- EMPATIA
+- ESCUCHA_ACTIVA
 
+SI MOTIVO_NO_VENTA = OTROS
+- INTERRUPCION_DE_ATENCION
+- NO_CUMPLE_PROCESO
+- TIPIFICACION
+
+PROCESO
 - BECA_18
 - CARRERA_NO_DISPONIBLE
 - CONVALIDACION
@@ -1195,7 +1225,6 @@ SI MOTIVO_NO_VENTA = PROCESO
 - OTROS
 
 SI MOTIVO_NO_VENTA = CLIENTE
-
 - CONVERSARA_CON_SU_HIJO
 - CONVERSARA_CON_SUS_PADRES
 - FINALIZA_LA_ATENCION
@@ -1209,27 +1238,20 @@ SI MOTIVO_NO_VENTA = CLIENTE
 - INDECISO
 - OTROS
 
-Si MOTIVO_NO_VENTA = NA, asignar:
-
+SI MOTIVO_NO_VENTA = NA, asignar:
 NA
 
 <<<END>>> 
 
-<<<DETALLE_SUBMOTIVO_NO_VENTA>>> 
+<<<SUBMOTIVO_NO_VENTA>>> 
 
-Determinar el detalle específico del submotivo de no venta de mayor peso.
+Determinar el submotivo de no venta de mayor peso.
 
-La clasificación depende obligatoriamente de:
-
-- <<<MOTIVO_NO_VENTA>>>
-- <<<SUBMOTIVO_NO_VENTA>>>
+La clasificación depende obligatoriamente del valor asignado en <<<MOTIVO_NO_VENTA>>>.
 
 Seleccionar EXACTAMENTE UNA opción.
 
-AGENTE
-
-SI SUBMOTIVO_NO_VENTA = HABILIDADES_COMERCIALES
-
+SI MOTIVO_NO_VENTA = AGENTE
 - MOTIVACION
 - SONDEO
 - ARGUMENTARIO
@@ -1239,142 +1261,43 @@ SI SUBMOTIVO_NO_VENTA = HABILIDADES_COMERCIALES
 - CIERRE
 - SENTIDO_DE_URGENCIA
 
-SI SUBMOTIVO_NO_VENTA = HABILIDADES_BLANDAS
-
+SI MOTIVO_NO_VENTA = HABILIDADES_BLANDAS
 - ACTITUD_FRENTE_AL_PROSPECTO
 - CONCENTRACION
 - EMPATIA
 - ESCUCHA_ACTIVA
 
-SI SUBMOTIVO_NO_VENTA = OTROS
-
+SI MOTIVO_NO_VENTA = OTROS
 - INTERRUPCION_DE_ATENCION
 - NO_CUMPLE_PROCESO
 - TIPIFICACION
 
 PROCESO
-
-SI SUBMOTIVO_NO_VENTA = BECA_18
-
-- INFORMACION_DE_BECA18
-
-SI SUBMOTIVO_NO_VENTA = CARRERA_NO_DISPONIBLE
-
-- CARRERA_NO_DICTADA_EN_UTP
-- CARRERA_TECNICA
+- BECA_18
+- CARRERA_NO_DISPONIBLE
+- CONVALIDACION
+- ESCOLAR
+- HORARIO_NO_DISPONIBLE
+- MODALIDAD_NO_DISPONIBLE
+- PERTENECE_A_UTP
 - POSTGRADO
+- OTROS
 
-SI SUBMOTIVO_NO_VENTA = CONVALIDACION
-
-- AUN_NO_TRAMITA_DOCUMENTOS
-- NO_CUMPLE_REQUISITOS
-
-SI SUBMOTIVO_NO_VENTA = ESCOLAR
-
-- INFORMACION
-- NO_CUMPLE_REQUISITOS
-
-SI SUBMOTIVO_NO_VENTA = HORARIO_NO_DISPONIBLE
-
-- TRABAJO
-- ESTUDIO
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = MODALIDAD_NO_DISPONIBLE
-
-- CARRERA_NO_DISPONIBLE_EN_MODALIDAD_REQUERIDA
-
-SI SUBMOTIVO_NO_VENTA = PERTENECE_A_UTP
-
-- INFORMACION_NO_COMERCIAL
-- RECIEN_INSCRITO
-- YA_ES_ALUMNO
-
-SI SUBMOTIVO_NO_VENTA = POSTGRADO
-
-- CURSOS
-- DIPLOMADOS
-- MAESTRIA
-- ESPECIALIZACION
-- NO_ESPECIFICA
-
-CLIENTE
-
-SI SUBMOTIVO_NO_VENTA = CONVERSARA_CON_SU_HIJO
-
-- CONFIRMAR_CARRERA_DE_INTERES
-- NO_CONOCE_DNI_DE_SU_HIJO
-- INFORMAR_BENEFICIOS
-
-SI SUBMOTIVO_NO_VENTA = CONVERSARA_CON_SUS_PADRES
-
-- NO_SERA_RESPONSABLE_DEL_PAGO
-- INDECISO
-
-SI SUBMOTIVO_NO_VENTA = FINALIZA_LA_ATENCION
-
-- DESCONFIANZA
-- CLIENTE_OCUPADO
-- CLIENTE_NO_MUESTRA_INTERES
-- NO_HUBO_CONTINUIDAD
-
-SI SUBMOTIVO_NO_VENTA = ELIGIO_OTRA_INSTITUCION
-
-- MAS_ECONOMICA
-- MAYORES_BENEFICIOS
-- MEJOR_CONVALIDACION
-- MENOR_DISTANCIA
-- MENORES_REQUISITOS
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = EVALUA_CONVALIDACION
-
-- QUIERE_RESPUESTA_DE_CONVALIDACION
-- AUN_NO_TRAMITA_DOCUMENTOS
-- NO_CUMPLE_REQUISITOS
-
-SI SUBMOTIVO_NO_VENTA = EVALUA_HORARIOS
-
-- ESTUDIO
-- TRABAJO
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = MOTIVOS_ECONOMICOS
-
-- LE_PARECE_CARO
-- SIN_DINERO_PARA_INSCRIBIRSE
-- SIN_PRESUPUESTO_PARA_LA_CARRERA
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = CLIENTE_OCUPADO
-
-- ESTUDIO
-- TRABAJO
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = PROXIMO_PROCESO
-
-- MOTIVOS_DE_SALUD
+SI MOTIVO_NO_VENTA = CLIENTE
+- CONVERSARA_CON_SU_HIJO
+- CONVERSARA_CON_SUS_PADRES
+- FINALIZA_LA_ATENCION
+- ELIGIO_OTRA_INSTITUCION
+- EVALUA_CONVALIDACION
+- EVALUA_HORARIOS
 - MOTIVOS_ECONOMICOS
-- VIAJE
-- TRABAJO
-- ESTUDIOS
-- NO_ESPECIFICA
+- CLIENTE_OCUPADO
+- PROXIMO_PROCESO
+- NO_DESEA_CONTINUAR
+- INDECISO
+- OTROS
 
-SI SUBMOTIVO_NO_VENTA = NO_DESEA_CONTINUAR
-
-- NO_INTERESADO
-- PERDIO_INTERES
-- NO_ESPECIFICA
-
-SI SUBMOTIVO_NO_VENTA = INDECISO
-
-- NO_DEFINIO_CARRERA
-- REQUIERE_MAS_TIEMPO
-- NO_ESPECIFICA
-
-Si SUBMOTIVO_NO_VENTA = NA, asignar:
-
+SI MOTIVO_NO_VENTA = NA, asignar:
 NA
 
 <<<END>>> 
@@ -1392,8 +1315,6 @@ Registrar información complementaria relevante sobre la no venta que no haya qu
 - <<<DETALLE_SUBMOTIVO_NO_VENTA>>>
 
 Incluir submotivos secundarios detectados, factores contribuyentes o hallazgos relevantes de la atención.
-
-Campo JSON: observaciones_no_venta.
 
 Si no aplica, asignar:
 NA
@@ -1698,7 +1619,7 @@ IMPORTANTE PARA EL FORMATO DE RESPUESTA
 
 12. Todos los campos deben respetar estrictamente el tipo de dato definido en el formato de salida.
 
-13. NUNCA omitas claves del JSON. Incluye siempre rebates/objeciones, pre_cierre, resumen_venta, subatributos Counter nuevos, T_* , MAYOR_REBATE y motivo_no_venta / submotivo_no_venta / detalle_submotivo_no_venta / observaciones_no_venta. En *_marcacion usa "SI"/"NO"/"NA"; en T_* usa enteros.
+13. NUNCA omitas claves del JSON. Incluye siempre rebates/objeciones, pre_cierre, resumen_venta, subatributos Counter nuevos, T_* y MAYOR_REBATE. En *_marcacion usa "SI"/"NO"/"NA"; en T_* usa enteros.
 
 14. NO incluyas claves de Admisión retiradas de Counter: empatia_*, actitud_comercial_*, sigue_flujo_gestion_*, ofrece_qr_*, valida_datos_postulante_*, T_OFRECE_QR.
 
@@ -1736,9 +1657,7 @@ IMPORTANTE PARA EL FORMATO DE RESPUESTA
 
 31. resultado_final_llamada y tipificacion_segun_casuistica: SOLO "RA" | "DS" | "SI". La narrativa va en conclusion_final_llamada.
 
-32. motivo_no_venta / submotivo_no_venta / detalle_submotivo_no_venta / observaciones_no_venta: OBLIGATORIOS. Si tipificacion = SI → los cuatro = "NA". Si tipificacion = RA o DS → motivo AGENTE|CLIENTE|PROCESO y submotivo/detalle según catálogo (no "NA" en motivo/submotivo/detalle salvo tipificacion SI).
-
-33. NO copies las marcaciones del ejemplo (muchas están en "SI" o "NA" solo para mostrar el tipo). Cada *_marcacion sale de evidencia de ESTA transcripción.
+32. NO copies las marcaciones del ejemplo (muchas están en "SI" o "NA" solo para mostrar el tipo). Cada *_marcacion sale de evidencia de ESTA transcripción.
 
 ESTE ES EL FORMATO DE SALIDA (Usa exactamente estas llaves. Los T_* y MAYOR_REBATE son ENTEROS).
 LOS VALORES SON SOLO FORMA: infiere cada campo; no los copies.
@@ -1812,10 +1731,6 @@ LOS VALORES SON SOLO FORMA: infiere cada campo; no los copies.
 "informacion_falsa_descripcion": "Sin info falsa ni fuera de proceso engañosa. (SI)",
 "informacion_falsa_marcacion": "SI",
 "tipificacion_segun_casuistica": "RA",
-"motivo_no_venta": "AGENTE",
-"submotivo_no_venta": "HABILIDADES_COMERCIALES",
-"detalle_submotivo_no_venta": "MOTIVACION",
-"observaciones_no_venta": "NA",
 "carreras_interes": [],
 "resultado_final_llamada": "RA",
 "conclusion_final_llamada": "Resumen breve del desenlace.",
@@ -1861,4 +1776,25 @@ Antes de puntuar: (1) identifica el hilo principal asesor-prospecto (nombre del 
 (3) Si [MM:SS] retrocede, no midas espera por resta de timestamps.
 (4) Consulta informativa no es objeción. No rellenes objecion_1..3.
 (5) T_* <= [MM:SS] máximo. Saludo: sin evidencia en el texto = NO (castigo). NA solo si es retoma explícita.
-Usa [MM:SS] para T_* (segundos enteros). Solo huecos >= 30 s sin aviso, con reloj monótono, cuentan como espera injustificada.
+Usa [MM:SS] para T_* (segundos enteros). Solo huecos >= 30 s sin aviso, con reloj monótono, cuentan como espera injustificada.''' AS prompt_text,
+    CURRENT_TIMESTAMP() AS updated_at
+) AS S
+ON T.prompt_name = S.prompt_name
+WHEN MATCHED THEN
+  UPDATE SET
+    prompt_text = S.prompt_text,
+    updated_at = S.updated_at
+WHEN NOT MATCHED THEN
+  INSERT (prompt_name, prompt_text, updated_at)
+  VALUES (S.prompt_name, S.prompt_text, S.updated_at);
+
+SELECT
+  prompt_name,
+  updated_at,
+  LENGTH(prompt_text) AS chars,
+  STRPOS(prompt_text, '<<<DETECCION_VENTA>>>') > 0 AS deteccion_venta,
+  STRPOS(prompt_text, '{{info_carreras}}') > 0 AS info_carreras,
+  STRPOS(prompt_text, 'PROHIBIDO tipificacion = \'RA\'') > 0 AS tipif_ra_prohibido,
+  STRPOS(prompt_text, '{{transcripcion}}') > 0 AS tiene_placeholder
+FROM `prd-utpbi-data-operation.raw_queue_smart.sys_prompts`
+WHERE prompt_name = 'canal_counter_prompt';

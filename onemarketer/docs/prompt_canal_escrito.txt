@@ -2052,7 +2052,7 @@ Incluir todos los rebates identificados en <<<REBATE>>>, tanto efectivos como no
 
 Puedes utilizar la siguiente informacion para evaluar lo relacionado a argumentario de venta:
 
-Informacion de las carreras de interes del cliente:
+{{info_carreras}}
 
 ##################################################
 FORMATO DE SALIDA OBLIGATORIO
