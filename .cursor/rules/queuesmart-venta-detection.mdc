@@ -6,7 +6,7 @@ alwaysApply: false
 
 # QueueSmart Counter — detección de venta (implementado)
 
-Aplicado en `canal_counter_prompt_completo.txt` + `update_sys_prompts_canal_counter_5.sql`.
+Aplicado en `canal_counter_prompt_completo.txt` + `update_sys_prompts_canal_counter_7.sql` (v7: refuerzos QA rebate/cierre/argumentario).
 
 ## Refuerzo activo
 1. Bloque `<<<DETECCION_VENTA>>>` antes de tipificación/cierre/motivo.

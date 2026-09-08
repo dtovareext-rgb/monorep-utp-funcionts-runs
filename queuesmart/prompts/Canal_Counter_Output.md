@@ -34,8 +34,8 @@ Contrato JSON para `sp_queuesmart_audio_analisis_ia` / prompt `canal_counter_pro
 
 ## Reglas clave de marcación
 
-- **Rebate**: solo objeciones reales (resistencia a inscribirse/pagar). Consulta informativa ≠ objeción. Si no hay objeción, `NA` (no rellenar 1..3).
-- **Rebate efectivo**: cada rebate acorde a su objeción; `NA` si rebate es `NA`.
+- **Rebate**: solo objeciones reales (resistencia a inscribirse/pagar). Consulta informativa ≠ objeción. Sin objeción real → `objecion_*` = `NA`; con tipificación RA/DS → `rebate_marcacion` = `SI` (nada que rebater) o `NO` (faltó/malo). **`rebate_marcacion` = `NA` solo si tipificación = SI (venta).**
+- **Rebate efectivo**: cada rebate acorde a su objeción. `NA` solo si venta SI (igual que rebate); RA/DS → `SI` o `NO`, nunca `NA`.
 - **Cierre**: no válido = pregunta abierta / agendar / quedar a la espera. No copiar `SI` del ejemplo.
 - **Saludo**: sin evidencia en el audio → `NO` (castigo). `NA` solo en retoma explícita (no aplica re-saludar). No inventar `SI`.
 - **Espera**: si `[MM:SS]` retrocede (STT), no restar huecos. Reloj monótono: &lt;15 s → `SI`; ≥30 s sin aviso → `NO`.
