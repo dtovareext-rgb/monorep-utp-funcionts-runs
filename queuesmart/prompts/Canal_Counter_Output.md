@@ -34,7 +34,7 @@ Contrato JSON para `sp_queuesmart_audio_analisis_ia` / prompt `canal_counter_pro
 
 ## Reglas clave de marcación
 
-- **Rebate**: solo objeciones reales (resistencia a inscribirse/pagar). Consulta informativa ≠ objeción. Sin objeción real → `objecion_*` = `NA`; con tipificación RA/DS → `rebate_marcacion` = `SI` (nada que rebater) o `NO` (faltó/malo). **`rebate_marcacion` = `NA` solo si tipificación = SI (venta).**
+- **Rebate**: solo objeciones reales (resistencia a inscribirse/pagar). Consulta informativa ≠ objeción. Sin objeción real → `objecion_*` = `NA` y `rebate` = **`SI`** (RA/DS). Objeción real no rebatida / no identificada por el asesor → **`NO`** (nunca `NA` en RA/DS). **`rebate` = `NA` solo si tipificación = SI (venta).**
 - **Rebate efectivo**: cada rebate acorde a su objeción. `NA` solo si venta SI (igual que rebate); RA/DS → `SI` o `NO`, nunca `NA`.
 - **Cierre**: no válido = pregunta abierta / agendar / quedar a la espera. No copiar `SI` del ejemplo.
 - **Saludo**: sin evidencia en el audio → `NO` (castigo). `NA` solo en retoma explícita (no aplica re-saludar). No inventar `SI`.
@@ -46,5 +46,6 @@ Contrato JSON para `sp_queuesmart_audio_analisis_ia` / prompt `canal_counter_pro
 - **plazo documentos**: default `NA`. `NO` solo si se habló de entregar documentos y no dio plazo.
 - **presenta_vacio**: sin demora → `SI` (no `NA`), salvo grabación que arranca en gestión.
 - **sondeo**: sin evidencia cuando aplica → `NO` (no `NA`).
+- **Motivación (`sondeo_motivacion`)**: en **AG**, mide solo si el asesor **hizo la pregunta** (metas, por qué estudiar). No exige que el prospecto respondiera ni acompañamiento. RA/AD/OP → **`NA`**.
 
 Fuente completa: `queuesmart/prompts/canal_counter_prompt_completo.txt`

@@ -127,7 +127,7 @@ Aplicadas a todos los atributos de la interacción.
 
 5c. Gestión sin oportunidad de inscripción nueva (OBLIGATORIO → NA comercial)
 Si la atención es de alumno existente (cambio de carrera, convalidación, vacante, renuncia de notas), Beca 18 / Pronabec / proceso de otro canal al que solo se deriva, traslado UPC-UTP con indicación de no usar el conducto regular Counter, maestría u otro producto que se deriva, o solo orientación sin vía a inscribir hoy por Counter:
-- Marca 'NA' (no 'NO') en: pre_cierre, cierre_comercial, sentido_de_urgencia, sondeo_motivacion cuando no correspondía explorar motivación de inscripción nueva, info_seguro_estudiantil / plazos / otros_beneficios cuando no hubo oportunidad de inversión por Counter, e info_correcta_inversion cuando no correspondía hablar de costos de inscripción regular.
+- Marca 'NA' (no 'NO') en: pre_cierre, cierre_comercial, sentido_de_urgencia, sondeo_motivacion en tipos RA/AD/OP o cuando no correspondía explorar motivación de inscripción nueva, info_seguro_estudiantil / plazos / otros_beneficios cuando no hubo oportunidad de inversión por Counter, e info_correcta_inversion cuando no correspondía hablar de costos de inscripción regular.
 - No penalices por no cerrar una venta que no existía o que debía hacerse por otro canal.
 
 6. Información proporcionada espontáneamente por el prospecto
@@ -400,25 +400,34 @@ ITEM: SONDEO
 
 <<<MOTIVACION>>> 
 
-No aplica ('NA') SOLO si:
+REGLA NA — TIPOS RA, AD y OP (OBLIGATORIA — prioridad sobre marcación SI/NO):
+En Counter la pregunta de motivación NO se realiza en atenciones tipo RA, AD ni OP (flujo distinto al argumentario AG). sondeo_motivacion_marcacion = 'NA' SIEMPRE. PROHIBIDO 'NO' por 'no se realiza la pregunta', 'no explora la motivación' u omisión equivalente en estos tipos.
+
+Infierelo del contenido de ESTA transcripción (no del nombre del archivo):
+- Tipo OP (orden / compromiso de pago): gestion_principal = PAGO_MATRICULA; o el motivo principal es pagar matrícula, pensión, voucher o medio de pago; o hay compromiso de pago / tipificación OP (SI con pago pendiente por concretar).
+- Tipo AD (administrativa): gestion_principal = DOCUMENTOS_REGULAR, DOCUMENTOS_CONVALIDACION o RECORDATORIO_EXAMEN; trámite de examen, entrega/subida de documentos, convalidación, recordatorio o gestión de alumno en proceso sin argumentario de inscripción nueva.
+- Tipo RA (retorno / retoma): tipo_contacto = SEGUIMIENTO con retoma explícita ('has ido evaluando', 'la vez pasada', 'ya te comenté', continúa ficha/pago/documentos/charla ya iniciada) sin desarrollar sondeo de motivación como en primer contacto comercial.
+
+La pregunta de motivación SÍ aplica en atención tipo AG (primer contacto comercial / orientación con argumentario de inscripción nueva): gestion_principal = INFORMACION_CARRERA con PRIMER_CONTACTO, salvo que caiga en otro 'No aplica' abajo.
+
+No aplica ('NA') también si:
 
 - La atención fue interrumpida abruptamente por el prospecto.
 - La consulta es realizada por una persona distinta al prospecto o a un familiar directo.
 - Gestión sin oportunidad de inscripción nueva (regla 5c): alumno/cambio de carrera, Beca 18 fuera de admisión, maestría derivada, solo trámite administrativo.
 
-Validar que el asesor:
-
-- Identifique la motivación del prospecto para estudiar.
-- Brinde acompañamiento una vez conocida la motivación.
+Qué se evalúa (solo si aplica tipo AG):
+- Únicamente si el asesor REALIZA una pregunta orientada a conocer la motivación del prospecto para estudiar (metas, por qué estudiar, qué lo motiva, qué busca lograr).
+- NO se evalúa si el prospecto respondió con claridad, si el asesor 'identificó' la motivación ni si brindó acompañamiento posterior. Eso es deseable en la atención, pero NO condiciona la marcación.
 
 MARCACIÓN (sondeo_motivacion_marcacion):
-- 'SI' si el asesor sondea/identifica la motivación (metas, por qué estudiar, qué lo motiva) CON evidencia en el audio.
-- 'NO' si debió sondear y NO hay evidencia de sondeo. Si la descripción dice 'no se realiza la pregunta' / 'no explora la motivación' → marcación OBLIGATORIA 'NO' (nunca 'NA').
-- 'NA' SOLO en las excepciones de 'No aplica' arriba, o si el asesor preguntó y el prospecto no respondió / la atención se cortó.
-- PROHIBIDO usar 'NA' como sustituto de 'NO' cuando simplemente no hubo sondeo.
-- PROHIBIDO 'SI' sin pregunta o identificación explícita de motivación en la transcripción.
-
-Si el asesor realiza la consulta, pero el prospecto no responde, la conversación se desvía o la atención finaliza, calificar como 'NA'.
+- 'NA' en tipos RA, AD u OP (regla arriba) y en todas las excepciones de 'No aplica'. PROHIBIDO 'NO' cuando el tipo es RA, AD u OP aunque no aparezca la pregunta en el audio.
+- 'SI' si aplica tipo AG y hay evidencia de que el asesor FORMULÓ al menos una pregunta de motivación (parafraseo válido). Basta la pregunta; no exijas respuesta del prospecto ni acompañamiento.
+- 'NO' si aplica tipo AG, debió realizar la pregunta de motivación y NO hay evidencia de ninguna pregunta orientada a metas/motivos/por qué estudiar.
+- PROHIBIDO exigir 'identificar' la motivación o 'brindar acompañamiento' para marcar 'SI'.
+- PROHIBIDO 'NO' si el asesor preguntó pero el prospecto no respondió, respondió evasivamente o la conversación se desvió: la pregunta realizada = 'SI'.
+- PROHIBIDO usar 'NA' como sustituto de 'NO' en tipo AG cuando simplemente no hubo pregunta de motivación.
+- PROHIBIDO 'SI' sin evidencia textual de pregunta de motivación en la transcripción (tipo AG).
 
 <<<END>>> 
 
@@ -655,7 +664,7 @@ REGLA OBLIGATORIA — TODAS LAS OBJECIONES (solo si tipificación RA o DS):
 - PROHIBIDO rellenar objecion_cliente_1..3 para 'completar el JSON'. Si no hay objeción real, los tres textos = 'NA'.
 - rebate_marcacion = 'SI' SOLO si hubo >=1 objeción real Y cada una tiene rebate_asesor_N_texto. Si alguna objeción real queda sin rebate → rebate_marcacion = 'NO'.
 - Si no hubo objeciones reales (solo consultas informativas) y tipificación RA/DS → rebate_marcacion = 'SI' (nada que rebater; no es NA).
-- Coherencia RA/DS: si objecion_cliente_1_texto = 'NA' (sin objeción real) → rebate_marcacion = 'SI' o 'NO' según desempeño general, NUNCA 'NA'. Si hay objeción en objecion_1..3 → rebate SI/NO según cobertura.
+- Coherencia RA/DS: si objecion_cliente_1..3 = 'NA' porque no hubo objeción real → rebate_marcacion = 'SI'. Si hubo objeción real en el audio (aunque el asesor no la rebatió) → objecion_* con texto + rebate_marcacion = 'NO'. NUNCA 'NA' en RA/DS.
 - Coherencia venta SI: rebate y rebate_efectivo = 'NA'; objecion_* y rebate_* = 'NA'.
 - PROHIBIDO rebate 'SI' con objeciones NA rellenadas con consultas disfrazadas.
 - En objecion_*_texto / rebate_*_texto: solo el contenido. PROHIBIDO meter '(SI)', '(NO)' o timestamps tipo '(25:21)'.
@@ -664,6 +673,13 @@ OBJECIÓN REAL vs CONSULTA (solo si tipificación RA o DS):
 - SÍ es objeción (rebate_marcacion = SI o NO): 'está caro' / 'no tengo plata' / 'me parece caro'; 'lo voy a pensar' / 'vuelvo mañana' / 'todavía no decido' con rechazo a inscribirse ahora; 'prefiero universidad pública/nacional'; 'tengo que hablar con mis papás/hijos' como barrera para decidir hoy; 'horarios no me cuadran' como impedimento; 'evalúo otra universidad'; 'espero el próximo proceso'.
 - NO es objeción (no va a objecion_*): preguntas informativas sin rechazo ('¿cuánto cuesta?', '¿hay beca?', '¿cómo es la convalidación?'); pedir repetir un dato; curiosidad sobre malla/modalidad sin resistencia a inscribirse.
 - PROHIBIDO rebate_marcacion = 'NA' si tipificación = RA o DS. Con objeción real → SI o NO. Sin objeción real → 'SI' (sin objeciones que atender).
+
+COHERENCIA DESCRIPCIÓN ↔ MARCACIÓN (OBLIGATORIO — evita NA indebido):
+- Escenario A — 'El prospecto no presenta objeciones que requieran un rebate': solo si en el audio NO hubo resistencia real. objecion_* = 'NA'. tipificación RA/DS → rebate_marcacion = 'SI' (no 'NA').
+- Escenario B — 'El asesor no identifica objeciones del prospecto para rebatir': el audio SÍ contiene objeción real pero el asesor no la detectó/rebatió. Registra la objeción en objecion_cliente_N_texto. tipificación RA/DS → rebate_marcacion = 'NO' y rebate_efectivo_marcacion = 'NO'. PROHIBIDO 'NA'.
+- PROHIBIDO combinar descripción tipo escenario B con rebate_marcacion = 'NA' (salvo venta SI).
+- PROHIBIDO dejar objecion_cliente_1..3 = 'NA' si en rebate_descripcion afirmas que el prospecto sí objetó, dudó, postergó o rechazó inscribirse/pagar.
+- Si detectas objeción en el audio, primero llena objecion_*; luego rebate SI (rebateó todas) o NO (omitió o rebatió mal). Nunca NA en RA/DS.
 
 Validar que el asesor:
 
@@ -1145,7 +1161,7 @@ Solo podrá asignarse CLIENTE cuando el asesor haya cumplido satisfactoriamente 
 
 CAUSAS ATRIBUIBLES AL AGENTE
 - HABILIDADES_COMERCIALES
-  - No aplica motivación.
+  - No aplica motivación cuando sondeo_motivacion = NA (tipos RA/AD/OP u otras excepciones de pauta).
   - No realiza sondeo.
   - No desarrolla adecuadamente el argumentario.
   - Brinda información incorrecta o incompleta.
@@ -1784,6 +1800,7 @@ INSTRUCCION FINAL:
 Antes de puntuar: (1) identifica el hilo principal asesor-prospecto (nombre del ticket si existe; si viene vacío, por continuidad temática); descarta crosstalk.
 (2) Clasifica tipo_contacto (PRIMER_CONTACTO vs SEGUIMIENTO) y gestion_principal según ESTA conversación; no copies el ejemplo.
 (3) Si [MM:SS] retrocede, no midas espera por resta de timestamps.
-(4) Consulta informativa no es objeción. No rellenes objecion_1..3. rebate_marcacion = "NA" SOLO si tipificación = SI (venta); si RA/DS → "SI" o "NO", nunca "NA".
-(5) T_* <= [MM:SS] máximo. Saludo: sin evidencia en el texto = NO (castigo). NA solo si es retoma explícita.
+(4) Consulta informativa no es objeción. No rellenes objecion_1..3 sin resistencia real. rebate_marcacion = "NA" SOLO si tipificación = SI (venta); si RA/DS → "SI" o "NO", nunca "NA". Si el prospecto sí objetó y el asesor no rebatió → "NO" (aunque la descripción diga "no identifica objeciones").
+(5) Motivación: RA/AD/OP → sondeo_motivacion = "NA". Tipo AG: "SI" solo si hay pregunta de motivación en el audio (basta preguntar; no exijas respuesta ni acompañamiento). Sin pregunta → "NO".
+(6) T_* <= [MM:SS] máximo. Saludo: sin evidencia en el texto = NO (castigo). NA solo si es retoma explícita.
 Usa [MM:SS] para T_* (segundos enteros). Solo huecos >= 30 s sin aviso, con reloj monótono, cuentan como espera injustificada.
