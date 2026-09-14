@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Cloud Run Job — QueeSmart S3 → GCS (prepare | worker).
+Cloud Run Job — QueeSmart S3 → GCS (prepare | gap_prepare | worker).
 
 Roles (env QS_JOB_ROLE o config job.role):
-  prepare  → lista S3 del día, escribe manifiesto JSONL + meta en GCS, exit 0
-  worker   → CLOUD_RUN_TASK_INDEX toma 1 línea del manifiesto, procesa y cataloga
+  prepare      → lista S3 del día, escribe manifiesto JSONL + meta en GCS, exit 0
+  gap_prepare  → solo faltantes de GAP_TARGET_DATE (anti-join catálogo BQ + GCS)
+  worker       → CLOUD_RUN_TASK_INDEX toma 1 línea del manifiesto, procesa y cataloga
+
+Gap fill manual: CONFIG_PATH=config/config.gap.json + GAP_TARGET_DATE=YYYY-MM-DD
 
 La orquestación de SPs (consolidate / STT / Gemini) vive en Cloud Workflows;
 este Job ya NO encadena stored procedures.
@@ -21,9 +24,10 @@ from zoneinfo import ZoneInfo
 
 from google.cloud import storage
 
-from audio_paths import DEFAULT_FILENAME_REGEX, resolve_sync_mode
+from audio_paths import resolve_sync_mode
 from config_loader import load_config
 from manifest import read_manifest_item, read_manifest_meta
+from gap_prepare import run_gap_prepare
 from sync import (
     build_s3_client,
     parse_manifest_parsed,
@@ -45,8 +49,8 @@ def _resolve_role(config: dict[str, Any]) -> str:
         or config.get("job", {}).get("role")
         or "worker"
     ).strip().lower()
-    if role not in {"prepare", "worker"}:
-        raise ValueError(f"QS_JOB_ROLE inválido: {role} (prepare|worker)")
+    if role not in {"prepare", "gap_prepare", "worker"}:
+        raise ValueError(f"QS_JOB_ROLE inválido: {role} (prepare|gap_prepare|worker)")
     return role
 
 
@@ -79,14 +83,12 @@ def run_worker(config: dict[str, Any]) -> int:
     task_index = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     task_count = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
     process_date = _process_date(config)
-    manifest_prefix = job_cfg.get("manifest_prefix", "state/manifests")
-    sync_mode = resolve_sync_mode(sync_cfg)
-    filename_regex = sync_cfg.get("filename_regex", DEFAULT_FILENAME_REGEX)
-
-    print(
-        f"[worker] task_index={task_index}/{task_count} "
-        f"process_date={process_date} mode={sync_mode}"
+    gap_cfg = config.get("gap", {})
+    manifest_prefix = (
+        gap_cfg.get("manifest_prefix")
+        or job_cfg.get("manifest_prefix", "state/manifests")
     )
+    filename_pattern = sync_cfg.get("filename_regex")
 
     gcs_client = storage.Client(project=gcp_cfg.get("project_id"))
     gcs_bucket = gcp_cfg["bucket_name"]
@@ -97,6 +99,18 @@ def run_worker(config: dict[str, Any]) -> int:
         bucket=gcs_bucket,
         process_date=process_date,
         manifest_prefix=manifest_prefix,
+    )
+    meta_mode = meta.get("sync_mode")
+    config_mode = sync_cfg.get("mode")
+    if meta_mode == "gap_fill" or config_mode == "gap_fill":
+        sync_mode = "gap_fill"
+    else:
+        sync_mode = resolve_sync_mode(sync_cfg)
+
+    print(
+        f"[worker] task_index={task_index}/{task_count} "
+        f"process_date={process_date} mode={sync_mode} "
+        f"manifest_prefix={manifest_prefix}"
     )
     manifest_count = int(meta.get("count") or 0)
     if manifest_count == 0:
@@ -145,7 +159,7 @@ def run_worker(config: dict[str, Any]) -> int:
         print(json.dumps(summary, indent=2))
         return 0
 
-    item["parsed"] = parse_manifest_parsed(item, filename_regex)
+    item["parsed"] = parse_manifest_parsed(item, filename_pattern)
     s3_client = build_s3_client(aws_cfg, secrets_cfg)
 
     try:
@@ -202,6 +216,10 @@ def main() -> int:
 
     if role == "prepare":
         run_prepare(config)
+        return 0
+
+    if role == "gap_prepare":
+        run_gap_prepare(config)
         return 0
 
     return run_worker(config)

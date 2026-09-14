@@ -26,7 +26,9 @@ Roles:
 | `prepare` | Lista el origen del día → `gs://destino/state/manifests/{fecha}.jsonl` |
 | `worker` | `CLOUD_RUN_TASK_INDEX` copia 1 línea |
 
-Orquesta el workflow `workflows/daily_pipeline.yaml` (prepare → lee count → worker N tasks).
+Orquesta el workflow `workflows/daily_pipeline.yaml` (prepare → lee count → worker N tasks → catálogo BQ).
+
+> **Gen IA (SP) temporalmente deshabilitado.** El workflow solo hace **copy + catálogo** hasta corregir `sp_utpbi_gen_ia_cita_promotor`. Para reactivarlo: `run_gen_ia=true` en el body del workflow (ver abajo).
 
 ## Config
 
@@ -96,7 +98,44 @@ bq query --use_legacy_sql=false --location=US --project_id=prd-utpbi-data-operat
 
 Sustituciones: `_PROJECT_ID`, `_JOB_NAME`, `_SERVICE_ACCOUNT`, `_DEST_BUCKET_NAME`, `_SOURCE_PROJECT_ID`, `_SOURCE_BUCKET_NAME`. Opcionales: `_SOURCE_PREFIX`, `_DEST_PREFIX`.
 
-## Manual
+## Workflow — args
+
+| Arg | Default | Qué hace |
+|-----|---------|----------|
+| `process_date` | ayer Lima | `YYYY-MM-DD` |
+| `run_gen_ia` | **`false`** | `true` → llama `sp_utpbi_gen_ia_cita_promotor` al final |
+| `skip_ingest` | `false` | `true` → solo SP (requiere `run_gen_ia=true`) |
+
+Diario (copy + catálogo, sin SP):
+
+```bash
+gcloud workflows run prd-utpbi-promotores-gcs-copy \
+  --project=prd-utpbi-data-operation \
+  --location=us-central1 \
+  --data='{}'
+```
+
+Cuando vuelva el SP — un día con copy + gen_ia:
+
+```bash
+gcloud workflows run prd-utpbi-promotores-gcs-copy \
+  --project=prd-utpbi-data-operation \
+  --location=us-central1 \
+  --data='{"process_date":"2026-09-07","run_gen_ia":true}'
+```
+
+Solo SP (sin copy), p. ej. backfill gen_ia:
+
+```bash
+gcloud workflows run prd-utpbi-promotores-gcs-copy \
+  --project=prd-utpbi-data-operation \
+  --location=us-central1 \
+  --data='{"process_date":"2026-09-07","skip_ingest":true,"run_gen_ia":true}'
+```
+
+Tras corregir el SP, cambiar el default de `run_gen_ia` a `true` en `workflows/daily_pipeline.yaml` o pasarlo en el Scheduler.
+
+## Manual (Job sin workflow)
 
 ```bash
 # prepare

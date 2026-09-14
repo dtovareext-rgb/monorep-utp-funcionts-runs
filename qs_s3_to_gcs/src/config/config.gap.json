@@ -13,18 +13,19 @@
     "region": "us-central1",
     "dataset_id": "raw_queue_smart",
     "cloud_run_job_name": "dev-utpbi-s3-to-gcs-micro-batch",
-    "service_account_email": "dev-utp-eduflow-sa@dev-utpbi-data-operation.iam.gserviceaccount.com",
-    "scheduler_name": "dev-utpbi-s3-to-gcs-daily",
-    "schedule": "0 5 * * *",
-    "schedule_timezone": "America/Lima"
+    "service_account_email": "dev-utp-eduflow-sa@dev-utpbi-data-operation.iam.gserviceaccount.com"
   },
   "job": {
-    "role": "worker",
-    "manifest_prefix": "state/manifests",
+    "role": "gap_prepare",
+    "manifest_prefix": "state/gap_manifests",
     "max_parallelism": 10
   },
+  "gap": {
+    "manifest_prefix": "state/gap_manifests",
+    "note": "Ejecutar manual día a día con GAP_TARGET_DATE=YYYY-MM-DD"
+  },
   "sync": {
-    "mode": "daily_yesterday",
+    "mode": "gap_fill",
     "timezone": "America/Lima",
     "gcs_date_folder_format": "%Y-%m-%d",
     "skip_if_exists_in_gcs": true,
@@ -36,12 +37,10 @@
     "enable_noise_reduction": false,
     "noise_filter": "afftdn",
     "ffmpeg_timeout_seconds": 300,
-    "io_chunk_size_bytes": 8388608,
-    "note": "Siempre FLAC+loudnorm para STT (counter abierto). afftdn opcional vía enable_noise_reduction."
+    "io_chunk_size_bytes": 8388608
   },
   "batch": {
-    "max_files": 500,
-    "max_total_mb": 4096,
+    "max_files": 2000,
     "min_object_size_bytes": 1
   },
   "bigquery": {
@@ -50,10 +49,6 @@
     "table_id": "hist_queesmart_mp3_catalog",
     "location": "US",
     "catalog_existing_in_gcs": true
-  },
-  "orchestration": {
-    "call_consolidate_after_sync": false,
-    "note": "Orquestación movida a Cloud Workflows (queuesmart/workflows/daily_pipeline.yaml)"
   },
   "secrets": {
     "source": "env",

@@ -5,16 +5,17 @@
 # 1) Job role=prepare (1 task) → manifiesto en bucket destino
 # 2) Lee count del meta
 # 3) Job role=worker (tasks=count) → copia + catálogo BQ
-# 4) SP raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor(process_date)
+# 4) SP raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor(process_date) — TEMPORALMENTE OFF
 #
 # Args opcionales:
 #   process_date   YYYY-MM-DD (default: ayer Lima)
-#   skip_ingest    true = solo SP gen_ia (sin prepare/worker)
+#   run_gen_ia     true = ejecuta el SP al final (default false hasta corregir el SP)
+#   skip_ingest    true = solo SP gen_ia (requiere run_gen_ia=true; sin copy/worker)
 #
-# Solo SP últimos 3 días (ej. 22–24 ago):
+# Cuando vuelva el SP, backfill solo gen_ia (ej. 22–24 ago):
 #   for d in 2026-08-22 2026-08-23 2026-08-24; do
 #     gcloud workflows run prd-utpbi-promotores-gcs-copy --location=us-central1 \
-#       --data="{\"process_date\":\"$d\",\"skip_ingest\":true}"
+#       --data="{\"process_date\":\"$d\",\"skip_ingest\":true,\"run_gen_ia\":true}"
 #   done
 #
 # Deploy:
@@ -39,6 +40,7 @@ main:
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
           - process_date: ${default(map.get(args, "process_date"), null)}
           - skip_ingest: ${default(map.get(args, "skip_ingest"), false)}
+          - run_gen_ia: ${default(map.get(args, "run_gen_ia"), false)}
           - started_at: ${sys.now()}
           - ingest_summary: {}
           - sp_results: {}
@@ -67,12 +69,21 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"promotores-gcs-copy START process_date=" + process_date + " skip_ingest=" + string(skip_ingest) + " job=" + job_name}'
+          text: '${"promotores-gcs-copy START process_date=" + process_date + " skip_ingest=" + string(skip_ingest) + " run_gen_ia=" + string(run_gen_ia) + " job=" + job_name}'
 
     - maybe_skip_ingest:
         switch:
-          - condition: ${skip_ingest == true}
+          - condition: ${skip_ingest == true and run_gen_ia == true}
             next: sp_gen_ia
+          - condition: ${skip_ingest == true and run_gen_ia == false}
+            steps:
+              - log_skip_ingest_only:
+                  call: sys.log
+                  args:
+                    severity: WARNING
+                    text: "skip_ingest=true pero run_gen_ia=false — SP deshabilitado; no hay copy ni gen_ia"
+              - jump_skip_ingest_only:
+                  next: finalize
           - condition: true
             next: run_prepare_job
 
@@ -208,8 +219,17 @@ main:
                   raise:
                     message: "Copia parcial"
                     ingest: ${ingest_summary}
-          - condition: true
+          - condition: ${run_gen_ia == true}
             next: sp_gen_ia
+          - condition: true
+            steps:
+              - log_skip_gen_ia:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: "SP gen_ia omitido (run_gen_ia=false)"
+              - jump_finalize:
+                  next: finalize
 
     - sp_gen_ia:
         steps:
