@@ -730,7 +730,7 @@ Se considera efectivo cuando:
 
 - El rebate aborda la misma temática de ESA objeción.
 - La respuesta es coherente con la situación planteada.
-- Presenta argumentos, alternativas o soluciones alineadas a la necesidad del prospecto.
+- Presenta argumentos, alternativas o soluciones alineadas a la necesidad del prospecto de acuerdo al sondeo de motivación.
 
 Se considera no efectivo (rebate_efectivo_marcacion = 'NO') cuando:
 
