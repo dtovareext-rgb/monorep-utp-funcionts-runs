@@ -1,0 +1,13 @@
+# Caso 1 — conversation_id 68837289-4e21-41d3-915e-a9e7fb902225
+# Asesor: Shirley Rivera | Cola: Escrito1x2 | Penalización IA: CIERRE=0
+# Whisper small / Spanish (local)
+
+[00:00.000 --> 00:09.000] Hola, ¿Qué tal? Buenos días.
+[00:09.000 --> 00:15.000] Buenos días. Buenos días, me comunico con Enrique.
+[00:15.000 --> 00:22.000] Te saluda Shirley Rivera, asesora educativa de la UTP.
+[00:23.000 --> 00:28.000] ¿Qué tal, Enrique? Veo que estás interesado en estudiar con nosotros, ¿correcto?
+[00:28.000 --> 00:31.000] Sí, yo estoy muy interesado, asesor.
+[00:31.000 --> 00:39.000] Ya me llevo formación y como había sido exalumno, no sé si no estoy al mismo...
+[00:39.000 --> 00:45.000] Claro, está muy bien. ¿Y por qué todavía no has realizado lo que es tu inscripción, Enrique?
+[00:45.000 --> 00:48.000] Porque tengo que ir a preguntar al SAE todavía.
+[00:48.000 --> 00:53.000] Muy bien, lo dejo reflejado, Enrique, que tengas un excelente día.

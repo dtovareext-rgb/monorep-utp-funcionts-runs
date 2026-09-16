@@ -1,0 +1,38 @@
+[cliente 19:33] Mándame la información
+[sistema 19:34] 51926457041@4 RESPONSE MARCA INICIO: {"state":"ok","data":{"RecordId":"2062854"}}
+[sistema 19:34] WAID: 51926457041@4
+[sistema 19:34] Estado Cliente: Registrado
+[sistema 19:34] URL Lead: https://utp.crm2.dynamics.com/main.aspx?appid=60d75ac9-420f-eb11-a813-000d3a5e70d3&pagetype=entityrecord&etn=lead&id=1d420c2d-2894-f111-b8db-e4fade0327ff
+[sistema 19:34] Nombre: ANDRES
+[sistema 19:34] Apellido: AVENCHARI
+[sistema 19:34] DNI: 81095141
+[sistema 19:34] Campus/Sede: PUCALLPA
+[sistema 19:34] Subgrado: PRESENCIAL
+[operador 19:34] Vemos que te has comunicado con nosotros anteriormente. 😌Esta es la información que tenemos registrada:Nombre: ANDRES AVENCHARICampus: PUCALLPASubgrado: PRESENCIALComéntanos en un solo mensaje ¿cómo te podemos ayudar? 🙌
+[cliente 19:35] Cómo es carrera profesional
+[operador 19:35] ¡Genial! 😀Te pondremos en contacto con un asesor.En breve se comunicará contigo.
+[sistema 19:35] Tipo Cliente: Registrado
+[sistema 19:35] ITR has transferred case to Skill Cola 1 a +
+[cliente 19:37] Quiero Aser una carrera
+[sistema 19:38] Caso recibido por ksanchezpr<br/>Caso id: <b>4456836</b>
+[operador 19:38] ❤️🖤❤️ Hola, ¡Qué gusto saludarte! 😀Mi nombre es Karen Sanchez  y te doy la bienvenid@ a la UTP, la universidad N°1 en preferencia educativa en todo el Perú. 🔝Aquí encontrarás la combinación perfecta 😉: respaldo de Intercorp, educación de calidad y oportunidades laborales reales para tu futuro. 🚀
+[cliente 19:39] Ya
+[operador 19:42] 🎓✨ Nuestros egresados están en el Top 5 de profesionales más contratados por las empresas. 💼🚀
+[cliente 19:43] Que laborales pa mi futuro
+[operador 19:43] Primero felicitarte por tu gran decisión y poner a UTP dentro de tus opciones, Cuéntame ¿qué te motiva a iniciar tu etapa universitaria? ❤️🖤❤️
+[operador 19:43] ¿Qué te motiva a estudiar?
+[cliente 19:46] Ser profesor
+[cliente 19:48] Universitaria
+[cliente 19:50] Mí motivo es estudiar universitaria
+[operador 19:52] ¡Genial! ¡Felicidades por elegirnos! 😊 ¿Qué te motivó a elegir la carrera ?
+[BOT/FLOW 19:52] [FLOW] Menú/botón automático de WhatsApp. Usar solo como contexto de datos recolectados (carrera, sede, edad, modalidad, etc.). No evaluar como comunicación humana del asesor. Payload técnico omitido.
+[operador 19:56] ¿Estás ahí? Estaré aquí por 4 minutos más.
+[sistema 19:56] Inactivity warning sent to user
+[operador 19:57] ¡Genial! ¡Felicidades por elegirnos! 😊 ¿Qué te motivó a elegir la carrera ?
+[operador 19:57] [IMAGEN] Material multimedia enviado (flyer/brochure/imagen/documento). Contenido binario/base64 omitido. Registrar envío de material para USO_DE_FLYERS_VIDEOS_Y_ARTES; no intentar decodificar ni interpretar el contenido visual.
+[operador 19:57] Gracias. Le contactamos también por WhatsApp Mi nombre es Karen Sanchez . estoy aquí para ayudarle.¿Desea conversar?Escríbame :  930 930 220WhatsApp: https://wa.me/.+51930930220¡Que tenga un excelente día!
+[sistema 19:57] ID AGENTE: 509
+[sistema 19:57] TXT AGENTE: ksanchezpr
+[sistema 19:57] HTTPPOST DATA CIERRA CASO: {"RecordId":"1d420c2d-2894-f111-b8db-e4fade0327ff","MessageId":"11402111","Clasification":"Cliente dejo de escribir","ClasificationID":65,"MessageUrl":"https://utp.onemarketer.cl/utp_pregrado/getimage?filename=downloadCase&idsessionlog=11402150,https://utp.onemarketer.cl/utp_pregrado/getimage?filename=downloadCase&idsessionlog=11402398","AgentID":"ksanchezpr"}
+[sistema 19:57] RESPONSE CIERRA CASO: {"data":{"state":"OK","data":{"RecordId":"9b344575-a0b0-f111-aaab-e4fade0323cc","RecordURL":"https://utp.crm2.dynamics.com/main.aspx?appid=&pagetype=entityrecord&etn=onetoone_whatsapp&id=9b344575-a0b0-f111-aaab-e4fade0323cc"}},"statusCode":200}
+[sistema 19:57] Cierra caso agente ksanchezpr

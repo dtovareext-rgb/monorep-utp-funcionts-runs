@@ -403,12 +403,18 @@ ITEM: SONDEO
 REGLA NA — TIPOS RA, AD y OP (OBLIGATORIA — prioridad sobre marcación SI/NO):
 En Counter la pregunta de motivación NO se realiza en atenciones tipo RA, AD ni OP (flujo distinto al argumentario AG). sondeo_motivacion_marcacion = 'NA' SIEMPRE. PROHIBIDO 'NO' por 'no se realiza la pregunta', 'no explora la motivación' u omisión equivalente en estos tipos.
 
-Infierelo del contenido de ESTA transcripción (no del nombre del archivo):
-- Tipo OP (orden / compromiso de pago): gestion_principal = PAGO_MATRICULA; o el motivo principal es pagar matrícula, pensión, voucher o medio de pago; o hay compromiso de pago / tipificación OP (SI con pago pendiente por concretar).
-- Tipo AD (administrativa): gestion_principal = DOCUMENTOS_REGULAR, DOCUMENTOS_CONVALIDACION o RECORDATORIO_EXAMEN; trámite de examen, entrega/subida de documentos, convalidación, recordatorio o gestión de alumno en proceso sin argumentario de inscripción nueva.
-- Tipo RA (retorno / retoma): tipo_contacto = SEGUIMIENTO con retoma explícita ('has ido evaluando', 'la vez pasada', 'ya te comenté', continúa ficha/pago/documentos/charla ya iniciada) sin desarrollar sondeo de motivación como en primer contacto comercial.
+FUENTE DE VERDAD DEL TIPO — NOMBRE DEL ARCHIVO (prioridad absoluta sobre el contenido del audio):
+- El prefijo ANTES del primer guión del archivo Ticketero trae campus + tipificación. Ej.: 035RA1-20260910-105220.webm → tipo RA; 165AD1-… → AD; 155OP1-… → OP; 105AG4-… → AG.
+- El prefijo puede tener 5, 6 o 7 caracteres (no siempre 6). Extrae las letras de tipificación del prefijo: RA, AD, OP, AG (u otras).
+- Si en el contexto del ticket viene tipificacion_ticketero o type_code (ej. RA1, AD1, OP2, AG4), úsalo: las primeras letras (RA/AD/OP/AG) definen el tipo.
+- PROHIBIDO ignorar el nombre del archivo o type_code e 'inferir' solo del audio cuando el prefijo ya indica RA, AD u OP.
+- Solo si NO hay prefijo/type_code usable, entonces como respaldo infiere del contenido:
+  - Tipo OP: gestion_principal = PAGO_MATRICULA; o motivo principal pagar matrícula/pensión/voucher; compromiso de pago.
+  - Tipo AD: gestion_principal = DOCUMENTOS_REGULAR, DOCUMENTOS_CONVALIDACION o RECORDATORIO_EXAMEN; trámite administrativo sin argumentario de inscripción nueva.
+  - Tipo RA: tipo_contacto = SEGUIMIENTO con retoma explícita sin sondeo de motivación de primer contacto.
+  - Tipo AG: gestion_principal = INFORMACION_CARRERA con PRIMER_CONTACTO (argumentario de inscripción nueva).
 
-La pregunta de motivación SÍ aplica en atención tipo AG (primer contacto comercial / orientación con argumentario de inscripción nueva): gestion_principal = INFORMACION_CARRERA con PRIMER_CONTACTO, salvo que caiga en otro 'No aplica' abajo.
+La pregunta de motivación SÍ aplica en atención tipo AG (primer contacto comercial / orientación con argumentario de inscripción nueva), salvo que caiga en otro 'No aplica' abajo.
 
 No aplica ('NA') también si:
 
@@ -1801,6 +1807,6 @@ Antes de puntuar: (1) identifica el hilo principal asesor-prospecto (nombre del 
 (2) Clasifica tipo_contacto (PRIMER_CONTACTO vs SEGUIMIENTO) y gestion_principal según ESTA conversación; no copies el ejemplo.
 (3) Si [MM:SS] retrocede, no midas espera por resta de timestamps.
 (4) Consulta informativa no es objeción. No rellenes objecion_1..3 sin resistencia real. rebate_marcacion = "NA" SOLO si tipificación = SI (venta); si RA/DS → "SI" o "NO", nunca "NA". Si el prospecto sí objetó y el asesor no rebatió → "NO" (aunque la descripción diga "no identifica objeciones").
-(5) Motivación: RA/AD/OP → sondeo_motivacion = "NA". Tipo AG: "SI" solo si hay pregunta de motivación en el audio (basta preguntar; no exijas respuesta ni acompañamiento). Sin pregunta → "NO".
+(5) Motivación: tipo Ticketero desde el NOMBRE del archivo / type_code (RA/AD/OP/AG en el prefijo antes del primer guión; prefijo puede tener 5–7 chars). Si RA/AD/OP → sondeo_motivacion = "NA" SIEMPRE (no inferir del audio para contradecir el nombre). Tipo AG: "SI" solo si hay pregunta de motivación; sin pregunta → "NO".
 (6) T_* <= [MM:SS] máximo. Saludo: sin evidencia en el texto = NO (castigo). NA solo si es retoma explícita.
 Usa [MM:SS] para T_* (segundos enteros). Solo huecos >= 30 s sin aviso, con reloj monótono, cuentan como espera injustificada.

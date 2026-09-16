@@ -1,0 +1,13 @@
+{
+    "gcp": {
+        "project_id": "prd-utpbi-data-operation",
+        "cloud_run_job_name": "prd-utpbi-genesys-audio-serialize-markov",
+        "region": "us-central1",
+        "bucket_audio": "prd-utp-stg-genesys-audios-b3k7w1n9x4v6p0j2t8q5m1z",
+        "path_audio": "data/input/genesys_audios_descarga_raw/fecha_descarga=YYYY-MM-DD/hora_descarga=HH",
+        "dataset_id": "raw_genesys_audios",
+        "table_id": "genesys_audios_serialize_markov",
+        "service_account_email": "genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com",
+        "docker_image_repository": "gcr.io/prd-utpbi-data-operation/genesys-audio-processor-markov"
+    }
+}

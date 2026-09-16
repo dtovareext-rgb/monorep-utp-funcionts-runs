@@ -1,0 +1,10 @@
+# Caso 2 — conversation_id cf66b620-ec6a-404e-94e3-fab28625026f
+# Asesor: Adelita Alegria | Cola: ESCRITOS_RA | Penalización IA: REBATE=0
+# Whisper small / Spanish (local)
+
+[00:00.000 --> 00:08.300] Hola, buenas tardes, te saluda
+[00:08.300 --> 00:11.000] Adelita Alegria, asesora educativa de la UTP.
+[00:11.000 --> 00:13.800] Tengo el gusto de comunicarme con Sayuri.
+[00:13.800 --> 00:19.800] Sí, ya he dicho ya que estoy matriculada en otra universidad.
+[00:19.800 --> 00:24.200] Ok, lo apunto, disculpa, así lo ponemos a reality en el sistema.
+[00:24.200 --> 00:25.600] Que tengas un excelente día, cuídese.
