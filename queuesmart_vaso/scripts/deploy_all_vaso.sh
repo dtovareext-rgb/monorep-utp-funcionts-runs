@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Deploy completo stacks VASO QueeSmart (BQ + Workflow).
 # No despliega Cloud Run Jobs (gap / Whisper): usar sus cloudbuild.
 #
@@ -45,6 +45,6 @@ gcloud workflows deploy "$WF_NAME" \
 echo "=== OK deploy_all_vaso ==="
 echo "Jobs Cloud Run (si faltan):"
 echo "  qs_s3_gap_vaso/cloudbuild.yaml  → prd-utpbi-s3-gap-vaso"
-echo "  cr_serialize_queuesmart/cloudbuild.yaml → prd-utpbi-queuesmart-audio-serialize-whisper-vaso"
+echo "  cr_serialize_queuesmart/cloudbuild.yaml → prd-utpbi-queuesmart-audio-serialize-whisper"
 echo "Run:"
 echo "  gcloud workflows run $WF_NAME --location=$LOCATION_WF --project=$PROJECT --data='{\"process_date\":\"YYYY-MM-DD\"}'"

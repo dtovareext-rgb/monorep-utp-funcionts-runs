@@ -1,4 +1,4 @@
-# Inventario completo — stack VASO QueeSmart
+﻿# Inventario completo — stack VASO QueeSmart
 
 Todo el pipeline paralelo (legado-miss) vive bajo este paquete + 2 Jobs hermanos.
 
@@ -45,7 +45,7 @@ Orquestador: `workflows/vaso_pipeline.yaml` → Workflow `queuesmart-vaso-pipeli
 | Paquete | Job | Qué hace |
 |---|---|---|
 | [`qs_s3_gap_vaso/`](../qs_s3_gap_vaso/) | `prd-utpbi-s3-gap-vaso` | S3→GCS solo legado-miss |
-| [`cr_serialize_queuesmart/`](../cr_serialize_queuesmart/) | `prd-utpbi-queuesmart-audio-serialize-whisper-vaso` | Whisper → tablas vaso |
+| [`cr_serialize_queuesmart/`](../cr_serialize_queuesmart/) | `prd-utpbi-queuesmart-audio-serialize-whisper` | Whisper → tablas vaso |
 
 ## Tablas BQ (todas vaso; ninguna prod)
 

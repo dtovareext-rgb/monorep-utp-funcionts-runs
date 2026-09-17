@@ -1,11 +1,11 @@
 # ============================================================
 # Cloud Run Job: cr_serialize_queuesmart
-# Whisper LOCAL — paso paralelo al STT Chirp (ML.TRANSCRIBE)
+# Whisper LOCAL (VASO) — sin diarización de hablantes
 # ============================================================
 
 setuptools>=68.0.0
 
-# Transcripción LOCAL (sin API key, costo cero)
+# Transcripción LOCAL (sin API key)
 faster-whisper==1.0.3
 
 # Audio

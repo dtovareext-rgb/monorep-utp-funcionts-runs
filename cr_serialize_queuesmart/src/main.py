@@ -1,6 +1,6 @@
 """
 cr_serialize_queuesmart/main.py
-Cloud Run Job — Whisper LOCAL (VASO) reemplaza STT Chirp en el pipeline queuesmart_vaso.
+Cloud Run Job — Whisper LOCAL (VASO). Sin diarización de hablantes.
 
 Escribe en tablas VASO (NO toca Chirp prod):
   - adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_raw
@@ -17,10 +17,11 @@ Flujo:
   1. FECHA_AUDIO → audios del día desde enriched_vaso (+ fallback catálogo vaso)
      GCS_URIS   → lista explícita (pruebas), metadata desde BQ si existe
   2. Particiona por source_file_name (padre) para no partir segmentos _s01/_s02
-  3. Whisper LOCAL → transcripcion con [MM:SS] (contrato Counter/Chirp)
+  3. faster-whisper → transcripcion [MM:SS] (contrato Counter)
   4. DELETE+INSERT raw por gcs_uri; rebuild prd fusionando segmentos del padre
 
-Audio Counter: FLAC mono 16 kHz (no estéreo → sin speaker por RMS).
+Audio Counter: FLAC mono 16 kHz. transcripcion_con_hablantes queda NULL
+(Whisper no identifica hablantes; diarización comercial queda fuera de scope).
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ import tempfile
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 from faster_whisper import WhisperModel
 from google.cloud import bigquery, storage
@@ -82,12 +85,38 @@ PROJECT = GCP["project_id"]
 
 FECHA_AUDIO = os.environ.get("FECHA_AUDIO", "").strip()
 GCS_URIS = os.environ.get("GCS_URIS", "").strip()
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "turbo").strip() or "turbo"
+
+# Rendimiento (CPU). Defaults orientados a lote Counter (~200/día).
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+WHISPER_BEAM_SIZE = max(1, _env_int("WHISPER_BEAM_SIZE", 3))
+WHISPER_WORD_TIMESTAMPS = _env_bool("WHISPER_WORD_TIMESTAMPS", False)
+WHISPER_CONDITION_ON_PREVIOUS = _env_bool("WHISPER_CONDITION_ON_PREVIOUS", False)
+WHISPER_CPU_THREADS = max(1, _env_int("WHISPER_CPU_THREADS", 0) or (os.cpu_count() or 4))
+WHISPER_NUM_WORKERS = max(1, _env_int("WHISPER_NUM_WORKERS", 1))
+
 # Sesgo léxico Whisper: español peruano + dominio Counter UTP.
 # Sobrescribible con WHISPER_INITIAL_PROMPT (Cloud Run / Cloud Build).
 # Mantener corto: Whisper solo usa ~224 tokens del prompt.
 _DEFAULT_WHISPER_INITIAL_PROMPT = (
     "Conversación presencial en un counter de la Universidad Tecnológica del Perú (UTP), "
-    "en español de Perú (acento limeño/costeño). "
+    "en español de Perú (variedades de distintas regiones: costa, sierra y selva). "
     "Hablan un asesor de admisiones y un postulante o apoderado. "
     "Vocabulario frecuente: matrícula, pensión, boleta, voucher, Yape, Plin, agente BCP, "
     "carrera, modalidad a distancia, semipresencial, turno noche, malla curricular, "
@@ -145,37 +174,149 @@ logger.info(
 
 
 # ---------------------------------------------------------------------------
-# Anti-alucinación
+# Anti-alucinación / colapso de bucles (Whisper CPU)
 # ---------------------------------------------------------------------------
-def _detect_intra_segment_loop(text: str) -> bool:
+# El loop clásico no empieza al inicio del segmento ("Bueno, en este caso, en este
+# caso…", "certificado de certificado de…", "sí, sí, sí…"). Antes se descartaba
+# el segmento entero; ahora se colapsa la repetición y se conserva el resto.
+
+_MAX_PHRASE_LEN = 8
+# Conservador para evaluación Gemini: solo bucles patológicos de Whisper.
+# 2 repeticiones reales ("sí, sí" / "claro, claro") NO se tocan.
+_COLLAPSE_MIN_REPS = 4
+_COLLAPSE_MAX_KEEP = 2
+# Monosílabos / muletillas: hace falta más repetición para colapsar
+_SHORT_TOKEN_MIN_REPS = 6
+
+
+def collapse_repetitions(text: str, *, max_keep: int = _COLLAPSE_MAX_KEEP) -> str:
+    """
+    Colapsa n-gramas consecutivos claramente alucinados (Whisper loop).
+    Conserva 2 copias para no inventar ni borrar énfasis real del counter.
+    No toca 2 repeticiones normales ("sí, sí", "ya, ya").
+    """
+    if not text or not text.strip():
+        return text
+
     words = text.split()
+    if len(words) >= 4:
+        words = _collapse_word_runs(words, max_keep=max_keep)
+        text = " ".join(words)
+
+    # 008-008-008 / 945-945-945 (token con separador, ≥3 copias)
+    text = re.sub(
+        r"\b([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]{1,24})(?:\s*([-/_,.])\s*\1){2,}\b",
+        lambda m: (m.group(1) + m.group(2)) * (max_keep - 1) + m.group(1),
+        text,
+    )
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
+
+
+def _norm_token(w: str) -> str:
+    return re.sub(r"[^\wáéíóúüñÁÉÍÓÚÜÑ]+", "", w, flags=re.UNICODE).lower()
+
+
+def _min_reps_for_phrase(phrase: list[str]) -> int:
+    """Muletillas de 1 token necesitan más reps; frases largas bastan con 4."""
+    if len(phrase) == 1 and len(_norm_token(phrase[0])) <= 4:
+        return _SHORT_TOKEN_MIN_REPS
+    return _COLLAPSE_MIN_REPS
+
+
+def _collapse_word_runs(words: list[str], *, max_keep: int) -> list[str]:
     n = len(words)
-    if n < 6:
-        return False
-    for pattern_len in range(1, n // 4 + 1):
-        pattern = words[:pattern_len]
-        reps = 0
-        for i in range(0, n - pattern_len + 1, pattern_len):
-            if words[i : i + pattern_len] == pattern:
+    out: list[str] = []
+    i = 0
+    while i < n:
+        max_len = min(_MAX_PHRASE_LEN, (n - i) // 3)
+        # Preferir el patrón con MÁS repeticiones (unidad más pequeña del loop).
+        best: tuple[int, int, int, list[str]] | None = None  # reps, -len, j, phrase
+        for length in range(1, max_len + 1):
+            phrase = words[i : i + length]
+            phrase_norm = [_norm_token(w) for w in phrase]
+            if not any(phrase_norm):
+                continue
+            need = _min_reps_for_phrase(phrase)
+            reps = 1
+            j = i + length
+            while j + length <= n:
+                nxt = [_norm_token(w) for w in words[j : j + length]]
+                if nxt != phrase_norm:
+                    break
                 reps += 1
-            else:
-                break
-        if reps >= 4:
-            return True
-    return False
+                j += length
+            if reps >= need:
+                cand = (reps, -length, j, phrase)
+                if best is None or cand[:2] > best[:2]:
+                    best = cand
+        if best is not None:
+            _reps, _neg_len, j, phrase = best
+            keep = min(_reps, max_keep)
+            for _ in range(keep):
+                out.extend(phrase)
+            i = j
+        else:
+            out.append(words[i])
+            i += 1
+    return out
+
+
+def _segment_with_text(seg: Any, text: str) -> Any:
+    return SimpleNamespace(
+        id=getattr(seg, "id", None),
+        seek=getattr(seg, "seek", None),
+        start=float(getattr(seg, "start", 0.0) or 0.0),
+        end=float(getattr(seg, "end", 0.0) or 0.0),
+        text=text,
+        tokens=getattr(seg, "tokens", None),
+        avg_logprob=getattr(seg, "avg_logprob", None),
+        compression_ratio=getattr(seg, "compression_ratio", None),
+        no_speech_prob=float(getattr(seg, "no_speech_prob", 0.0) or 0.0),
+    )
 
 
 def filter_segments(raw_segments: list) -> list:
     filtered = []
     for seg in raw_segments:
-        text_strip = seg.text.strip()
+        text_strip = (seg.text or "").strip()
+        if not text_strip:
+            continue
         text_lower = text_strip.lower()
         if seg.no_speech_prob > NO_SPEECH_PROB_THRESHOLD:
             continue
         if text_lower in HALLUCINATION_PHRASES:
             continue
-        if _detect_intra_segment_loop(text_strip):
+
+        collapsed = collapse_repetitions(text_strip)
+        # Si tras colapsar queda casi vacío o solo basura muy corta de loop puro → drop
+        if not collapsed.strip():
             continue
+        # Ratio extremo: texto original >> colapsado (bucle masivo) y colapsado muy corto
+        if (
+            len(text_strip) > 80
+            and len(collapsed) < 24
+            and len(text_strip) >= 8 * max(len(collapsed), 1)
+        ):
+            logger.info(
+                "  Drop segmento loop extremo (%.1fs-%.1fs) raw=%s collapsed=%s",
+                float(seg.start),
+                float(seg.end),
+                len(text_strip),
+                len(collapsed),
+            )
+            continue
+
+        if collapsed != text_strip:
+            logger.debug(
+                "  Collapse loop %.1fs-%.1fs: %s→%s chars",
+                float(seg.start),
+                float(seg.end),
+                len(text_strip),
+                len(collapsed),
+            )
+            seg = _segment_with_text(seg, collapsed)
+
         filtered.append(seg)
 
     consecutive_limit = 2
@@ -230,11 +371,13 @@ def build_transcripcion_mmss(segments: list) -> str:
         if not current_words:
             return
         stamp = seconds_to_mmss(block_start)
-        blocks.append(f"[{stamp}] {' '.join(current_words).strip()}")
+        body = collapse_repetitions(" ".join(current_words).strip())
+        if body:
+            blocks.append(f"[{stamp}] {body}")
         current_words = []
 
     for seg in segments:
-        text = seg.text.strip()
+        text = collapse_repetitions(seg.text.strip())
         if not text:
             continue
         gap = float(seg.start) - prev_end
@@ -497,67 +640,19 @@ def load_audio_as_mono_wav(src_path: str, wav_path: str) -> tuple[int, int]:
     return len(audio), channels_original
 
 
-def transcribe_uri(
-    storage_client: storage.Client,
+def _base_row(
     meta: dict,
-    tmpdir: str,
-    model: WhisperModel,
+    *,
+    uri: str,
+    process_date: str | None,
+    duration_seconds: float | None,
+    whisper_payload: dict[str, Any],
+    status: str,
+    transcripcion: str | None,
+    transcripcion_con_hablantes: str | None,
+    observaciones: str,
 ) -> dict:
-    uri = meta["gcs_uri"]
-    bucket_name, blob_name = uri[5:].split("/", 1)
-    blob = storage_client.bucket(bucket_name).blob(blob_name)
-
-    suffix = Path(blob_name).suffix.lower() or ".flac"
-    local_audio = os.path.join(tmpdir, f"{Path(blob_name).stem}{suffix}")
-    blob.download_to_filename(local_audio)
-
-    wav_path = os.path.join(tmpdir, f"{Path(blob_name).stem}_mono.wav")
-    duration_ms, channels_original = load_audio_as_mono_wav(local_audio, wav_path)
-
-    segments_iter, info = model.transcribe(
-        wav_path,
-        language="es",
-        task="transcribe",
-        word_timestamps=True,
-        initial_prompt=WHISPER_INITIAL_PROMPT,
-        condition_on_previous_text=True,
-        temperature=0.0,
-        beam_size=5,
-        vad_filter=True,
-        vad_parameters=dict(
-            threshold=0.5,
-            min_speech_duration_ms=250,
-            max_speech_duration_s=float("inf"),
-            min_silence_duration_ms=500,
-            speech_pad_ms=200,
-        ),
-    )
-    raw_segments = list(segments_iter)
-    segments = filter_segments(raw_segments)
-    transcripcion = build_transcripcion_mmss(segments)
-
-    whisper_payload = {
-        "engine": "faster-whisper",
-        "model": WHISPER_MODEL,
-        "language": getattr(info, "language", "es"),
-        "locale_bias": "es-PE",
-        "initial_prompt_preview": WHISPER_INITIAL_PROMPT[:160],
-        "duration": getattr(info, "duration", duration_ms / 1000.0),
-        "segments_raw": len(raw_segments),
-        "segments_kept": len(segments),
-        "channels_original": channels_original,
-    }
-
-    process_date = meta.get("process_date")
-    if hasattr(process_date, "isoformat"):
-        process_date = process_date.isoformat()
-
-    duration_seconds = meta.get("duration_seconds")
-    if duration_seconds is None:
-        duration_seconds = round(duration_ms / 1000.0, 3)
-
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
     return {
         "process_date": process_date or date.today().isoformat(),
         "gcs_uri": uri,
@@ -587,19 +682,152 @@ def transcribe_uri(
         "database": meta.get("database"),
         "json_text": json.dumps(whisper_payload, ensure_ascii=False),
         "full_response": json.dumps(whisper_payload, ensure_ascii=False),
-        "status": "OK" if transcripcion else "EMPTY",
+        "status": status,
         "transcripcion": transcripcion,
-        "transcripcion_con_hablantes": None,  # Counter mono; prompt usa [MM:SS]
+        "transcripcion_con_hablantes": transcripcion_con_hablantes,
         "resumen": None,
         "intencion": None,
         "idioma": "es",
         "tono": None,
         "entidades": None,
-        "observaciones": f"whisper:{WHISPER_MODEL}",
+        "observaciones": observaciones,
         "load_date": now_utc,
         "_parent_key": parent_key_from_names(meta.get("source_file_name"), meta.get("file_name")),
         "_segment_ord": segment_ord_from_file_name(meta.get("file_name")),
     }
+
+
+def transcribe_uri(
+    storage_client: storage.Client,
+    meta: dict,
+    tmpdir: str,
+    model: WhisperModel,
+) -> dict:
+    uri = meta["gcs_uri"]
+    process_date = meta.get("process_date")
+    if hasattr(process_date, "isoformat"):
+        process_date = process_date.isoformat()
+
+    bucket_name, blob_name = uri[5:].split("/", 1)
+    blob = storage_client.bucket(bucket_name).blob(blob_name)
+
+    suffix = Path(blob_name).suffix.lower() or ".flac"
+    local_audio = os.path.join(tmpdir, f"{Path(blob_name).stem}{suffix}")
+    blob.download_to_filename(local_audio)
+
+    wav_path = os.path.join(tmpdir, f"{Path(blob_name).stem}_mono.wav")
+    try:
+        duration_ms, channels_original = load_audio_as_mono_wav(local_audio, wav_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("  Audio corrupto/ilegible %s: %s", uri, exc, exc_info=True)
+        return _base_row(
+            meta,
+            uri=uri,
+            process_date=process_date,
+            duration_seconds=meta.get("duration_seconds"),
+            whisper_payload={
+                "engine": "faster-whisper",
+                "model": WHISPER_MODEL,
+                "error": f"audio_load_failed: {exc}",
+            },
+            status="CORRUPT",
+            transcripcion=None,
+            transcripcion_con_hablantes=None,
+            observaciones=f"whisper:{WHISPER_MODEL};error=audio_load",
+        )
+
+    if duration_ms < 500:
+        logger.warning("  Audio casi silencio (%.0f ms): %s", duration_ms, uri)
+        return _base_row(
+            meta,
+            uri=uri,
+            process_date=process_date,
+            duration_seconds=round(duration_ms / 1000.0, 3),
+            whisper_payload={
+                "engine": "faster-whisper",
+                "model": WHISPER_MODEL,
+                "duration_ms": duration_ms,
+                "error": "too_short_or_silent",
+            },
+            status="EMPTY",
+            transcripcion=None,
+            transcripcion_con_hablantes=None,
+            observaciones=f"whisper:{WHISPER_MODEL};silent_or_short",
+        )
+
+    try:
+        segments_iter, info = model.transcribe(
+            wav_path,
+            language="es",
+            task="transcribe",
+            word_timestamps=WHISPER_WORD_TIMESTAMPS,
+            initial_prompt=WHISPER_INITIAL_PROMPT,
+            condition_on_previous_text=WHISPER_CONDITION_ON_PREVIOUS,
+            temperature=0.0,
+            beam_size=WHISPER_BEAM_SIZE,
+            # Default Whisper 2.4; no bajar: riesgo de tirar segmentos válidos para evaluación
+            compression_ratio_threshold=2.4,
+            vad_filter=True,
+            vad_parameters=dict(
+                threshold=0.5,
+                min_speech_duration_ms=250,
+                max_speech_duration_s=float("inf"),
+                min_silence_duration_ms=500,
+                speech_pad_ms=200,
+            ),
+        )
+        raw_segments = list(segments_iter)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("  Whisper falló %s: %s", uri, exc, exc_info=True)
+        return _base_row(
+            meta,
+            uri=uri,
+            process_date=process_date,
+            duration_seconds=round(duration_ms / 1000.0, 3),
+            whisper_payload={
+                "engine": "faster-whisper",
+                "model": WHISPER_MODEL,
+                "error": f"transcribe_failed: {exc}",
+            },
+            status="ERROR",
+            transcripcion=None,
+            transcripcion_con_hablantes=None,
+            observaciones=f"whisper:{WHISPER_MODEL};error=transcribe",
+        )
+
+    segments = filter_segments(raw_segments)
+    transcripcion = build_transcripcion_mmss(segments)
+
+    whisper_payload = {
+        "engine": "faster-whisper",
+        "model": WHISPER_MODEL,
+        "language": getattr(info, "language", "es"),
+        "locale_bias": "es-PE",
+        "initial_prompt_preview": WHISPER_INITIAL_PROMPT[:160],
+        "duration": getattr(info, "duration", duration_ms / 1000.0),
+        "segments_raw": len(raw_segments),
+        "segments_kept": len(segments),
+        "channels_original": channels_original,
+        "beam_size": WHISPER_BEAM_SIZE,
+        "word_timestamps": WHISPER_WORD_TIMESTAMPS,
+        "condition_on_previous_text": WHISPER_CONDITION_ON_PREVIOUS,
+    }
+
+    duration_seconds = meta.get("duration_seconds")
+    if duration_seconds is None:
+        duration_seconds = round(duration_ms / 1000.0, 3)
+
+    return _base_row(
+        meta,
+        uri=uri,
+        process_date=process_date,
+        duration_seconds=duration_seconds,
+        whisper_payload=whisper_payload,
+        status="OK" if transcripcion else "EMPTY",
+        transcripcion=transcripcion,
+        transcripcion_con_hablantes=None,
+        observaciones=f"whisper:{WHISPER_MODEL}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -828,14 +1056,29 @@ def main() -> None:
         raise ValueError(f"FECHA_AUDIO inválida: {FECHA_AUDIO!r}")
 
     logger.info(
-        "=== QueueSmart Whisper → hist STT | modo=%s ===",
+        "=== QueueSmart Whisper → hist VASO | modo=%s ===",
         f"LISTA" if is_list else f"DÍA {FECHA_AUDIO}",
     )
 
     mapped = MODEL_MAP.get(WHISPER_MODEL, WHISPER_MODEL)
     t0 = time.time()
-    model = WhisperModel(mapped, device="cpu", compute_type="int8")
-    logger.info("Whisper '%s' en %.1fs", mapped, time.time() - t0)
+    model = WhisperModel(
+        mapped,
+        device="cpu",
+        compute_type="int8",
+        cpu_threads=WHISPER_CPU_THREADS,
+        num_workers=WHISPER_NUM_WORKERS,
+    )
+    logger.info(
+        "Whisper '%s' device=cpu int8 threads=%s workers=%s beam=%s word_ts=%s cond_prev=%s en %.1fs",
+        mapped,
+        WHISPER_CPU_THREADS,
+        WHISPER_NUM_WORKERS,
+        WHISPER_BEAM_SIZE,
+        WHISPER_WORD_TIMESTAMPS,
+        WHISPER_CONDITION_ON_PREVIOUS,
+        time.time() - t0,
+    )
 
     storage_client = storage.Client(project=PROJECT)
     bq_client = bigquery.Client(project=PROJECT)
@@ -893,7 +1136,12 @@ def main() -> None:
                 with tempfile.TemporaryDirectory() as tmpdir:
                     row = transcribe_uri(storage_client, meta, tmpdir, model)
                 rows.append(row)
-                logger.info("  ✓ %s (%s chars)", uri, len(row.get("transcripcion") or ""))
+                logger.info(
+                    "  ✓ %s status=%s chars=%s",
+                    uri,
+                    row.get("status"),
+                    len(row.get("transcripcion") or ""),
+                )
             except Exception as e:
                 logger.error("  ✗ %s: %s", uri, e, exc_info=True)
 
@@ -902,7 +1150,7 @@ def main() -> None:
     else:
         logger.warning("Tarea %s: sin filas.", task_index)
 
-    logger.info("=== Fin | %s segmentos cargados a hist STT ===", len(rows))
+    logger.info("=== Fin | %s segmentos cargados a hist VASO ===", len(rows))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
--- =============================================================================
+﻿-- =============================================================================
 -- Pipeline queuesmart_vaso — un día (manual BQ)
 -- Preferido: Cloud Workflow queuesmart-vaso-pipeline (ver README).
 --
@@ -18,7 +18,7 @@ DECLARE v_fecha DATE DEFAULT DATE '2026-09-10';
 CALL `prd-utpbi-data-operation.raw_queue_smart.sp_queuesmart_mp3_consolidate_vaso`(v_fecha);
 
 -- 3) Whisper (ejecutar en Cloud Run, no aquí):
--- gcloud run jobs execute prd-utpbi-queuesmart-audio-serialize-whisper-vaso \
+-- gcloud run jobs execute prd-utpbi-queuesmart-audio-serialize-whisper \
 --   --region=us-central1 --project=prd-utpbi-data-operation \
 --   --update-env-vars=FECHA_AUDIO=2026-09-10
 

@@ -17,7 +17,7 @@
 -- =============================================================================
 
 BEGIN
-  DECLARE d DATE DEFAULT DATE '2026-08-31';
+  DECLARE d DATE DEFAULT DATE '2026-09-09';
   DECLARE end_date DATE DEFAULT DATE_SUB(CURRENT_DATE('America/Lima'), INTERVAL 1 DAY);
 
   WHILE d <= end_date DO
@@ -33,7 +33,7 @@ BEGIN
 
   SELECT FORMAT(
     'OK — reproceso %s → %s (canal_escrito_prompt)',
-    '2026-08-31',
+    '2026-09-03',
     FORMAT_DATE('%Y-%m-%d', end_date)
   ) AS resultado;
 END;

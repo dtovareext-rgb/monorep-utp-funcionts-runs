@@ -1,4 +1,4 @@
-# queuesmart_vaso
+﻿# queuesmart_vaso
 
 **Hub del pipeline VASO** QueeSmart (legado-miss: `.audio` ∪ prefijo ≠ 6).
 
@@ -28,7 +28,7 @@ Workflow: [`workflows/vaso_pipeline.yaml`](workflows/vaso_pipeline.yaml) orquest
 | Hist catalog | `hist_queesmart_mp3_catalog` | `hist_queesmart_mp3_catalog_vaso` |
 | Consolidate | `sp_queuesmart_mp3_consolidate` | `sp_queuesmart_mp3_consolidate_vaso` |
 | Catalog / enriched | `queuesmart_mp3_*` | `queuesmart_mp3_*_vaso` |
-| STT | Chirp `sp_queuesmart_mp3_gen_ia` | Whisper Job `…-whisper-vaso` |
+| STT | Chirp `sp_queuesmart_mp3_gen_ia` | Whisper Job `…-whisper` |
 | Transcripciones | `hist_*_gen_ia_*` | `hist_*_whisper_vaso_*` |
 | Análisis | `sp_queuesmart_audio_analisis_ia` | `sp_queuesmart_audio_analisis_ia_vaso` |
 | Resultado | `hist_*_analisis_ia_*` | `hist_*_analisis_ia_vaso_*` |

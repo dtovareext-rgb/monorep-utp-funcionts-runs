@@ -10,8 +10,10 @@
 #
 # Defaults:
 #   job_gap     = prd-utpbi-s3-gap-vaso
-#   job_whisper = prd-utpbi-queuesmart-audio-serialize-whisper-vaso
+#   job_whisper = prd-utpbi-queuesmart-audio-serialize-whisper
 #   manifest    = state/gap_vaso_manifests
+#   whisper_max_tasks = 10  (paralelo; Job parallelism debe ser >= esto)
+#   whisper_audios_per_task = 10  (~200 padres → 10 tasks)
 #
 # Deploy:
 #   gcloud workflows deploy queuesmart-vaso-pipeline \
@@ -33,16 +35,20 @@ main:
           - location: ${default(map.get(args, "location"), "us-central1")}
           - bq_location: ${default(map.get(args, "bq_location"), "US")}
           - job_gap: ${default(map.get(args, "job_gap"), "prd-utpbi-s3-gap-vaso")}
-          - job_whisper: ${default(map.get(args, "job_whisper"), "prd-utpbi-queuesmart-audio-serialize-whisper-vaso")}
+          - job_whisper: ${default(map.get(args, "job_whisper"), "prd-utpbi-queuesmart-audio-serialize-whisper")}
           - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-queuesmart")}
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/gap_vaso_manifests")}
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), -1)}
           - invoke_downstream: ${default(map.get(args, "invoke_downstream"), true)}
+          - whisper_max_tasks: ${default(map.get(args, "whisper_max_tasks"), 10)}
+          - whisper_audios_per_task: ${default(map.get(args, "whisper_audios_per_task"), 10)}
           - process_date: ${default(map.get(args, "process_date"), null)}
           - started_at: ${sys.now()}
           - ingest_summary: {}
           - sp_results: {}
           - whisper_result: {}
+          - whisper_parent_count: 0
+          - whisper_task_count: 1
 
     - resolve_process_date:
         switch:
@@ -331,7 +337,67 @@ main:
                           - sp_results["consolidate_vaso"]: "ok"
 
     # -------------------------------------------------------------------------
-    # 5) Job Whisper (reemplaza Chirp / gen_ia)
+    # 4b) Contar padres a transcribir → taskCount Whisper
+    # -------------------------------------------------------------------------
+    - count_whisper_parents:
+        try:
+          steps:
+            - query_parent_count:
+                call: googleapis.bigquery.v2.jobs.query
+                args:
+                  projectId: ${project_id}
+                  body:
+                    query: '${"SELECT COUNT(DISTINCT COALESCE(source_file_name, file_name)) AS n FROM `" + project_id + ".raw_queue_smart.queuesmart_mp3_enriched_vaso` WHERE process_day = DATE ''" + process_date + "'' AND gcs_uri IS NOT NULL"}'
+                    useLegacySql: false
+                    location: ${bq_location}
+                    timeoutMs: 60000
+                  connector_params:
+                    timeout: 120
+                result: parent_count_resp
+            - parse_parent_count:
+                assign:
+                  - whisper_parent_count: ${int(default(parent_count_resp.rows[0].f[0].v, 0))}
+        except:
+          as: count_err
+          steps:
+            - log_count_err:
+                call: sys.log
+                args:
+                  severity: WARNING
+                  text: '${"No se pudo contar padres Whisper; taskCount=1 — " + string(default(map.get(count_err, "message"), "n/a"))}'
+            - fallback_count:
+                assign:
+                  - whisper_parent_count: 0
+
+    - compute_whisper_tasks:
+        assign:
+          # ceil(n / per_task) = (n + per_task - 1) / per_task ; mínimo 1
+          - whisper_tasks_raw: ${int((whisper_parent_count + whisper_audios_per_task - 1) / whisper_audios_per_task)}
+          - whisper_task_count: ${whisper_tasks_raw}
+
+    - cap_whisper_tasks:
+        switch:
+          - condition: ${whisper_parent_count <= 0}
+            assign:
+              - whisper_task_count: 1
+          - condition: ${whisper_tasks_raw < 1}
+            assign:
+              - whisper_task_count: 1
+          - condition: ${whisper_tasks_raw > whisper_max_tasks}
+            assign:
+              - whisper_task_count: ${int(whisper_max_tasks)}
+          - condition: true
+            assign:
+              - whisper_task_count: ${int(whisper_tasks_raw)}
+
+    - log_whisper_plan:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"VASO Whisper plan parents=" + string(whisper_parent_count) + " taskCount=" + string(whisper_task_count) + " max=" + string(whisper_max_tasks) + " per_task=" + string(whisper_audios_per_task)}'
+
+    # -------------------------------------------------------------------------
+    # 5) Job Whisper (reemplaza Chirp / gen_ia) — paralelo por padres
     # -------------------------------------------------------------------------
     - run_whisper_job:
         try:
@@ -343,13 +409,13 @@ main:
                   location: ${location}
                   body:
                     overrides:
-                      taskCount: 1
+                      taskCount: ${whisper_task_count}
                       containerOverrides:
                         - env:
                             - name: FECHA_AUDIO
                               value: ${process_date}
                   connector_params:
-                    timeout: 14400
+                    timeout: 86400
                 result: whisper_status
             - mark_whisper_ok:
                 assign:
@@ -376,6 +442,8 @@ main:
           - whisper_result:
               succeededCount: ${whisper_succeeded}
               failedCount: ${whisper_failed}
+              taskCount: ${whisper_task_count}
+              parentCount: ${whisper_parent_count}
 
     - validate_whisper:
         switch:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy Cloud Run Job cr_serialize_queuesmart (Whisper → hist STT).
+# Deploy Cloud Run Job cr_serialize_queuesmart (Whisper → hist VASO).
 # Invocado por Cloud Build tras build+push de la imagen.
 set -euo pipefail
 
@@ -27,20 +27,20 @@ _JOB_NAME="$(trim "${_JOB_NAME:-}")"
 _SERVICE_ACCOUNT="$(trim "${_SERVICE_ACCOUNT:-}")"
 _BUCKET_NAME="$(trim "${_BUCKET_NAME:-}")"
 _LOCATION="$(trim "${_LOCATION:-us-central1}")"
-_IMAGE_NAME="$(trim "${_IMAGE_NAME:-queuesmart-audio-serialize-whisper-vaso}")"
+_IMAGE_NAME="$(trim "${_IMAGE_NAME:-queuesmart-audio-serialize-whisper}")"
 _IMAGE_TAG="$(trim "${_IMAGE_TAG:-latest}")"
-_MEMORY="$(trim "${_MEMORY:-16Gi}")"
-_CPU="$(trim "${_CPU:-4}")"
-_TASK_TIMEOUT="$(trim "${_TASK_TIMEOUT:-14400s}")"
+_MEMORY="$(trim "${_MEMORY:-32Gi}")"
+_CPU="$(trim "${_CPU:-8}")"
+_TASK_TIMEOUT="$(trim "${_TASK_TIMEOUT:-86400s}")"
 _MAX_RETRIES="$(trim "${_MAX_RETRIES:-1}")"
-_PARALLELISM="$(trim "${_PARALLELISM:-1}")"
+_PARALLELISM="$(trim "${_PARALLELISM:-10}")"
 _WHISPER_MODEL="$(trim "${_WHISPER_MODEL:-turbo}")"
 _DATASET_RAW_QUEUE="$(trim "${_DATASET_RAW_QUEUE:-raw_queue_smart}")"
 _DATASET_HIST="$(trim "${_DATASET_HIST:-adf_speech_analytics}")"
 _TABLE_HIST_RAW="$(trim "${_TABLE_HIST_RAW:-hist_queuesmart_mp3_whisper_vaso_raw}")"
 _TABLE_HIST_PRD="$(trim "${_TABLE_HIST_PRD:-hist_queuesmart_mp3_whisper_vaso_prd}")"
-_TABLE_ENRICHED="$(trim "${_TABLE_ENRICHED:-queuesmart_mp3_enriched}")"
-_TABLE_CATALOG="$(trim "${_TABLE_CATALOG:-hist_queesmart_mp3_catalog}")"
+_TABLE_ENRICHED="$(trim "${_TABLE_ENRICHED:-queuesmart_mp3_enriched_vaso}")"
+_TABLE_CATALOG="$(trim "${_TABLE_CATALOG:-hist_queesmart_mp3_catalog_vaso}")"
 
 echo "=== Validando variables del activador ==="
 require "_PROJECT_ID" "${_PROJECT_ID}"
@@ -72,6 +72,9 @@ ENV_VARS+=",QS_TABLE_HIST_RAW=${_TABLE_HIST_RAW}"
 ENV_VARS+=",QS_TABLE_HIST_PRD=${_TABLE_HIST_PRD}"
 ENV_VARS+=",QS_TABLE_ENRICHED=${_TABLE_ENRICHED}"
 ENV_VARS+=",QS_TABLE_CATALOG=${_TABLE_CATALOG}"
+ENV_VARS+=",WHISPER_BEAM_SIZE=3"
+ENV_VARS+=",WHISPER_WORD_TIMESTAMPS=false"
+ENV_VARS+=",WHISPER_CONDITION_ON_PREVIOUS=false"
 
 echo "=== Habilitando APIs ==="
 gcloud services enable \
@@ -99,7 +102,7 @@ gcloud run jobs deploy "${_JOB_NAME}" \
   --parallelism="${_PARALLELISM}" \
   --tasks=1
 
-echo "=== Deploy OK (VASO — no escribe hist Chirp) ==="
+echo "=== Deploy OK (VASO — Whisper [MM:SS], sin hablantes) ==="
 echo "Destino:"
 echo "  ${_PROJECT_ID}.${_DATASET_HIST}.${_TABLE_HIST_RAW}"
 echo "  ${_PROJECT_ID}.${_DATASET_HIST}.${_TABLE_HIST_PRD}"
@@ -107,8 +110,3 @@ echo "Ejecutar un día:"
 echo "  gcloud run jobs execute ${_JOB_NAME} \\"
 echo "    --region=${_LOCATION} --project=${_PROJECT_ID} \\"
 echo "    --update-env-vars=FECHA_AUDIO=YYYY-MM-DD"
-echo ""
-echo "Prueba URI:"
-echo "  gcloud run jobs execute ${_JOB_NAME} \\"
-echo "    --region=${_LOCATION} --project=${_PROJECT_ID} \\"
-echo "    --update-env-vars=GCS_URIS='gs://${_BUCKET_NAME}/data/input/queuesmart_mp3/imported_from_s3/YYYY-MM-DD/ARCHIVO.flac'"

@@ -1,16 +1,19 @@
-# cr_serialize_queuesmart — VASO Whisper en PRD
+﻿# cr_serialize_queuesmart — VASO Whisper (sin hablantes)
 
-Cloud Run Job Whisper local sobre audios de **producción**, escribiendo en tablas
-**vaso** (misma estructura que Chirp STT). No toca `hist_queuesmart_mp3_gen_ia_*`.
+Cloud Run Job **faster-whisper** sobre audios de producción, escribiendo en tablas
+**vaso**. No toca `hist_queuesmart_mp3_gen_ia_*`.
+
+| Campo | Contenido |
+|---|---|
+| `transcripcion` | `[MM:SS] texto` (contrato Counter / Gemini) |
+| `transcripcion_con_hablantes` | `NULL` (Whisper no diariza; comercial fuera de scope) |
 
 | | Chirp prod | Este Job (vaso) |
 |---|---|---|
 | Lee GCS | PRD bucket | PRD bucket |
 | Lee enriched / catalog | prod | **`queuesmart_mp3_enriched_vaso`** / **`hist_queesmart_mp3_catalog_vaso`** |
 | Escribe | `hist_*_gen_ia_*` | `hist_queuesmart_mp3_whisper_vaso_raw` / `_prd` |
-| Job | — | `prd-utpbi-queuesmart-audio-serialize-whisper-vaso` |
-
-Override de tablas de lectura (opcional): `QS_TABLE_ENRICHED`, `QS_TABLE_CATALOG`.
+| Job | — | `prd-utpbi-queuesmart-audio-serialize-whisper` |
 
 ## Estructura
 
@@ -19,61 +22,44 @@ cr_serialize_queuesmart/
   cloudbuild.yaml
   scripts/cloudbuild_deploy.sh
   bigquery/tables/hist_queuesmart_mp3_whisper_vaso.sql
-  src/   # Dockerfile + main + config (defaults PRD vaso)
+  src/   # Dockerfile + main.py + config
 ```
 
-## 1) Crear tablas vaso (una vez)
+## Recursos
+
+Default Cloud Run Job: **32Gi / 8 CPU**, **parallelism=10**, **task-timeout=24h**.
+
+Whisper (defaults rápidos, override por env):
+- `WHISPER_BEAM_SIZE=3`
+- `WHISPER_WORD_TIMESTAMPS=false` (timestamps por segmento → `[MM:SS]`)
+- `WHISPER_CONDITION_ON_PREVIOUS=false`
+- `cpu_threads` = CPUs del contenedor
+
+Workflow: cuenta padres en `enriched_vaso` y lanza `taskCount = min(10, ceil(n/10))`.
+Args opcionales: `whisper_max_tasks`, `whisper_audios_per_task`.
+
+Si ves `maximum timeout of 3600 seconds`, el Job en GCP aún tiene 1h — actualizar:
 
 ```bash
-bq query --use_legacy_sql=false --location=US \
-  --project_id=prd-utpbi-data-operation \
-  < cr_serialize_queuesmart/bigquery/tables/hist_queuesmart_mp3_whisper_vaso.sql
+gcloud run jobs update prd-utpbi-queuesmart-audio-serialize-whisper \
+  --region=us-central1 --project=prd-utpbi-data-operation \
+  --task-timeout=86400s --parallelism=10 --memory=32Gi --cpu=8
 ```
 
-## 2) Cloud Build
-
-Activador: `cr_serialize_queuesmart/cloudbuild.yaml`
-
-| Variable | Valor PRD vaso |
-|---|---|
-| `_PROJECT_ID` | `prd-utpbi-data-operation` |
-| `_JOB_NAME` | `prd-utpbi-queuesmart-audio-serialize-whisper-vaso` |
-| `_SERVICE_ACCOUNT` | `genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com` |
-| `_BUCKET_NAME` | `prd-utp-stg-queuesmart` |
-| `_TABLE_HIST_RAW` | `hist_queuesmart_mp3_whisper_vaso_raw` |
-| `_TABLE_HIST_PRD` | `hist_queuesmart_mp3_whisper_vaso_prd` |
+## Deploy (Cloud Build)
 
 ```bash
 gcloud builds submit \
   --project=prd-utpbi-data-operation \
   --config=cr_serialize_queuesmart/cloudbuild.yaml \
-  --substitutions=_PROJECT_ID=prd-utpbi-data-operation,_JOB_NAME=prd-utpbi-queuesmart-audio-serialize-whisper-vaso,_SERVICE_ACCOUNT=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com,_BUCKET_NAME=prd-utp-stg-queuesmart \
+  --substitutions=_PROJECT_ID=prd-utpbi-data-operation,_JOB_NAME=prd-utpbi-queuesmart-audio-serialize-whisper,_SERVICE_ACCOUNT=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com,_BUCKET_NAME=prd-utp-stg-queuesmart \
   .
 ```
 
-## 3) Ejecutar muestra de audios
+## Ejecutar
 
 ```bash
-# Un día (FLACs del día en queuesmart_mp3_enriched_vaso)
-gcloud run jobs execute prd-utpbi-queuesmart-audio-serialize-whisper-vaso \
+gcloud run jobs execute prd-utpbi-queuesmart-audio-serialize-whisper \
   --region=us-central1 --project=prd-utpbi-data-operation \
-  --update-env-vars=FECHA_AUDIO=2026-09-10
-
-# URIs puntuales (prueba vaso)
-gcloud run jobs execute prd-utpbi-queuesmart-audio-serialize-whisper-vaso \
-  --region=us-central1 --project=prd-utpbi-data-operation \
-  --update-env-vars=GCS_URIS='gs://prd-utp-stg-queuesmart/data/input/queuesmart_mp3/imported_from_s3/2026-09-10/ARCHIVO.flac'
-```
-
-## Comparar Chirp vs Whisper
-
-```sql
-SELECT
-  c.gcs_uri,
-  c.transcripcion AS chirp,
-  w.transcripcion AS whisper
-FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd` AS c
-INNER JOIN `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_prd` AS w
-  USING (gcs_uri)
-WHERE c.process_date = DATE '2026-09-10';
+  --update-env-vars=FECHA_AUDIO=2026-08-01
 ```

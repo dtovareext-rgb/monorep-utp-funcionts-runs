@@ -2,7 +2,7 @@
 # ============================================================
 # deploy.sh — Cloud Run Job: cr_serialize_queuesmart
 #
-# Paso PARALELO al STT Chirp. No modifica queuesmart STT productivo.
+# Whisper LOCAL → tablas VASO (sin diarización).
 #
 # Uso:
 #   chmod +x deploy.sh
@@ -29,7 +29,7 @@ echo "  Región    : $REGION"
 echo "  Job       : $JOB_NAME"
 echo "  Imagen    : $IMAGE"
 echo "  SA Email  : $SA_EMAIL"
-echo "  Whisper   : $WHISPER_MODEL (LOCAL)"
+echo "  Whisper   : $WHISPER_MODEL (LOCAL, sin hablantes)"
 echo "============================================================"
 
 echo ""
@@ -61,12 +61,14 @@ COMMON_FLAGS=(
     --region="$REGION"
     --project="$PROJECT_ID"
     --service-account="$SA_EMAIL"
-    --memory="16Gi"
-    --cpu="4"
-    --task-timeout="14400s"
+    --memory="32Gi"
+    --cpu="8"
+    --task-timeout="86400s"
     --max-retries="1"
-    --set-env-vars="WHISPER_MODEL=$WHISPER_MODEL"
+    --set-env-vars="WHISPER_MODEL=$WHISPER_MODEL,WHISPER_BEAM_SIZE=3,WHISPER_WORD_TIMESTAMPS=false,WHISPER_CONDITION_ON_PREVIOUS=false"
     --labels="project=queuesmart,component=serializer-whisper,env=prd,team=data-engineering,cost-center=utpbi"
+    --parallelism=10
+    --tasks=1
 )
 
 if [[ -z "$JOB_EXISTS" ]]; then
@@ -93,18 +95,12 @@ echo ""
 echo "============================================================"
 echo "  ✓ Deploy OK — $JOB_NAME ($REGION)"
 echo ""
-echo "  MODO DÍA (producción / backfill):"
+echo "  MODO DÍA:"
 echo "    gcloud run jobs execute $JOB_NAME \\"
 echo "      --region=$REGION --project=$PROJECT_ID \\"
 echo "      --update-env-vars=FECHA_AUDIO=2026-09-10"
 echo ""
-echo "  MODO LISTA (pruebas):"
-echo "    gcloud run jobs execute $JOB_NAME \\"
-echo "      --region=$REGION --project=$PROJECT_ID \\"
-echo "      --update-env-vars=GCS_URIS='gs://prd-utp-stg-queuesmart/data/input/queuesmart_mp3/imported_from_s3/2026-09-10/035RA1-20260910-105220.flac'"
-echo ""
-echo "  Destino = mismas tablas STT (Chirp):"
-echo "    adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_raw"
-echo "    adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd"
-echo "  Downstream Gemini: sp_queuesmart_audio_analisis_ia (sin cambios)"
+echo "  Destino VASO:"
+echo "    adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_raw"
+echo "    adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_prd"
 echo "============================================================"
