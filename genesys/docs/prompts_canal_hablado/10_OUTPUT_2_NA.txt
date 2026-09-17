@@ -1,0 +1,20 @@
+Considera generar la siguiente metadata:
+
+Para los campos de descripcion leer la descripcion y colocar una explicacion detallada con los casos que encontraste y de los cuales te basastes para la marcacion siendo especifico en la descripcion para entender a detalle, en caso no se cumpla con el requisito el carcador se marcar como 1, si no cumple marcar como 0 y si no aplica y se marca como NA mencionar el motivo detallado en la descripcion.
+
+[
+{
+"argumentario_venta": {
+"descripcion" (string): "Explicacion de porque se determinara si en la marcación cumple (1) o no cumple (0). Lo que se espera del asesor se encuentra en la seccion <<< ARGUMENTARIO DE VENTA >>>, en caso se cumpla marcar como '1'",
+"marcacion" (string): '1' | '0' | "NA",
+},
+"informacion_argumentario_venta": {
+"descripcion" (string): "Explicacion de porque se determinara si en la marcación cumple (1) o no cumple (0), cuando se detecte diferencias sobre algun costo mencionarlo como detalle relevante, Lo que se espera del asesor se encuentra en la seccion <<< INFORMACION CORRECTA DE ARGUMENTARIO DE VENTA >>> ,en caso se cumpla marcar como '1'",
+"marcacion" (string): '1' | '0' | "NA",
+},
+"informacion_falsa": {
+"descripcion" (string): "Explicacion de porque se determinara si en la marcación cumple (1) o no cumple (0). Lo que se espera del asesor se encuentra en la seccion <<< INFORMACION FALSA >>>",
+"marcacion" (string): '1' | '0' | "NA",
+}
+}
+]

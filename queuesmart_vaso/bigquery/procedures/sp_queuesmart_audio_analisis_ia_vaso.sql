@@ -1,30 +1,18 @@
 -- =============================================================================
--- SP: Gen IA análisis audio QueeSmart (Etapa 2) — PRODUCCIÓN
+-- SP: Gen IA análisis audio QueeSmart VASO (Etapa 2 Whisper)
 --
--- Evalúa cada transcripción (etapa 1) con prompt de
---   raw_queue_smart.sys_prompts
---
--- Flujo (reproceso por fecha):
---   0) DELETE hist análisis raw/prd del día
---   1) Toma todas las transcripciones del día desde hist STT PRD
---   2) AI.GENERATE_TABLE + INSERT hist análisis
---
--- Formato salida: queuesmart/prompts/Canal_Counter_Output.md
---   arreglo JSON [{ ... }] con *_marcacion (SI|NO|NA) / *_descripcion
---
--- Placeholders: {{transcripcion}} {{transcripcion_con_hablantes}}
---               {{asesor_nombre}} {{asesor_usuario}} {{asesor_codigo}}
---               {{info_carreras}} (transversal + lista nombres; fallback título vacío legacy)
--- Contexto carreras (raw_genesys_audios.detalle_carreras_raw):
---   - documento_txt transversal (flg_transversar = 'S') en todos los audios
---   - lista de nombres oficiales (sin fichas completas; Counter no ancla CRM fácil)
--- Default prompt_name: canal_counter_prompt
+-- Lee:  hist_queuesmart_mp3_whisper_vaso_prd  (NO Chirp gen_ia)
+-- Escribe: hist_queuesmart_audio_analisis_ia_vaso_raw / _prd
+-- Prompt: mismo canal_counter_prompt en sys_prompts
+-- NO toca tablas de análisis ni STT de producción.
 --
 -- CALL:
---   CALL `...sp_queuesmart_audio_analisis_ia`(DATE '2026-06-22', NULL);
+--   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_audio_analisis_ia_vaso`(
+--     DATE '2026-09-10', NULL
+--   );
 -- =============================================================================
 
-CREATE OR REPLACE PROCEDURE `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_audio_analisis_ia`(
+CREATE OR REPLACE PROCEDURE `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_audio_analisis_ia_vaso`(
   v_fecha_proceso DATE,
   v_prompt_name STRING
 )
@@ -36,17 +24,17 @@ BEGIN
   DECLARE v_info_carreras STRING;
 
   -- Labels de costo: heredan a jobs hijos (AI.GENERATE_TABLE / Flash 2.5).
-  SET @@query_label = 'producto:queuesmart,etapa:gemini,servicio:flash-2-5';
+  SET @@query_label = 'producto:queuesmart-vaso,etapa:gemini,servicio:flash-2-5';
 
   SET v_effective_prompt = IFNULL(NULLIF(TRIM(v_prompt_name), ''), 'canal_counter_prompt');
 
   -- ---------------------------------------------------------------------------
   -- 0. Reproceso por fecha: borra hist análisis del día
   -- ---------------------------------------------------------------------------
-  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_vaso_raw`
   WHERE process_date = v_fecha_proceso;
 
-  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_vaso_prd`
   WHERE process_date = v_fecha_proceso;
 
   SET (v_sys_prompt, v_prompt_updated_at) = (
@@ -190,7 +178,7 @@ BEGIN
             'asesor_codigo: ', IFNULL(h.asesorcodigo, 'N/D')
           )
       END AS prompt_base
-    FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_gen_ia_process_data_prd` AS h
+    FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_prd` AS h
     WHERE h.process_date = v_fecha_proceso
       AND NULLIF(TRIM(h.transcripcion), '') IS NOT NULL
   ) AS base;
@@ -222,10 +210,10 @@ BEGIN
     )
   ) AS ia;
 
-  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_vaso_raw`
   WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
-  INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
+  INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_vaso_raw`
 (
     process_date,
     gcs_uri,
@@ -839,10 +827,10 @@ BEGIN
     DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
   FROM cte_cleaned;
 
-  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
+  DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_vaso_prd`
   WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
-  INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd`
+  INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_vaso_prd`
 (
     process_date,
     gcs_uri,
@@ -1086,7 +1074,7 @@ BEGIN
     t_comentario_negativo_utp,
     mayor_rebate,
     load_date
-  FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_raw`
+  FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_vaso_raw`
   WHERE gcs_uri IN (SELECT gcs_uri FROM tmp_queuesmart_audio_analisis_input);
 
 END;

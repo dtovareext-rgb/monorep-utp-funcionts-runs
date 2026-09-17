@@ -1,0 +1,159 @@
+{
+    "precondicion": "OK",
+    "atributos": {
+      "saludo": {
+        "score": "1",
+        "descripcion": "El asesor se presenta con su nombre y da la bienvenida a la UTP, mencionando el respaldo de Intercorp, educación de calidad y oportunidades laborales. (1)"
+      },
+      "despedida": {
+        "score": "0",
+        "descripcion": "El asesor no se despide adecuadamente ni deja su contacto corporativo de forma clara antes del cierre del caso. (0)"
+      },
+      "aclara_duda_del_cliente": {
+        "score": "0",
+        "descripcion": "El asesor no aclara la duda del cliente sobre 'Que laborales pa mi futuro' y en su lugar repite una pregunta de motivación. (0)"
+      },
+      "primera_respuesta": {
+        "score": "1",
+        "descripcion": "El asesor responde al primer mensaje del cliente dentro del tiempo esperado. (1)"
+      },
+      "segunda_respuesta": {
+        "score": "0",
+        "descripcion": "El asesor excede el tiempo promedio de respuesta entre mensajes. (0)"
+      },\n    "vacios_injustificados": {
+        "score": "0",
+        "descripcion": "El asesor genera un tiempo de espera prolongado sin justificación, lo que lleva a un mensaje de inactividad del sistema. (0)"
+      },
+      "corte_intencional": {
+        "score": "1",
+        "descripcion": "No se evidencia un corte intencional de la conversación por parte del asesor. (1)"
+      },
+      "abandono_del_chat": {
+        "score": "0",
+        "descripcion": "El asesor deja de responder al prospecto durante la conversación, lo que lleva al cierre del caso por inactividad. (0)"
+      },
+      "tono_despectivo_o_sarcastico": {
+        "score": "1",
+        "descripcion": "El asesor no utiliza expresiones despectivas o sarcásticas. (1)"
+      },
+      "confronta_al_prospecto": {
+        "score": "1",
+        "descripcion": "El asesor no adopta una actitud confrontacional. (1)"
+      },
+      "lenguaje_grosero": {
+        "score": "1",
+        "descripcion": "El asesor no utiliza lenguaje grosero. (1)"
+      },
+      "claridad_y_coherencia": {
+        "score": "0",
+        "descripcion": "Los mensajes del asesor no son del todo claros y coherentes, especialmente al repetir preguntas de motivación en lugar de responder a la duda del cliente. (0)"
+      },
+      "informacion_complementaria": {
+        "score": "NA",
+        "descripcion": "La conversación no avanza lo suficiente para que el asesor brinde información complementaria. (NA)"
+      },
+      "motivacion": {
+        "score": "1",
+        "descripcion": "El asesor pregunta al cliente sobre su motivación para estudiar. (1)"
+      },
+      "identifica_campus": {
+        "score": "1",
+        "descripcion": "El campus de interés del prospecto ya estaba identificado en la ficha previa y el asesor lo tiene en cuenta. (1)"
+      },
+      "sondeo_por_interes": {
+        "score": "0",
+        "descripcion": "El asesor no explora los intereses y necesidades del prospecto de manera completa, ni pregunta la edad o si labora. (0)"
+      },
+      "argumentario_de_venta": {
+        "score": "NA",
+        "descripcion": "La conversación no progresa a un punto donde se pueda construir un argumentario de venta personalizado. (NA)"
+      },
+      "validacion_informacion_argumentario": {
+        "score": "NA",
+        "descripcion": "No se llega a validar información del argumentario de venta. (NA)"
+      },
+      "rebate": {
+        "score": "NA",
+        "descripcion": "No se presenta ninguna objeción por parte del cliente que requiera un rebate. (NA)"
+      },
+      "rebate_efectivo": {
+        "score": "NA",
+        "descripcion": "No se presenta ninguna objeción por parte del cliente que requiera un rebate. (NA)"
+      },
+      "cierre": {
+        "score": "NA",
+        "descripcion": "No se evalua al asesor porque el cliente abandona la conversacion. (NA)"
+      },
+      "resumen_de_venta": {
+        "score": "NA",
+        "descripcion": "No se concreta ninguna venta para realizar un resumen. (NA)"
+      },
+      "sentido_de_urgencia": {
+        "score": "NA",
+        "descripcion": "La conversación no avanza a un punto donde se pueda aplicar sentido de urgencia. (NA)"
+      },
+      "ortografia_y_signos_de_puntuacion": {
+        "score": "1",
+        "descripcion": "El asesor presenta una correcta ortografía y uso de signos de puntuación. (1)"
+      },
+      "plantillas_whatsapp": {
+        "score": "1",
+        "descripcion": "El asesor utiliza plantillas de WhatsApp al inicio de la conversación. (1)"
+      },
+      "uso_de_flyers_videos_y_artes": {
+        "score": "1",
+        "descripcion": "El asesor envía una imagen durante la conversación. (1)"
+      },
+      "comunicacion_ordenada_y_coherente": {
+        "score": "0",
+        "descripcion": "La comunicación del asesor no es ordenada ni coherente al repetir preguntas de motivación y no abordar directamente la duda del cliente. (0)"
+      },
+      "informacion_falsa": {
+        "score": "1",
+        "descripcion": "No se detecta intención maliciosa al brindar información. (1)"
+      },
+      "actitud_comercial": {
+        "score": "0",
+        "descripcion": "La actitud comercial del asesor es deficiente al no mantener la fluidez de la conversación y no responder directamente a las consultas del cliente. (0)"
+      },
+      "afecta_imagen_negocio": {
+        "score": "1",
+        "descripcion": "El asesor no realiza comentarios negativos que afecten la imagen del negocio. (1)"
+      }
+    },
+    "clasificaciones": {
+      "informacion_complementaria_clasificacion": [],
+      "sondeo_clasificacion": [
+        "NO_SONDEA_DE_ACUERDO_AL_INTERES_DEL_PROSPECTO"
+      ],
+      "argumentario_de_venta_clasificacion": [],
+      "cierre_clasificacion": [],
+      "informacion_falsa_clasificacion": [],
+      "actitud_comercial_clasificacion": [
+        "MULETILLAS_Y_REDUNDANCIAS"
+      ]
+    },
+    "clasificadores": {
+      "motivacion_del_cliente": "autorrealizacion_desarrollo_personal",
+      "tipificacion": "CDE",
+      "tipificacion_detalle": "CDE",
+      "atributo": "Empleabilidad",
+      "estilo_del_asesor": "Neutral / rutinario",
+      "segundo_numero_contacto": "NA"
+    },
+    "motivo_no_venta": {
+      "motivo": "AGENTE",
+      "submotivo": "HABILIDADES_COMERCIALES",
+      "detalle": "SONDEO",
+      "observaciones": "El asesor no logra mantener la fluidez de la conversación ni responder a las dudas del cliente, lo que contribuye al abandono del chat."
+    },
+    "carreras": {
+      "carreras_de_interes": [],
+      "flag_varias_carreras": "0",
+      "carrera_interes_utp": "NA",
+      "carrera_de_interes_no_encontrada": "NA",
+      "modalidad_deseada": "NA",
+      "sede_deseada": "NA"
+    },
+    "resumen_evaluacion": "El asesor no logra mantener la fluidez de la conversación ni responder a las dudas del cliente, lo que contribuye al abandono del chat. No aclara la duda del cliente sobre 'Que laborales pa mi futuro' y en su lugar repite una pregunta de motivación. Como oportunidad de mejora, el asesor debe escuchar activamente al cliente y responder directamente a sus consultas. El asesor excede el tiempo promedio de respuesta entre mensajes y genera un vacío injustificado. Como oportunidad de mejora, el asesor debe mantener tiempos de respuesta ágiles y justificar cualquier demora. El asesor no se despide adecuadamente ni deja su contacto corporativo de forma clara antes del cierre del caso. Como oportunidad de mejora, el asesor debe finalizar la conversación de manera cordial y proporcionar su contacto. El asesor no explora los intereses y necesidades del prospecto de manera completa, ni pregunta la edad o si labora. Como oportunidad de mejora, el asesor debe realizar un sondeo más profundo para adaptar la oferta educativa."
+  }

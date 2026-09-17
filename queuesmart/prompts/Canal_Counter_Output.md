@@ -46,6 +46,6 @@ Contrato JSON para `sp_queuesmart_audio_analisis_ia` / prompt `canal_counter_pro
 - **plazo documentos**: default `NA`. `NO` solo si se habló de entregar documentos y no dio plazo.
 - **presenta_vacio**: sin demora → `SI` (no `NA`), salvo grabación que arranca en gestión.
 - **sondeo**: sin evidencia cuando aplica → `NO` (no `NA`).
-- **Motivación (`sondeo_motivacion`)**: en **AG**, mide solo si el asesor **hizo la pregunta** (metas, por qué estudiar). No exige que el prospecto respondiera ni acompañamiento. RA/AD/OP → **`NA`**.
+- **Motivación (`sondeo_motivacion`)**: tipificación Ticketero desde el **nombre del archivo** / `type_code` (prefijo antes del primer `-`; 5–7 chars → RA/AD/OP/AG). **RA/AD/OP → `NA` siempre** (el SP también fuerza NA post-LLM). En **AG**, mide solo si el asesor **hizo la pregunta** (metas, por qué estudiar); no exige respuesta ni acompañamiento.
 
 Fuente completa: `queuesmart/prompts/canal_counter_prompt_completo.txt`

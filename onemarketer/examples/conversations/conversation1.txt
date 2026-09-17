@@ -1,0 +1,15 @@
+[cliente 00:18] Hola, vengo desde la WEB con el ID de atención Y-1HDBE y quisiera obtener información sobre la UTP.
+[sistema 00:18] 51926080539@4 RESPONSE MARCA INICIO: {"state":"ok","data":{"RecordId":"2012204"}}
+[sistema 00:18] WAID: 51926080539@4
+[sistema 00:18] Estado Cliente: Registrado
+[sistema 00:18] URL Lead: https://utp.crm2.dynamics.com/main.aspx?appid=60d75ac9-420f-eb11-a813-000d3a5e70d3&pagetype=entityrecord&etn=lead&id=f2b43556-fba4-f111-aaad-7ced8da83220
+[sistema 00:18] Nombre: EDGAR BETO
+[sistema 00:18] Apellido: MALDONADO SURICHAQUI
+[sistema 00:18] DNI: 43827897
+[sistema 00:18] Campus/Sede: CAMPUS VIRTUAL
+[sistema 00:18] Subgrado: A DISTANCIA
+[sistema 00:18] Carrera: DERECHO
+[operador 00:18] Vemos que te has comunicado con nosotros anteriormente. 😌Esta es la información que tenemos registrada:Nombre: EDGAR BETO MALDONADO SURICHAQUICampus: CAMPUS VIRTUALSubgrado: A DISTANCIACarrera: DERECHOComéntanos en un solo mensaje ¿cómo te podemos ayudar? 🙌
+[cliente 00:18] Se puede comvalidar el curso
+[operador 00:18] ¡Hola! En este momento nuestros asesores se encuentran fuera del horario de atención. Pero no te preocupes, déjanos tu consulta y estaremos encantados de ayudarte en cuanto estemos disponibles en el siguiente horario:Lunes a sábado: 8:30 a.m. a 8:00 p.m.¡Escríbenos y te atenderemos con gusto!
+[sistema 00:26] [IMAGEN] Material multimedia enviado (flyer/brochure/imagen/documento). Contenido binario/base64 omitido. Registrar envío de material para USO_DE_FLYERS_VIDEOS_Y_ARTES; no intentar decodificar ni interpretar el contenido visual.
