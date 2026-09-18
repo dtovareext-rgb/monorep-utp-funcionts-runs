@@ -2,15 +2,19 @@
 # Cloud Workflows — Mentores GCS→GCS (prepare + worker)
 # =============================================================================
 #
-# Solo copia + catálogo BQ (sin Gen IA por ahora).
 # 1) Job role=prepare (1 task) → manifiesto en bucket destino
 # 2) Lee count del meta
 # 3) Job role=worker (tasks=count) → copia + catálogo BQ
+# 4) Job Whisper (cr_serialize_cita / CITA_CANAL=mentor)
 #
 # Args opcionales:
-#   process_date   YYYY-MM-DD (default: ayer Lima)
-#   gcs_bucket     bucket destino del manifiesto (default: prd-utp-stg-mentores)
-#   manifest_prefix default state/manifests/mentores
+#   process_date              YYYY-MM-DD (default: ayer Lima)
+#   run_whisper               true = Job Whisper tras copy (default true)
+#   gcs_bucket                bucket destino (default: prd-utp-stg-mentores)
+#   manifest_prefix           default state/manifests/mentores
+#   job_whisper               default prd-utpbi-cita-mentor-audio-serialize-whisper
+#   whisper_max_tasks         default 10
+#   whisper_audios_per_task   default 10
 #
 # Deploy:
 #   gcloud workflows deploy prd-utpbi-mentores-gcs-copy \
@@ -27,13 +31,19 @@ main:
         assign:
           - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
           - location: ${default(map.get(args, "location"), "us-central1")}
+          - bq_location: ${default(map.get(args, "bq_location"), "US")}
           - job_name: ${default(map.get(args, "job_name"), "prd-utpbi-mentores-gcs-copy")}
+          - job_whisper: ${default(map.get(args, "job_whisper"), "prd-utpbi-cita-mentor-audio-serialize-whisper")}
           - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-mentores")}
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests/mentores")}
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
           - process_date: ${default(map.get(args, "process_date"), null)}
+          - run_whisper: ${default(map.get(args, "run_whisper"), true)}
+          - whisper_max_tasks: ${default(map.get(args, "whisper_max_tasks"), 10)}
+          - whisper_audios_per_task: ${default(map.get(args, "whisper_audios_per_task"), 10)}
           - started_at: ${sys.now()}
           - ingest_summary: {}
+          - whisper_result: {}
 
     - resolve_process_date:
         switch:
@@ -59,7 +69,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"mentores-gcs-copy START process_date=" + process_date + " job=" + job_name}'
+          text: '${"mentores-gcs-copy START process_date=" + process_date + " run_whisper=" + string(run_whisper) + " job=" + job_name + " whisper=" + job_whisper}'
 
     - run_prepare_job:
         call: googleapis.run.v1.namespaces.jobs.run
@@ -204,7 +214,141 @@ main:
                     message: "Copia parcial"
                     ingest: ${ingest_summary}
           - condition: true
-            next: finalize
+            next: maybe_run_whisper
+
+    - maybe_run_whisper:
+        switch:
+          - condition: ${run_whisper == false}
+            steps:
+              - log_skip_whisper:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: "Whisper omitido (run_whisper=false)"
+              - jump_finalize_skip:
+                  next: finalize
+          - condition: true
+            next: count_whisper_parents
+
+    - count_whisper_parents:
+        try:
+          steps:
+            - query_parent_count:
+                call: googleapis.bigquery.v2.jobs.query
+                args:
+                  projectId: ${project_id}
+                  body:
+                    query: '${"SELECT COUNT(DISTINCT COALESCE(NULLIF(TRIM(folder_uuid), ''), file_name, gcs_uri)) AS n FROM `" + project_id + ".raw_cita_promotor.hist_cita_mentor_audio_catalog` WHERE fecha_audio = DATE ''" + process_date + "'' AND gcs_uri IS NOT NULL"}'
+                    useLegacySql: false
+                    location: ${bq_location}
+                    timeoutMs: 60000
+                  connector_params:
+                    timeout: 120
+                result: parent_count_resp
+            - parse_parent_count:
+                assign:
+                  - whisper_parent_count: ${int(default(parent_count_resp.rows[0].f[0].v, 0))}
+        except:
+          as: count_err
+          steps:
+            - log_count_err:
+                call: sys.log
+                args:
+                  severity: WARNING
+                  text: '${"No se pudo contar padres Whisper; taskCount=1 — " + string(default(map.get(count_err, "message"), "n/a"))}'
+            - fallback_count:
+                assign:
+                  - whisper_parent_count: 0
+
+    - compute_whisper_tasks:
+        assign:
+          - whisper_tasks_raw: ${int((whisper_parent_count + whisper_audios_per_task - 1) / whisper_audios_per_task)}
+          - whisper_task_count: ${whisper_tasks_raw}
+
+    - cap_whisper_tasks:
+        switch:
+          - condition: ${whisper_parent_count <= 0}
+            assign:
+              - whisper_task_count: 1
+          - condition: ${whisper_tasks_raw < 1}
+            assign:
+              - whisper_task_count: 1
+          - condition: ${whisper_tasks_raw > whisper_max_tasks}
+            assign:
+              - whisper_task_count: ${int(whisper_max_tasks)}
+          - condition: true
+            assign:
+              - whisper_task_count: ${int(whisper_tasks_raw)}
+
+    - log_whisper_plan:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"Mentor Whisper plan parents=" + string(whisper_parent_count) + " taskCount=" + string(whisper_task_count) + " job=" + job_whisper}'
+
+    - run_whisper_job:
+        try:
+          steps:
+            - call_whisper:
+                call: googleapis.run.v1.namespaces.jobs.run
+                args:
+                  name: '${"namespaces/" + project_id + "/jobs/" + job_whisper}'
+                  location: ${location}
+                  body:
+                    overrides:
+                      taskCount: ${whisper_task_count}
+                      containerOverrides:
+                        - env:
+                            - name: FECHA_AUDIO
+                              value: ${process_date}
+                  connector_params:
+                    timeout: 86400
+                result: whisper_status
+            - mark_whisper_ok:
+                assign:
+                  - whisper_connector_ok: true
+        except:
+          as: whisper_err
+          steps:
+            - log_whisper_err:
+                call: sys.log
+                args:
+                  severity: ERROR
+                  text: '${"Whisper Job falló: " + string(default(map.get(whisper_err, "message"), "n/a"))}'
+            - raise_whisper:
+                raise:
+                  message: "Cloud Run Job Whisper cita mentor falló"
+                  error: ${whisper_err}
+
+    - normalize_whisper:
+        assign:
+          - whisper_exec: ${default(map.get(whisper_status, "response"), whisper_status)}
+          - whisper_st: ${default(map.get(whisper_exec, "status"), json.decode("{}"))}
+          - whisper_failed: ${int(default(map.get(whisper_st, "failedCount"), 0))}
+          - whisper_succeeded: ${int(default(map.get(whisper_st, "succeededCount"), 0))}
+          - whisper_result:
+              succeededCount: ${whisper_succeeded}
+              failedCount: ${whisper_failed}
+              taskCount: ${whisper_task_count}
+              parentCount: ${whisper_parent_count}
+
+    - validate_whisper:
+        switch:
+          - condition: ${whisper_failed > 0}
+            steps:
+              - raise_whisper_failed:
+                  raise:
+                    message: "Whisper mentor failedCount > 0"
+                    result: ${whisper_result}
+          - condition: true
+            steps:
+              - log_whisper_ok:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: '${"Whisper mentor OK succeeded=" + string(whisper_succeeded)}'
+              - jump_finalize:
+                  next: finalize
 
     - finalize:
         assign:
@@ -212,6 +356,7 @@ main:
           - summary:
               process_date: ${process_date}
               ingest: ${ingest_summary}
+              whisper: ${whisper_result}
               elapsed_seconds: ${elapsed_seconds}
 
     - log_summary:

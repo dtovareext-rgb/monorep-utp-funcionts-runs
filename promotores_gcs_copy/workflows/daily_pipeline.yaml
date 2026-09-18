@@ -5,17 +5,25 @@
 # 1) Job role=prepare (1 task) → manifiesto en bucket destino
 # 2) Lee count del meta
 # 3) Job role=worker (tasks=count) → copia + catálogo BQ
-# 4) SP raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor(process_date) — TEMPORALMENTE OFF
+# 4) Job Whisper (cr_serialize_cita / CITA_CANAL=promotor)
+# 5) SPs en paralelo (tras Whisper):
+#      - raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor
+#      - raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor_complementaria
 #
 # Args opcionales:
-#   process_date   YYYY-MM-DD (default: ayer Lima)
-#   run_gen_ia     true = ejecuta el SP al final (default false hasta corregir el SP)
-#   skip_ingest    true = solo SP gen_ia (requiere run_gen_ia=true; sin copy/worker)
+#   process_date                 YYYY-MM-DD (default: ayer Lima)
+#   run_whisper                  true = Job Whisper tras copy (default true)
+#   run_gen_ia                   true = SP principal (default true)
+#   run_gen_ia_complementaria    true = SP complementaria (default true)
+#   skip_ingest                  true = solo SPs (sin copy/worker/Whisper)
+#   job_whisper                  default prd-utpbi-cita-promotor-audio-serialize-whisper
+#   whisper_max_tasks            default 10
+#   whisper_audios_per_task      default 10
 #
-# Cuando vuelva el SP, backfill solo gen_ia (ej. 22–24 ago):
+# Backfill solo SPs (ej. 22–24 ago):
 #   for d in 2026-08-22 2026-08-23 2026-08-24; do
 #     gcloud workflows run prd-utpbi-promotores-gcs-copy --location=us-central1 \
-#       --data="{\"process_date\":\"$d\",\"skip_ingest\":true,\"run_gen_ia\":true}"
+#       --data="{\"process_date\":\"$d\",\"skip_ingest\":true}"
 #   done
 #
 # Deploy:
@@ -35,14 +43,20 @@ main:
           - location: ${default(map.get(args, "location"), "us-central1")}
           - bq_location: ${default(map.get(args, "bq_location"), "US")}
           - job_name: ${default(map.get(args, "job_name"), "prd-utpbi-promotores-gcs-copy")}
+          - job_whisper: ${default(map.get(args, "job_whisper"), "prd-utpbi-cita-promotor-audio-serialize-whisper")}
           - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-citapromotor-9bd1430535b8")}
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/manifests")}
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), 0)}
           - process_date: ${default(map.get(args, "process_date"), null)}
           - skip_ingest: ${default(map.get(args, "skip_ingest"), false)}
-          - run_gen_ia: ${default(map.get(args, "run_gen_ia"), false)}
+          - run_whisper: ${default(map.get(args, "run_whisper"), true)}
+          - run_gen_ia: ${default(map.get(args, "run_gen_ia"), true)}
+          - run_gen_ia_complementaria: ${default(map.get(args, "run_gen_ia_complementaria"), true)}
+          - whisper_max_tasks: ${default(map.get(args, "whisper_max_tasks"), 10)}
+          - whisper_audios_per_task: ${default(map.get(args, "whisper_audios_per_task"), 10)}
           - started_at: ${sys.now()}
           - ingest_summary: {}
+          - whisper_result: {}
           - sp_results: {}
 
     - resolve_process_date:
@@ -69,19 +83,19 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"promotores-gcs-copy START process_date=" + process_date + " skip_ingest=" + string(skip_ingest) + " run_gen_ia=" + string(run_gen_ia) + " job=" + job_name}'
+          text: '${"promotores-gcs-copy START process_date=" + process_date + " skip_ingest=" + string(skip_ingest) + " run_whisper=" + string(run_whisper) + " run_gen_ia=" + string(run_gen_ia) + " run_gen_ia_complementaria=" + string(run_gen_ia_complementaria) + " job=" + job_name + " whisper=" + job_whisper}'
 
     - maybe_skip_ingest:
         switch:
-          - condition: ${skip_ingest == true and run_gen_ia == true}
-            next: sp_gen_ia
-          - condition: ${skip_ingest == true and run_gen_ia == false}
+          - condition: ${skip_ingest == true and (run_gen_ia == true or run_gen_ia_complementaria == true)}
+            next: run_sps_parallel
+          - condition: ${skip_ingest == true}
             steps:
               - log_skip_ingest_only:
                   call: sys.log
                   args:
                     severity: WARNING
-                    text: "skip_ingest=true pero run_gen_ia=false — SP deshabilitado; no hay copy ni gen_ia"
+                    text: "skip_ingest=true pero ambos SPs deshabilitados — no hay copy ni gen_ia"
               - jump_skip_ingest_only:
                   next: finalize
           - condition: true
@@ -219,89 +233,323 @@ main:
                   raise:
                     message: "Copia parcial"
                     ingest: ${ingest_summary}
-          - condition: ${run_gen_ia == true}
-            next: sp_gen_ia
+          - condition: true
+            next: maybe_run_whisper
+
+    - maybe_run_whisper:
+        switch:
+          - condition: ${run_whisper == false}
+            steps:
+              - log_skip_whisper:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: "Whisper omitido (run_whisper=false)"
+              - jump_after_whisper_skip:
+                  next: after_whisper
+          - condition: true
+            next: count_whisper_parents
+
+    - count_whisper_parents:
+        try:
+          steps:
+            - query_parent_count:
+                call: googleapis.bigquery.v2.jobs.query
+                args:
+                  projectId: ${project_id}
+                  body:
+                    query: '${"SELECT COUNT(DISTINCT COALESCE(NULLIF(TRIM(folder_uuid), ''), file_name, gcs_uri)) AS n FROM `" + project_id + ".raw_cita_promotor.hist_cita_promotor_audio_catalog` WHERE fecha_audio = DATE ''" + process_date + "'' AND gcs_uri IS NOT NULL"}'
+                    useLegacySql: false
+                    location: ${bq_location}
+                    timeoutMs: 60000
+                  connector_params:
+                    timeout: 120
+                result: parent_count_resp
+            - parse_parent_count:
+                assign:
+                  - whisper_parent_count: ${int(default(parent_count_resp.rows[0].f[0].v, 0))}
+        except:
+          as: count_err
+          steps:
+            - log_count_err:
+                call: sys.log
+                args:
+                  severity: WARNING
+                  text: '${"No se pudo contar padres Whisper; taskCount=1 — " + string(default(map.get(count_err, "message"), "n/a"))}'
+            - fallback_count:
+                assign:
+                  - whisper_parent_count: 0
+
+    - compute_whisper_tasks:
+        assign:
+          - whisper_tasks_raw: ${int((whisper_parent_count + whisper_audios_per_task - 1) / whisper_audios_per_task)}
+          - whisper_task_count: ${whisper_tasks_raw}
+
+    - cap_whisper_tasks:
+        switch:
+          - condition: ${whisper_parent_count <= 0}
+            assign:
+              - whisper_task_count: 1
+          - condition: ${whisper_tasks_raw < 1}
+            assign:
+              - whisper_task_count: 1
+          - condition: ${whisper_tasks_raw > whisper_max_tasks}
+            assign:
+              - whisper_task_count: ${int(whisper_max_tasks)}
+          - condition: true
+            assign:
+              - whisper_task_count: ${int(whisper_tasks_raw)}
+
+    - log_whisper_plan:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"Promotor Whisper plan parents=" + string(whisper_parent_count) + " taskCount=" + string(whisper_task_count) + " job=" + job_whisper}'
+
+    - run_whisper_job:
+        try:
+          steps:
+            - call_whisper:
+                call: googleapis.run.v1.namespaces.jobs.run
+                args:
+                  name: '${"namespaces/" + project_id + "/jobs/" + job_whisper}'
+                  location: ${location}
+                  body:
+                    overrides:
+                      taskCount: ${whisper_task_count}
+                      containerOverrides:
+                        - env:
+                            - name: FECHA_AUDIO
+                              value: ${process_date}
+                  connector_params:
+                    timeout: 86400
+                result: whisper_status
+            - mark_whisper_ok:
+                assign:
+                  - whisper_connector_ok: true
+        except:
+          as: whisper_err
+          steps:
+            - log_whisper_err:
+                call: sys.log
+                args:
+                  severity: ERROR
+                  text: '${"Whisper Job falló: " + string(default(map.get(whisper_err, "message"), "n/a"))}'
+            - raise_whisper:
+                raise:
+                  message: "Cloud Run Job Whisper cita promotor falló"
+                  error: ${whisper_err}
+
+    - normalize_whisper:
+        assign:
+          - whisper_exec: ${default(map.get(whisper_status, "response"), whisper_status)}
+          - whisper_st: ${default(map.get(whisper_exec, "status"), json.decode("{}"))}
+          - whisper_failed: ${int(default(map.get(whisper_st, "failedCount"), 0))}
+          - whisper_succeeded: ${int(default(map.get(whisper_st, "succeededCount"), 0))}
+          - whisper_result:
+              succeededCount: ${whisper_succeeded}
+              failedCount: ${whisper_failed}
+              taskCount: ${whisper_task_count}
+              parentCount: ${whisper_parent_count}
+
+    - validate_whisper:
+        switch:
+          - condition: ${whisper_failed > 0}
+            steps:
+              - raise_whisper_failed:
+                  raise:
+                    message: "Whisper promotor failedCount > 0"
+                    result: ${whisper_result}
+          - condition: true
+            steps:
+              - log_whisper_ok:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: '${"Whisper promotor OK succeeded=" + string(whisper_succeeded)}'
+              - jump_after_whisper:
+                  next: after_whisper
+
+    - after_whisper:
+        switch:
+          - condition: ${run_gen_ia == true or run_gen_ia_complementaria == true}
+            next: run_sps_parallel
           - condition: true
             steps:
               - log_skip_gen_ia:
                   call: sys.log
                   args:
                     severity: INFO
-                    text: "SP gen_ia omitido (run_gen_ia=false)"
+                    text: "SPs gen_ia omitidos (run_gen_ia=false y run_gen_ia_complementaria=false)"
               - jump_finalize:
                   next: finalize
 
-    - sp_gen_ia:
-        steps:
-          - log_sp:
-              call: sys.log
-              args:
-                severity: INFO
-                text: '${"SP start: sp_utpbi_gen_ia_cita_promotor(" + process_date + ")"}'
-          - call_sp:
-              call: googleapis.bigquery.v2.jobs.insert
-              args:
-                projectId: ${project_id}
-                body:
-                  labels:
-                    pipeline: cita_promotor
-                    sp: gen_ia
-                  configuration:
-                    query:
-                      query: '${"CALL `" + project_id + ".raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor`(DATE ''" + process_date + "'');"}'
-                      useLegacySql: false
-                      priority: INTERACTIVE
-                  jobReference:
-                    location: ${bq_location}
-                connector_params:
-                  timeout: 14400
-              result: sp_job
-          - wait_sp:
-              call: sys.sleep
-              args:
-                seconds: 5
-          - poll_sp:
-              call: googleapis.bigquery.v2.jobs.get
-              args:
-                projectId: ${project_id}
-                jobId: ${sp_job.jobReference.jobId}
-                location: ${bq_location}
-              result: sp_status
-          - check_sp:
-              switch:
-                - condition: ${sp_status.status.state == "DONE"}
-                  next: sp_done
-                - condition: true
-                  steps:
-                    - sleep_sp:
-                        call: sys.sleep
-                        args:
-                          seconds: 15
-                    - loop_sp:
-                        next: poll_sp
-          - sp_done:
-              switch:
-                - condition: ${"errorResult" in sp_status.status}
-                  steps:
-                    - log_sp_err:
-                        call: sys.log
-                        args:
-                          severity: ERROR
-                          text: '${"SP gen_ia FAILED: " + string(default(map.get(map.get(sp_status, "status"), "errorResult"), "unknown"))}'
-                    - raise_sp:
-                        raise:
-                          message: "sp_utpbi_gen_ia_cita_promotor falló"
-                          error: ${sp_status.status.errorResult}
-                - condition: true
-                  steps:
-                    - log_sp_ok:
-                        call: sys.log
-                        args:
-                          severity: INFO
-                          text: "SP gen_ia OK"
-                    - mark_sp:
-                        assign:
-                          - sp_results["gen_ia"]: "ok"
+    # Ambos SPs en paralelo tras Whisper (mismos inputs de catálogo/día).
+    - run_sps_parallel:
+        parallel:
+          shared: [sp_results]
+          branches:
+            - branch_gen_ia:
+                steps:
+                  - maybe_run_gen_ia:
+                      switch:
+                        - condition: ${run_gen_ia == false}
+                          steps:
+                            - mark_skip_gen_ia:
+                                assign:
+                                  - sp_results["gen_ia"]: "skipped"
+                        - condition: true
+                          steps:
+                            - log_sp:
+                                call: sys.log
+                                args:
+                                  severity: INFO
+                                  text: '${"SP start: sp_utpbi_gen_ia_cita_promotor(" + process_date + ")"}'
+                            - call_sp:
+                                call: googleapis.bigquery.v2.jobs.insert
+                                args:
+                                  projectId: ${project_id}
+                                  body:
+                                    labels:
+                                      pipeline: cita_promotor
+                                      sp: gen_ia
+                                    configuration:
+                                      query:
+                                        query: '${"CALL `" + project_id + ".raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor`(DATE ''" + process_date + "'');"}'
+                                        useLegacySql: false
+                                        priority: INTERACTIVE
+                                    jobReference:
+                                      location: ${bq_location}
+                                  connector_params:
+                                    timeout: 14400
+                                result: sp_job
+                            - wait_sp:
+                                call: sys.sleep
+                                args:
+                                  seconds: 5
+                            - poll_sp:
+                                call: googleapis.bigquery.v2.jobs.get
+                                args:
+                                  projectId: ${project_id}
+                                  jobId: ${sp_job.jobReference.jobId}
+                                  location: ${bq_location}
+                                result: sp_status
+                            - check_sp:
+                                switch:
+                                  - condition: ${sp_status.status.state == "DONE"}
+                                    next: sp_done
+                                  - condition: true
+                                    steps:
+                                      - sleep_sp:
+                                          call: sys.sleep
+                                          args:
+                                            seconds: 15
+                                      - loop_sp:
+                                          next: poll_sp
+                            - sp_done:
+                                switch:
+                                  - condition: ${"errorResult" in sp_status.status}
+                                    steps:
+                                      - log_sp_err:
+                                          call: sys.log
+                                          args:
+                                            severity: ERROR
+                                            text: '${"SP gen_ia FAILED: " + string(default(map.get(map.get(sp_status, "status"), "errorResult"), "unknown"))}'
+                                      - raise_sp:
+                                          raise:
+                                            message: "sp_utpbi_gen_ia_cita_promotor falló"
+                                            error: ${sp_status.status.errorResult}
+                                  - condition: true
+                                    steps:
+                                      - log_sp_ok:
+                                          call: sys.log
+                                          args:
+                                            severity: INFO
+                                            text: "SP gen_ia OK"
+                                      - mark_sp:
+                                          assign:
+                                            - sp_results["gen_ia"]: "ok"
+
+            - branch_gen_ia_complementaria:
+                steps:
+                  - maybe_run_complementaria:
+                      switch:
+                        - condition: ${run_gen_ia_complementaria == false}
+                          steps:
+                            - mark_skip_complementaria:
+                                assign:
+                                  - sp_results["gen_ia_complementaria"]: "skipped"
+                        - condition: true
+                          steps:
+                            - log_sp_comp:
+                                call: sys.log
+                                args:
+                                  severity: INFO
+                                  text: '${"SP start: sp_utpbi_gen_ia_cita_promotor_complementaria(" + process_date + ")"}'
+                            - call_sp_comp:
+                                call: googleapis.bigquery.v2.jobs.insert
+                                args:
+                                  projectId: ${project_id}
+                                  body:
+                                    labels:
+                                      pipeline: cita_promotor
+                                      sp: gen_ia_complementaria
+                                    configuration:
+                                      query:
+                                        query: '${"CALL `" + project_id + ".raw_cita_promotor.sp_utpbi_gen_ia_cita_promotor_complementaria`(DATE ''" + process_date + "'');"}'
+                                        useLegacySql: false
+                                        priority: INTERACTIVE
+                                    jobReference:
+                                      location: ${bq_location}
+                                  connector_params:
+                                    timeout: 14400
+                                result: sp_job_comp
+                            - wait_sp_comp:
+                                call: sys.sleep
+                                args:
+                                  seconds: 5
+                            - poll_sp_comp:
+                                call: googleapis.bigquery.v2.jobs.get
+                                args:
+                                  projectId: ${project_id}
+                                  jobId: ${sp_job_comp.jobReference.jobId}
+                                  location: ${bq_location}
+                                result: sp_status_comp
+                            - check_sp_comp:
+                                switch:
+                                  - condition: ${sp_status_comp.status.state == "DONE"}
+                                    next: sp_done_comp
+                                  - condition: true
+                                    steps:
+                                      - sleep_sp_comp:
+                                          call: sys.sleep
+                                          args:
+                                            seconds: 15
+                                      - loop_sp_comp:
+                                          next: poll_sp_comp
+                            - sp_done_comp:
+                                switch:
+                                  - condition: ${"errorResult" in sp_status_comp.status}
+                                    steps:
+                                      - log_sp_comp_err:
+                                          call: sys.log
+                                          args:
+                                            severity: ERROR
+                                            text: '${"SP gen_ia_complementaria FAILED: " + string(default(map.get(map.get(sp_status_comp, "status"), "errorResult"), "unknown"))}'
+                                      - raise_sp_comp:
+                                          raise:
+                                            message: "sp_utpbi_gen_ia_cita_promotor_complementaria falló"
+                                            error: ${sp_status_comp.status.errorResult}
+                                  - condition: true
+                                    steps:
+                                      - log_sp_comp_ok:
+                                          call: sys.log
+                                          args:
+                                            severity: INFO
+                                            text: "SP gen_ia_complementaria OK"
+                                      - mark_sp_comp:
+                                          assign:
+                                            - sp_results["gen_ia_complementaria"]: "ok"
 
     - finalize:
         assign:
@@ -309,6 +557,7 @@ main:
           - summary:
               process_date: ${process_date}
               ingest: ${ingest_summary}
+              whisper: ${whisper_result}
               sps: ${sp_results}
               elapsed_seconds: ${elapsed_seconds}
 

@@ -26,9 +26,7 @@ Roles:
 | `prepare` | Lista el origen del día → `gs://destino/state/manifests/{fecha}.jsonl` |
 | `worker` | `CLOUD_RUN_TASK_INDEX` copia 1 línea |
 
-Orquesta el workflow `workflows/daily_pipeline.yaml` (prepare → lee count → worker N tasks → catálogo BQ).
-
-> **Gen IA (SP) temporalmente deshabilitado.** El workflow solo hace **copy + catálogo** hasta corregir `sp_utpbi_gen_ia_cita_promotor`. Para reactivarlo: `run_gen_ia=true` en el body del workflow (ver abajo).
+Orquesta el workflow `workflows/daily_pipeline.yaml` (prepare → lee count → worker N tasks → catálogo BQ → SP gen_ia).
 
 ## Config
 
@@ -103,10 +101,14 @@ Sustituciones: `_PROJECT_ID`, `_JOB_NAME`, `_SERVICE_ACCOUNT`, `_DEST_BUCKET_NAM
 | Arg | Default | Qué hace |
 |-----|---------|----------|
 | `process_date` | ayer Lima | `YYYY-MM-DD` |
-| `run_gen_ia` | **`false`** | `true` → llama `sp_utpbi_gen_ia_cita_promotor` al final |
-| `skip_ingest` | `false` | `true` → solo SP (requiere `run_gen_ia=true`) |
+| `run_whisper` | **`true`** | `false` → omite Job Whisper tras el copy |
+| `run_gen_ia` | **`true`** | `false` → omite `sp_utpbi_gen_ia_cita_promotor` |
+| `run_gen_ia_complementaria` | **`true`** | `false` → omite `sp_utpbi_gen_ia_cita_promotor_complementaria` |
+| `skip_ingest` | `false` | `true` → solo SPs (sin copy/worker) |
 
-Diario (copy + catálogo, sin SP):
+Tras el copy, ambos SPs corren **en paralelo** (mismo `process_date`).
+
+Diario (copy + catálogo + SP):
 
 ```bash
 gcloud workflows run prd-utpbi-promotores-gcs-copy \
@@ -115,13 +117,13 @@ gcloud workflows run prd-utpbi-promotores-gcs-copy \
   --data='{}'
 ```
 
-Cuando vuelva el SP — un día con copy + gen_ia:
+Solo copy + catálogo (sin SP):
 
 ```bash
 gcloud workflows run prd-utpbi-promotores-gcs-copy \
   --project=prd-utpbi-data-operation \
   --location=us-central1 \
-  --data='{"process_date":"2026-09-07","run_gen_ia":true}'
+  --data='{"process_date":"2026-09-07","run_gen_ia":false}'
 ```
 
 Solo SP (sin copy), p. ej. backfill gen_ia:
