@@ -37,7 +37,7 @@ Carpeta GCS = `%d-%m-%Y` → ej. `audios/mentores/07-09-2026/`.
 2. lee count del meta  
 3. worker N tasks → copia GCS + insert catálogo BQ  
 
-Args: `process_date` (default ayer Lima), `gcs_bucket` (default `prd-utp-stg-mentores` — **debe coincidir** con `dest.bucket_name` del Job / `config.json`).
+Args: `process_date` (default ayer Lima), `gcs_bucket` (default `prd-utp-stg-mentores` — **debe coincidir** con `dest.bucket_name` del Job / `config.json`), `run_whisper` (default `true` → Job `prd-utpbi-cita-mentor-audio-serialize-whisper` tras el copy).
 
 > Si cambias el bucket en `config.json`, redeploy **Cloud Run Job** (env `DEST_BUCKET_NAME`) **y** el workflow (`gcs_bucket` default) o pasa `"gcs_bucket":"..."` al ejecutar.
 
