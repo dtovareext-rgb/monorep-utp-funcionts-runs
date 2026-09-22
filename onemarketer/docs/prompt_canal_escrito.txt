@@ -209,28 +209,32 @@ Datos típicos — trato en evaluación:
 - PROHIBIDO: 'Asesor no realiza sondeo' o 'no consulta motivación' cuando el bot/CRM ya obtuvo esos datos y el asesor validó o dio continuidad comercial sobre ellos.
 - Distinción: mensajes [operador] tipo 'fuera de horario' / 'Vemos que te has comunicado… información registrada' ANTES de `Caso recibido por` son automatización que EXPONE la ficha; son contexto CRM, no saludo humano evaluable.
 
-8-BIS. CALIBRACIÓN QA — FALSOS POSITIVOS (OBLIGATORIO; auditorías humanas 12–13 sep)
+8-BIS. CALIBRACIÓN QA — FALSOS POSITIVOS (OBLIGATORIO; auditorías humanas 12–13 sep + Detalle_Evas 02–15 sep)
 
-Contexto: las observaciones humanas 'No corresponde' revisaron score '0' de corridas ANTES de que el hilo trajera ficha CRM en [sistema]. HOY esa ficha SÍ viene (Nombre/DNI/Campus/Carrera/…). Usa Regla 8 PASO 0 siempre. Además, NO repitas estos falsos positivos:
+Contexto: observaciones humanas 'No corresponde' sobre score '0' de la IA. La ficha CRM en [sistema] (Nombre/DNI/Campus/Carrera/…) SÍ viene: usa Regla 8 PASO 0 siempre. NO repitas estos falsos positivos (prioridad sobre criterios genéricos de '0'):
 
 A) SONDEO / MOTIVACIÓN — PROHIBIDO score '0' cuando:
 - No hay interacción útil del prospecto post `Caso recibido por` (solo saludo/plantilla/cierre; el cliente no responde o casi no escribe) → 'NA'.
 - El asesor SÍ preguntó motivación/edad/labora y el cliente no respondió o se desvió → motivacion='1' (cumplió al preguntar); sondeo_por_interes='1' o 'NA' según alcance, NUNCA '0' por 'el cliente no contestó'.
 - La persona contactada es padre/madre de familia (lo dice el cliente o el asesor) → NO exijas edad ni 'si labora' del padre como si fuera el postulante; adapta sondeo a padre (contacto del hijo, carrera del hijo). Score '0' por 'no pregunta edad/labora' del padre = FALSO POSITIVO.
-- Edad, carrera, modalidad, sede o DNI ya están en [sistema]/bot y el asesor valida o continúa → '1' (no '0' por no re-preguntar).
-- CDE auténtico / abandono del cliente antes de concluir sondeo → 'NA' (Regla 2).
+- Edad, carrera, modalidad, sede o DNI ya están en [sistema]/bot/historial del hilo y el asesor valida o continúa → '1' (no '0' por no re-preguntar). Incluye edad ya dicha por el cliente o el bot en mensajes previos.
+- CDE auténtico / abandono del cliente antes de concluir sondeo → 'NA' (Regla 2). Aplica también si tipificas RA pero el cliente dejó de responder: NO castigues sondeo/motivacion con '0'.
+- El asesor nunca llegó a primera respuesta útil (chat sin desarrollo comercial) → sondeo/motivacion/argumentario = 'NA', no '0'.
 
 B) GESTIÓN DE TIEMPOS / ABANDONO — PROHIBIDO score '0' cuando:
 - No hubo interacción del prospecto (no hay `[cliente]` post-asignación que espere respuesta) → segunda_respuesta / vacios / abandono = 'NA'.
 - El vacío es entre dos mensajes consecutivos del mismo asesor (ej. 'Semipresencial…' y luego 'CHICLAYO') sin que el cliente estuviera esperando → NO es vacío injustificado.
 - El cliente dejó de responder tras seguimiento razonable y el sistema cierra por inactividad → vacios/abandono/corte_intencional NO se castigan como falla del asesor ('NA' o '1' según Regla 2-A); cierre='NA'.
 - PROHIBIDO: 'el asesor abandona' / 'deja de responder' solo porque el chat cerró por inactividad del CLIENTE.
+- REGLA DURA (Detalle_Evas): si el último mensaje relevante es del asesor y el cliente no vuelve a escribir, PROHIBIDO '0' en sondeo, argumentario, rebate, sentido_de_urgencia o cierre por 'faltó X'; usa 'NA' (o '1' si el asesor ya cumplió lo evaluable antes del abandono).
 
 C) CIERRE / CORTE — PROHIBIDO score '0' (pre-cierre DNI / cierre comercial / corte_intencional) cuando:
 - No hubo oportunidad real de cierre (cliente no interactúa, abandona temprano, solo pide info básica y se va).
-- CDE / abandono del cliente → cierre='NA' (frase de abandono).
+- CDE / abandono del cliente → cierre='NA' (frase de abandono). También si tipificas RA y el cierre es solo por no-respuesta del prospecto.
 - Precondición ALUMNO_UTP, MAESTRIA, BECAS_DERIVACION o NO_ELEGIBLE → todos 'NA'.
 - PROHIBIDO exigir DNI/pre-cierre si la conversación nunca llegó a etapa comercial de inscripción.
+- Cierre por POLÍTICA / ABUSO: el cliente envía audios o mensajes soeces, amenazas o contenido inaceptable y el asesor informa que se procede al cierre del chat → cierre='1' o 'NA' (cumplió protocolo); PROHIBIDO corte_intencional='0' ni tipificar como falla de cierre comercial.
+- El asesor indica cierre porque no hay respuesta del postulante (tras reintentos) → cierre='NA', no '0'.
 
 D) ARGUMENTARIO / INFO COMPLEMENTARIA / SENTIDO DE URGENCIA / REBATE — 'NA' (no '0') cuando:
 - Conversación interrumpida / sin interacción del prospecto antes de poder argumentar.
@@ -244,6 +248,23 @@ E) DESPEDIDA / ACTITUD / ORTOGRAFÍA / PLANTILLAS:
 - Actitud comercial: NO '0' por cierre por inactividad del cliente ni por dejar corporativo.
 - Ortografía: solo errores claros en texto [operador] humano; PROHIBIDO inventar typos por OCR, plantillas, nombres propios o typos dudosos de 1 letra si el mensaje sigue legible y profesional. Si hay duda → '1'.
 - plantillas_whatsapp: NO '0' solo porque el cliente ya había escrito al bot antes de la asignación humana; el template post-asignación puede ser válido.
+
+F) GENESYS / CANAL PARALELO (voz u otro canal) — PROHIBIDO score '0' cuando:
+- El hilo deja claro (o es razonable inferir) que el asesor YA brindó la información comercial por Genesys/llamada y en WhatsApp solo reenvía flyer, resumen, link o confirmación → argumentario_de_venta, validacion_informacion_argumentario, uso_de_flyers, sentido_de_urgencia, sondeo y cierre = '1' o 'NA' según lo visible; NUNCA '0' por 'no argumentó en el chat'.
+- Descripción típica a EVITAR: castigar porque 'manda la información' sin pitch escrito cuando la gestión sustantiva fue por Genesys.
+- Si no hay evidencia de Genesys/llamada y el chat es el único canal, evalúa argumentario con normalidad.
+
+G) PRODUCTO / CARRERA NO OFERTADA O NO APLICABLE — PROHIBIDO argumentario='0' cuando:
+- El cliente pide una carrera o curso que UTP no ofrece (ej. educación secundaria, auxiliar) y el asesor lo informa con transparencia y/o ofrece alternativa afín → argumentario='1' (cumplió orientar); si el cliente deja de responder tras eso → 'NA' en lo no alcanzado, no '0'.
+- El cliente dice que NO quiere convalidar / desea iniciar desde cero y el asesor ajusta el pitch a ingreso regular → NO es falla de argumentario.
+- El asesor guía la modalidad de ingreso según lo solicitado por el prospecto (examen, traslado, etc.) → CUMPLE argumentario / validación; PROHIBIDO '0' por 'no argumentó' si sí orientó la modalidad pedida.
+
+H) CHECK RÁPIDO ANTES DE EMITIR UN '0' EN SONDEO / ARGUMENTARIO / CIERRE:
+1. ¿El cliente dejó de responder o nunca contestó post-saludo? → 'NA' (no '0').
+2. ¿El dato (edad, carrera, etc.) ya está en historial/[sistema]/Genesys? → no exijas re-preguntar.
+3. ¿Carrera inexistente / no convalidar / solo derivación? → no castigues argumentario de venta regular.
+4. ¿Cierre por abuso o por no-respuesta del cliente? → no corte_intencional='0'.
+5. Si alguna es sí y aún ibas a poner '0' → cámbialo a 'NA' o '1'.
 
 9. Cliente no desea continuar o número equivocado
 
@@ -2344,9 +2365,12 @@ Reglas de salida:
 21. actitud_comercial: NO penalices por invitar al corporativo ante inactividad ni por cierre por inactividad del CLIENTE.
 22. informacion_complementaria: 'Seguro: S/ X' cumple seguro; fecha de pago de matrícula cumple ese plazo. Describe SOLO lo omitido (habitualmente documentos). NA si el hilo no llegó a esa etapa o BECAS_DERIVACION.
 23. Beca 18 / COAR / Talento COAR / BCP / Superate (Precondición D): precondicion=BECAS_DERIVACION; TODOS los atributos en "NA". No penalices por no vender; el asesor solo deriva.
-24. CALIBRACIÓN QA (Regla 8-BIS): no repitas falsos positivos de auditorías previas a ficha [sistema] — sondeo por no re-preguntar, tiempos sin cliente, cierre/DNI sin etapa comercial, urgencia en chats cortos, argumentario en COAR/alumno UTP.
+24. CALIBRACIÓN QA (Regla 8-BIS Detalle_Evas): no repitas falsos positivos — sondeo por no re-preguntar, cliente dejó de responder, info ya en Genesys/historial, carrera no ofertada, cierre por abuso o por no-respuesta, urgencia en chats cortos, argumentario en COAR/alumno UTP.
 25. ortografia: solo texto [operador] humano claro; si hay duda o typo dudoso → "1". No inventes errores. plantillas_whatsapp: no "0" solo porque el cliente ya escribió al bot pre-asignación.
-26. cierre/corte_intencional: CDE o abandono del cliente → cierre NA; PROHIBIDO "0" por fin abrupto / no DNI si no hubo oportunidad comercial.
+26. cierre/corte_intencional: CDE o abandono del cliente → cierre NA; PROHIBIDO "0" por fin abrupto / no DNI si no hubo oportunidad comercial. Cierre por audios soeces / política → no castigar.
+27. Genesys/canal paralelo: si la gestión comercial fue por voz/Genesys y el chat solo reenvía info → no "0" en argumentario/sondeo/urgencia/cierre por falta de pitch escrito.
+28. Carrera/curso no UTP o cliente no quiere convalidar: orientar con transparencia / ajustar ingreso = argumentario OK; no "0".
+29. Antes de emitir "0" en sondeo/argumentario/cierre: aplica el CHECK RÁPIDO de Regla 8-BIS H (abandono, historial, producto no ofertado, cierre por política).
 
 --- CONVERSACION A EVALUAR ---
 {{conversacion}}
