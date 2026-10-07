@@ -3,23 +3,28 @@
 -- =============================================================================
 --
 -- PROJECT_ID        = prd-utpbi-data-operation
--- DATASET_RAW       = raw_queue_smart          (US)
--- DATASET_ANALYTICS = adf_speech_analytics    (US — Gen IA / STT)
+-- DATASET_RAW       = raw_queue_smart          (us-central1)
+-- DATASET_ANALYTICS = adf_speech_analytics    (US — Gen IA)
 -- BQ_CONNECTION     = `prd-utpbi-data-operation.US.utp_gen_ia_process`
--- STT_MODEL         = `prd-utpbi-data-operation.adf_speech_analytics.speech-to-text-v2`
 -- GEMINI_MODEL      = `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`
 -- EXTERNAL_TABLE    = `prd-utpbi-data-operation.adf_speech_analytics.tmp_utp_external_table_queuesmart_mp3`
 --
--- Flujo:
---   1. qs_s3_to_gcs → hist_queesmart_mp3_catalog
---   2. sp_queuesmart_mp3_consolidate → enriched + CALL gen_ia
---   3. Etapa 1: ML.TRANSCRIBE (speech-to-text-v2) → hist_queuesmart_mp3_gen_ia_*
---   4. Etapa 2: Gemini + canal_counter_prompt → hist_queuesmart_audio_analisis_ia_*
+-- Gen IA (flujo principal):
+--   hist_queesmart_mp3_catalog  ← job qs_s3_to_gcs
+--   sp_queuesmart_mp3_gen_ia    ← CALL en adf_speech_analytics (US)
+--   hist_queuesmart_mp3_gen_ia_process_data_raw / _prd
 --
--- Manual:
---   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(ayer)
+-- Orquestación diaria:
+--   1. qs_s3_to_gcs (ayer)
+--   2. CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(ayer)
 --
 -- Despliegue: ver deploy/prd_gen_ia.sql
 -- Ejemplo CALL: examples/call_sp_gen_ia_prd.sql
 --
 -- (Opcional) CRM Ticketero: sp_queuesmart_mp3_consolidate + qs_sql_to_bq
+-- CRM Dynamics (mismas uniones que Genesys / OneMarketer), tablas de prod:
+--   v_queuesmart_counter_crm_lead
+--   v_queuesmart_lead_conversaciones
+--   leads + systemusers + opportunities en prd-utpbi-data-storage-pv.raw_dynamic_crm
+--   Match: ndoc ↔ onetoone_nro (DNI), o numcelular ↔ mobilephone (9 dígitos).
+--   Dataset prod: raw_queue_smart (us-central1)
