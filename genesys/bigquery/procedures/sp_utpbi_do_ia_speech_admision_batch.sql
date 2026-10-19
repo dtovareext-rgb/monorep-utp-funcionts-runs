@@ -106,7 +106,7 @@ BEGIN
     ia.*
   FROM
     AI.GENERATE_TABLE(
-      MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`,
+      MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-3-5-flash`,
       (
         SELECT
           STRUCT(
@@ -286,7 +286,7 @@ BEGIN
     ia.*
   FROM
     AI.GENERATE_TABLE(
-      MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`,
+      MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-3-5-flash`,
       (
         SELECT
           STRUCT(
@@ -482,7 +482,7 @@ BEGIN
     ia.*
   FROM
     AI.GENERATE_TABLE(
-      MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`,
+      MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-3-5-flash`,
       (
         SELECT
           STRUCT(

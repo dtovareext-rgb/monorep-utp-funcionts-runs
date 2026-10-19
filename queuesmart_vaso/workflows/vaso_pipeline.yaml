@@ -487,7 +487,7 @@ main:
                   labels:
                     producto: queuesmart-vaso
                     etapa: gemini
-                    servicio: flash-2-5
+                    servicio: flash-3-5
                     pipeline: queuesmart-vaso
                   jobReference:
                     location: ${bq_location}

@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- Pipeline queuesmart_vaso — un día (manual BQ)
 -- Preferido: Cloud Workflow queuesmart-vaso-pipeline (ver README).
 --

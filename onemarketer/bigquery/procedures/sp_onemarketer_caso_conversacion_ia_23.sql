@@ -30,8 +30,8 @@ BEGIN
   DECLARE v_caso_count INT64;
   DECLARE v_info_carreras STRING;
 
-  -- Labels de costo: heredan a jobs hijos (AI.GENERATE_TABLE / Flash 2.5).
-  SET @@query_label = 'producto:onemarketer,etapa:gemini,servicio:flash-2-5';
+  -- Labels de costo: heredan a jobs hijos (AI.GENERATE_TABLE / Flash 3.5).
+  SET @@query_label = 'producto:onemarketer,etapa:gemini,servicio:flash-3-5';
 
   SET v_effective_prompt = IFNULL(NULLIF(TRIM(v_prompt_name), ''), 'canal_escrito_prompt');
 
@@ -163,7 +163,7 @@ BEGIN
   CREATE OR REPLACE TEMP TABLE tmp_onemarketer_caso_conversacion_ia_results AS
   SELECT ia.*
   FROM AI.GENERATE_TABLE(
-    MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-2-5-flash`,
+    MODEL `prd-utpbi-data-operation.adf_speech_analytics.gemini-3-5-flash`,
     (
       SELECT
         STRUCT(prompt AS instruction) AS prompt,

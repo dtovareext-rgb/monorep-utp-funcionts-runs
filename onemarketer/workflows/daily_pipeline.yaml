@@ -232,7 +232,7 @@ main:
                   labels:
                     producto: onemarketer
                     etapa: gemini
-                    servicio: flash-2-5
+                    servicio: flash-3-5
                     pipeline: onemarketer-daily
                   jobReference:
                     location: ${bq_location}

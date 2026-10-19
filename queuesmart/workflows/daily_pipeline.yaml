@@ -537,7 +537,7 @@ main:
                   labels:
                     producto: queuesmart
                     etapa: gemini
-                    servicio: flash-2-5
+                    servicio: flash-3-5
                     pipeline: queuesmart-daily
                   jobReference:
                     location: ${bq_location}

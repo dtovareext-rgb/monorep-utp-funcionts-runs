@@ -1,4 +1,4 @@
-﻿# queuesmart_vaso
+# queuesmart_vaso
 
 **Hub del pipeline VASO** QueeSmart (legado-miss: `.audio` ∪ prefijo ≠ 6).
 

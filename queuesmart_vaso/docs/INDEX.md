@@ -1,4 +1,4 @@
-﻿# Inventario completo — stack VASO QueeSmart
+# Inventario completo — stack VASO QueeSmart
 
 Todo el pipeline paralelo (legado-miss) vive bajo este paquete + 2 Jobs hermanos.
 
