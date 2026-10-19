@@ -135,7 +135,7 @@ gcloud workflows run prd-utpbi-promotores-gcs-copy \
   --data='{"process_date":"2026-09-07","skip_ingest":true,"run_gen_ia":true}'
 ```
 
-Tras corregir el SP, cambiar el default de `run_gen_ia` a `true` en `workflows/daily_pipeline.yaml` o pasarlo en el Scheduler.
+El diario ya llama `sp_utpbi_gen_ia_cita_promotor`: el default de `run_gen_ia` en `workflows/daily_pipeline.yaml` es `true`.
 
 ## Manual (Job sin workflow)
 
