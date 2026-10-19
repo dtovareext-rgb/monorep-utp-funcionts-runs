@@ -2,12 +2,13 @@
 --
 -- Fuente: raw_queue_smart.queuesmart_mp3_enriched (esquema prod: tickets_hist_raw).
 -- Counter no trae contact_id. El lead se resuelve así:
---   1) ndoc ↔ leads.onetoone_nro (DNI)
---   2) numcelular ↔ leads.mobilephone (últimos 9 dígitos, sin +51)
+--   1) ndoc ↔ leads.onetoone_nro (DNI) — join de igualdad
+--   2) numcelular ↔ leads.mobilephone (últimos 9 dígitos, sin +51) — solo si el audio no trae DNI
 -- A partir del lead, las uniones son las de Genesys:
 --   3) leads.utp_usuario_primera_actividad_exitosa ↔ systemusers.systemuserid
 --   4) leads.parentcontactid ↔ opportunities.customerid
 -- systemusers y opportunities: snapshot más reciente por llave (modifiedon).
+-- Match CRM: sin OR (hash join); preferir DNI; si hay varios leads, el más cercano a audio_fecha.
 --
 -- Proyecto fijo de prod: prd-utpbi-data-operation / prd-utpbi-data-storage-pv.
 -- Desplegar con --location=us-central1
@@ -60,22 +61,13 @@ WITH audios AS (
     ) AS phone_norm
   FROM `prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_enriched` AS e
 ),
-leads_snap AS (
-  SELECT
-    l.*,
-    ROW_NUMBER() OVER (
-      PARTITION BY l.leadid
-      ORDER BY l.modifiedon DESC NULLS LAST
-    ) AS rn_lead
-  FROM `prd-utpbi-data-storage-pv.raw_dynamic_crm.leads` AS l
-),
 leads_latest AS (
   SELECT
     leadid,
     fullname,
     emailaddress1,
     mobilephone,
-    SAFE_CAST(createdon AS TIMESTAMP) AS createdon,
+    createdon,
     modifiedon,
     onetoone_nro,
     onetoone_fuenteorigen,
@@ -96,28 +88,79 @@ leads_latest AS (
     yomifullname,
     utp_usuario_primera_actividad_exitosa,
     utp_usuario_primera_actividad_exitosaname,
-    NULLIF(REGEXP_REPLACE(TRIM(SAFE_CAST(onetoone_nro AS STRING)), r'[^0-9]', ''), '') AS dni_norm,
-    NULLIF(
-      RIGHT(
-        REGEXP_REPLACE(
-          REGEXP_REPLACE(TRIM(SAFE_CAST(mobilephone AS STRING)), r'[^0-9]', ''),
-          r'^51',
-          ''
-        ),
-        9
-      ),
-      ''
-    ) AS phone_norm
-  FROM leads_snap
-  WHERE rn_lead = 1
-),
-systemusers_latest AS (
-  SELECT * EXCEPT(rn_user)
+    dni_norm,
+    phone_norm,
+    usuario_primera_key,
+    parentcontact_key
   FROM (
     SELECT
-      su.systemuserid,
-      su.utp_equipo_trabajoname,
-      su.utp_supervisorasignadoidname,
+      SAFE_CAST(l.leadid AS STRING) AS leadid,
+      SAFE_CAST(l.fullname AS STRING) AS fullname,
+      SAFE_CAST(l.emailaddress1 AS STRING) AS emailaddress1,
+      SAFE_CAST(l.mobilephone AS STRING) AS mobilephone,
+      SAFE_CAST(l.createdon AS TIMESTAMP) AS createdon,
+      SAFE_CAST(l.modifiedon AS TIMESTAMP) AS modifiedon,
+      SAFE_CAST(l.onetoone_nro AS STRING) AS onetoone_nro,
+      SAFE_CAST(l.onetoone_fuenteorigen AS STRING) AS onetoone_fuenteorigen,
+      SAFE_CAST(l.onetoone_sededeseada AS STRING) AS onetoone_sededeseada,
+      SAFE_CAST(l.onetoone_clasificacion AS STRING) AS onetoone_clasificacion,
+      SAFE_CAST(l.utp_nombre_campana_digital AS STRING) AS utp_nombre_campana_digital,
+      SAFE_CAST(l.onetoone_productoname AS STRING) AS onetoone_productoname,
+      SAFE_CAST(l.utp_sub_gradoname AS STRING) AS utp_sub_gradoname,
+      SAFE_CAST(l.onetoone_detallefuenteorigenname AS STRING) AS onetoone_detallefuenteorigenname,
+      SAFE_CAST(l.onetoone_sededeseadaname AS STRING) AS onetoone_sededeseadaname,
+      SAFE_CAST(l.telephone2 AS STRING) AS telephone2,
+      SAFE_CAST(l.utp_primera_tipificacion_exitosa AS STRING) AS utp_primera_tipificacion_exitosa,
+      SAFE_CAST(l.utp_segundaactividadexitosa AS STRING) AS utp_segundaactividadexitosa,
+      SAFE_CAST(l.utp_ultima_actividad_exitosa AS STRING) AS utp_ultima_actividad_exitosa,
+      SAFE_CAST(l.utp_ultimatipificacion AS STRING) AS utp_ultimatipificacion,
+      SAFE_CAST(l.onetoone_fechadenacimiento AS STRING) AS onetoone_fechadenacimiento,
+      SAFE_CAST(l.parentcontactid AS STRING) AS parentcontactid,
+      SAFE_CAST(l.yomifullname AS STRING) AS yomifullname,
+      SAFE_CAST(l.utp_usuario_primera_actividad_exitosa AS STRING) AS utp_usuario_primera_actividad_exitosa,
+      SAFE_CAST(l.utp_usuario_primera_actividad_exitosaname AS STRING) AS utp_usuario_primera_actividad_exitosaname,
+      NULLIF(REGEXP_REPLACE(TRIM(SAFE_CAST(l.onetoone_nro AS STRING)), r'[^0-9]', ''), '') AS dni_norm,
+      NULLIF(
+        RIGHT(
+          REGEXP_REPLACE(
+            REGEXP_REPLACE(TRIM(SAFE_CAST(l.mobilephone AS STRING)), r'[^0-9]', ''),
+            r'^51',
+            ''
+          ),
+          9
+        ),
+        ''
+      ) AS phone_norm,
+      NULLIF(TRIM(SAFE_CAST(l.utp_usuario_primera_actividad_exitosa AS STRING)), '') AS usuario_primera_key,
+      NULLIF(TRIM(SAFE_CAST(l.parentcontactid AS STRING)), '') AS parentcontact_key,
+      ROW_NUMBER() OVER (
+        PARTITION BY l.leadid
+        ORDER BY l.modifiedon DESC NULLS LAST
+      ) AS rn_lead
+    FROM `prd-utpbi-data-storage-pv.raw_dynamic_crm.leads` AS l
+  )
+  WHERE rn_lead = 1
+),
+leads_by_dni AS (
+  SELECT *
+  FROM leads_latest
+  WHERE dni_norm IS NOT NULL
+),
+leads_by_phone AS (
+  SELECT *
+  FROM leads_latest
+  WHERE phone_norm IS NOT NULL
+),
+systemusers_latest AS (
+  SELECT
+    systemuserid_key,
+    utp_equipo_trabajoname,
+    utp_supervisorasignadoidname
+  FROM (
+    SELECT
+      NULLIF(TRIM(SAFE_CAST(su.systemuserid AS STRING)), '') AS systemuserid_key,
+      SAFE_CAST(su.utp_equipo_trabajoname AS STRING) AS utp_equipo_trabajoname,
+      SAFE_CAST(su.utp_supervisorasignadoidname AS STRING) AS utp_supervisorasignadoidname,
       ROW_NUMBER() OVER (
         PARTITION BY su.systemuserid
         ORDER BY su.modifiedon DESC NULLS LAST
@@ -125,18 +168,30 @@ systemusers_latest AS (
     FROM `prd-utpbi-data-storage-pv.raw_dynamic_crm.systemusers` AS su
   )
   WHERE rn_user = 1
+    AND systemuserid_key IS NOT NULL
 ),
 opportunities_latest AS (
-  SELECT * EXCEPT(rn_opp)
+  SELECT
+    customerid_key,
+    ownerid,
+    owneridMicrosoft_Dynamics_CRM_associatednavigationproperty,
+    owneridMicrosoft_Dynamics_CRM_lookuplogicalname,
+    owneridname,
+    owneridtype,
+    owneridyominame,
+    customerid
   FROM (
     SELECT
-      op.customerid,
-      op.ownerid,
-      op.owneridMicrosoft_Dynamics_CRM_associatednavigationproperty,
-      op.owneridMicrosoft_Dynamics_CRM_lookuplogicalname,
-      op.owneridname,
-      op.owneridtype,
-      op.owneridyominame,
+      NULLIF(TRIM(SAFE_CAST(op.customerid AS STRING)), '') AS customerid_key,
+      SAFE_CAST(op.ownerid AS STRING) AS ownerid,
+      SAFE_CAST(op.owneridMicrosoft_Dynamics_CRM_associatednavigationproperty AS STRING)
+        AS owneridMicrosoft_Dynamics_CRM_associatednavigationproperty,
+      SAFE_CAST(op.owneridMicrosoft_Dynamics_CRM_lookuplogicalname AS STRING)
+        AS owneridMicrosoft_Dynamics_CRM_lookuplogicalname,
+      SAFE_CAST(op.owneridname AS STRING) AS owneridname,
+      SAFE_CAST(op.owneridtype AS STRING) AS owneridtype,
+      SAFE_CAST(op.owneridyominame AS STRING) AS owneridyominame,
+      SAFE_CAST(op.customerid AS STRING) AS customerid,
       ROW_NUMBER() OVER (
         PARTITION BY op.customerid
         ORDER BY op.modifiedon DESC NULLS LAST
@@ -144,10 +199,149 @@ opportunities_latest AS (
     FROM `prd-utpbi-data-storage-pv.raw_dynamic_crm.opportunities` AS op
   )
   WHERE rn_opp = 1
+    AND customerid_key IS NOT NULL
 ),
-leads_crm AS (
+match_dni AS (
   SELECT
-    l.*,
+    a.audio_key,
+    l.leadid,
+    l.fullname AS crm_fullname,
+    l.emailaddress1 AS crm_email,
+    l.mobilephone AS crm_mobilephone,
+    l.onetoone_nro AS crm_dni,
+    l.onetoone_sededeseada AS crm_sede_deseada,
+    l.onetoone_fuenteorigen AS crm_fuente_origen,
+    l.onetoone_clasificacion AS crm_clasificacion,
+    l.utp_nombre_campana_digital AS crm_campana_digital,
+    l.createdon AS crm_createdon,
+    l.modifiedon AS crm_modifiedon,
+    l.onetoone_productoname AS crm_producto_carrera,
+    l.utp_sub_gradoname AS crm_sub_grado,
+    l.onetoone_detallefuenteorigenname AS crm_detalle_fuente_origen_name,
+    l.onetoone_sededeseadaname AS crm_sede_deseada_name,
+    l.telephone2 AS crm_telefono_alterno,
+    l.utp_primera_tipificacion_exitosa,
+    l.utp_segundaactividadexitosa,
+    l.utp_ultima_actividad_exitosa,
+    l.utp_ultimatipificacion,
+    l.onetoone_fechadenacimiento AS crm_fecha_nacimiento,
+    l.parentcontactid,
+    l.yomifullname,
+    l.utp_usuario_primera_actividad_exitosaname AS crm_usuario_primera_actividad_exitosa,
+    l.usuario_primera_key,
+    l.parentcontact_key,
+    'dni' AS match_method,
+    ABS(
+      TIMESTAMP_DIFF(
+        TIMESTAMP(COALESCE(a.audio_fecha, a.process_day)),
+        l.createdon,
+        SECOND
+      )
+    ) AS match_time_delta_sec
+  FROM audios AS a
+  INNER JOIN leads_by_dni AS l
+    ON a.dni_norm = l.dni_norm
+  WHERE a.dni_norm IS NOT NULL
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY a.audio_key
+    ORDER BY
+      ABS(
+        TIMESTAMP_DIFF(
+          TIMESTAMP(COALESCE(a.audio_fecha, a.process_day)),
+          l.createdon,
+          SECOND
+        )
+      ) ASC NULLS LAST
+  ) = 1
+),
+match_phone AS (
+  SELECT
+    a.audio_key,
+    l.leadid,
+    l.fullname AS crm_fullname,
+    l.emailaddress1 AS crm_email,
+    l.mobilephone AS crm_mobilephone,
+    l.onetoone_nro AS crm_dni,
+    l.onetoone_sededeseada AS crm_sede_deseada,
+    l.onetoone_fuenteorigen AS crm_fuente_origen,
+    l.onetoone_clasificacion AS crm_clasificacion,
+    l.utp_nombre_campana_digital AS crm_campana_digital,
+    l.createdon AS crm_createdon,
+    l.modifiedon AS crm_modifiedon,
+    l.onetoone_productoname AS crm_producto_carrera,
+    l.utp_sub_gradoname AS crm_sub_grado,
+    l.onetoone_detallefuenteorigenname AS crm_detalle_fuente_origen_name,
+    l.onetoone_sededeseadaname AS crm_sede_deseada_name,
+    l.telephone2 AS crm_telefono_alterno,
+    l.utp_primera_tipificacion_exitosa,
+    l.utp_segundaactividadexitosa,
+    l.utp_ultima_actividad_exitosa,
+    l.utp_ultimatipificacion,
+    l.onetoone_fechadenacimiento AS crm_fecha_nacimiento,
+    l.parentcontactid,
+    l.yomifullname,
+    l.utp_usuario_primera_actividad_exitosaname AS crm_usuario_primera_actividad_exitosa,
+    l.usuario_primera_key,
+    l.parentcontact_key,
+    'telefono' AS match_method,
+    ABS(
+      TIMESTAMP_DIFF(
+        TIMESTAMP(COALESCE(a.audio_fecha, a.process_day)),
+        l.createdon,
+        SECOND
+      )
+    ) AS match_time_delta_sec
+  FROM audios AS a
+  INNER JOIN leads_by_phone AS l
+    ON a.phone_norm = l.phone_norm
+  WHERE a.phone_norm IS NOT NULL
+    AND (a.dni_norm IS NULL OR a.dni_norm = '')
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY a.audio_key
+    ORDER BY
+      ABS(
+        TIMESTAMP_DIFF(
+          TIMESTAMP(COALESCE(a.audio_fecha, a.process_day)),
+          l.createdon,
+          SECOND
+        )
+      ) ASC NULLS LAST
+  ) = 1
+),
+lead_hits AS (
+  SELECT * FROM match_dni
+  UNION ALL
+  SELECT * FROM match_phone
+),
+crm_matched AS (
+  SELECT
+    a.*,
+    h.leadid,
+    h.match_method,
+    h.match_time_delta_sec,
+    h.crm_fullname,
+    h.crm_email,
+    h.crm_mobilephone,
+    h.crm_dni,
+    h.crm_sede_deseada,
+    h.crm_fuente_origen,
+    h.crm_clasificacion,
+    h.crm_campana_digital,
+    h.crm_createdon,
+    h.crm_modifiedon,
+    h.crm_producto_carrera,
+    h.crm_sub_grado,
+    h.crm_detalle_fuente_origen_name,
+    h.crm_sede_deseada_name,
+    h.crm_telefono_alterno,
+    h.utp_primera_tipificacion_exitosa,
+    h.utp_segundaactividadexitosa,
+    h.utp_ultima_actividad_exitosa,
+    h.utp_ultimatipificacion,
+    h.crm_fecha_nacimiento,
+    h.parentcontactid,
+    h.yomifullname,
+    h.crm_usuario_primera_actividad_exitosa,
     su.utp_equipo_trabajoname AS crm_equipo_de_trabajo,
     su.utp_supervisorasignadoidname AS crm_supervisor_asignado,
     op.ownerid,
@@ -157,93 +351,13 @@ leads_crm AS (
     op.owneridtype,
     op.owneridyominame,
     op.customerid
-  FROM leads_latest AS l
-  LEFT JOIN systemusers_latest AS su
-    ON UPPER(SAFE_CAST(l.utp_usuario_primera_actividad_exitosa AS STRING))
-     = UPPER(SAFE_CAST(su.systemuserid AS STRING))
-  LEFT JOIN opportunities_latest AS op
-    ON UPPER(SAFE_CAST(l.parentcontactid AS STRING))
-     = UPPER(SAFE_CAST(op.customerid AS STRING))
-),
-crm_matched AS (
-  SELECT
-    a.*,
-    SAFE_CAST(l.leadid AS STRING) AS leadid,
-    SAFE_CAST(l.fullname AS STRING) AS crm_fullname,
-    SAFE_CAST(l.emailaddress1 AS STRING) AS crm_email,
-    SAFE_CAST(l.mobilephone AS STRING) AS crm_mobilephone,
-    SAFE_CAST(l.onetoone_nro AS STRING) AS crm_dni,
-    SAFE_CAST(l.onetoone_sededeseada AS STRING) AS crm_sede_deseada,
-    SAFE_CAST(l.onetoone_fuenteorigen AS STRING) AS crm_fuente_origen,
-    SAFE_CAST(l.onetoone_clasificacion AS STRING) AS crm_clasificacion,
-    SAFE_CAST(l.utp_nombre_campana_digital AS STRING) AS crm_campana_digital,
-    l.createdon AS crm_createdon,
-    SAFE_CAST(l.modifiedon AS TIMESTAMP) AS crm_modifiedon,
-    SAFE_CAST(l.onetoone_productoname AS STRING) AS crm_producto_carrera,
-    SAFE_CAST(l.utp_sub_gradoname AS STRING) AS crm_sub_grado,
-    SAFE_CAST(l.onetoone_detallefuenteorigenname AS STRING) AS crm_detalle_fuente_origen_name,
-    SAFE_CAST(l.onetoone_sededeseadaname AS STRING) AS crm_sede_deseada_name,
-    SAFE_CAST(l.telephone2 AS STRING) AS crm_telefono_alterno,
-    SAFE_CAST(l.utp_primera_tipificacion_exitosa AS STRING) AS utp_primera_tipificacion_exitosa,
-    SAFE_CAST(l.utp_segundaactividadexitosa AS STRING) AS utp_segundaactividadexitosa,
-    SAFE_CAST(l.utp_ultima_actividad_exitosa AS STRING) AS utp_ultima_actividad_exitosa,
-    SAFE_CAST(l.utp_ultimatipificacion AS STRING) AS utp_ultimatipificacion,
-    SAFE_CAST(l.onetoone_fechadenacimiento AS STRING) AS crm_fecha_nacimiento,
-    SAFE_CAST(l.parentcontactid AS STRING) AS parentcontactid,
-    SAFE_CAST(l.yomifullname AS STRING) AS yomifullname,
-    SAFE_CAST(l.utp_usuario_primera_actividad_exitosaname AS STRING) AS crm_usuario_primera_actividad_exitosa,
-    SAFE_CAST(l.crm_equipo_de_trabajo AS STRING) AS crm_equipo_de_trabajo,
-    SAFE_CAST(l.crm_supervisor_asignado AS STRING) AS crm_supervisor_asignado,
-    SAFE_CAST(l.ownerid AS STRING) AS ownerid,
-    SAFE_CAST(l.owneridMicrosoft_Dynamics_CRM_associatednavigationproperty AS STRING)
-      AS owneridMicrosoft_Dynamics_CRM_associatednavigationproperty,
-    SAFE_CAST(l.owneridMicrosoft_Dynamics_CRM_lookuplogicalname AS STRING)
-      AS owneridMicrosoft_Dynamics_CRM_lookuplogicalname,
-    SAFE_CAST(l.owneridname AS STRING) AS owneridname,
-    SAFE_CAST(l.owneridtype AS STRING) AS owneridtype,
-    SAFE_CAST(l.owneridyominame AS STRING) AS owneridyominame,
-    SAFE_CAST(l.customerid AS STRING) AS customerid,
-    CASE
-      WHEN a.dni_norm IS NOT NULL AND a.dni_norm = l.dni_norm THEN 'dni'
-      WHEN a.phone_norm IS NOT NULL AND a.phone_norm = l.phone_norm THEN 'telefono'
-      ELSE NULL
-    END AS match_method,
-    ABS(
-      TIMESTAMP_DIFF(
-        TIMESTAMP(COALESCE(a.audio_fecha, a.process_day)),
-        SAFE_CAST(l.createdon AS TIMESTAMP),
-        SECOND
-      )
-    ) AS match_time_delta_sec
   FROM audios AS a
-  LEFT JOIN leads_crm AS l
-    ON (
-      a.dni_norm IS NOT NULL
-      AND l.dni_norm IS NOT NULL
-      AND a.dni_norm = l.dni_norm
-    )
-    OR (
-      (a.dni_norm IS NULL OR a.dni_norm = '')
-      AND a.phone_norm IS NOT NULL
-      AND l.phone_norm IS NOT NULL
-      AND a.phone_norm = l.phone_norm
-    )
-  QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY a.audio_key
-    ORDER BY
-      CASE
-        WHEN a.dni_norm IS NOT NULL AND a.dni_norm = l.dni_norm THEN 1
-        WHEN a.phone_norm IS NOT NULL AND a.phone_norm = l.phone_norm THEN 2
-        ELSE 9
-      END,
-      ABS(
-        TIMESTAMP_DIFF(
-          TIMESTAMP(COALESCE(a.audio_fecha, a.process_day)),
-          SAFE_CAST(l.createdon AS TIMESTAMP),
-          SECOND
-        )
-      ) ASC NULLS LAST
-  ) = 1
+  LEFT JOIN lead_hits AS h
+    ON h.audio_key = a.audio_key
+  LEFT JOIN systemusers_latest AS su
+    ON su.systemuserid_key = h.usuario_primera_key
+  LEFT JOIN opportunities_latest AS op
+    ON op.customerid_key = h.parentcontact_key
 ),
 gen_ia AS (
   SELECT * EXCEPT(rn)
