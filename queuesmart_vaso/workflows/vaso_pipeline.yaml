@@ -2,24 +2,28 @@
 # Cloud Workflows — Pipeline VASO QueeSmart (legado-miss)
 # =============================================================================
 #
-# Orquesta (NO toca prod Chirp / analisis prod):
-#   1) Job qs_s3_gap_vaso (gap_prepare + worker)
+# Orquesta (NO toca tablas STT/analisis de producción):
+#   1) Job qs_s3_gap_vaso (gap_prepare + worker) — FLAC listo para STT
 #   2) SP consolidate_vaso
-#   3) Job Whisper cr_serialize_queuesmart
+#   3) Job qsmart_transcribe (STT Chirp 3 + diarización) → hist_*_whisper_vaso_*
+#      (mismas tablas vaso; productor pasa de Whisper a STT API v2)
 #   4) SP analisis_ia_vaso (Gemini)
 #
 # Defaults:
-#   job_gap     = prd-utpbi-s3-gap-vaso
-#   job_whisper = prd-utpbi-queuesmart-audio-serialize-whisper
-#   manifest    = state/gap_vaso_manifests
-#   whisper_max_tasks = 10  (paralelo; Job parallelism debe ser >= esto)
-#   whisper_audios_per_task = 10  (~200 padres → 10 tasks)
+#   job_gap              = prd-utpbi-s3-gap-vaso
+#   stt_job_name         = prd-utpbi-qsmart-transcribe
+#   stt_manifest_prefix  = state/stt_manifests_vaso
+#   manifest             = state/gap_vaso_manifests
+#   enriched vaso        = raw_queue_smart.queuesmart_mp3_enriched_vaso
+#   hist STT vaso        = adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_{raw,prd}
 #
-# Deploy:
+# Deploy (SoT = repo speech_counter):
 #   gcloud workflows deploy queuesmart-vaso-pipeline \
 #     --source=queuesmart_vaso/workflows/vaso_pipeline.yaml \
 #     --location=us-central1 --project=prd-utpbi-data-operation \
 #     --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+# Jobs Cloud Build (raíz speech_counter):
+#   qs_s3_gap_vaso/cloudbuild.yaml  +  qsmart_transcribe/cloudbuild.yaml
 #
 # Run:
 #   gcloud workflows run queuesmart-vaso-pipeline --location=us-central1 \
@@ -35,20 +39,21 @@ main:
           - location: ${default(map.get(args, "location"), "us-central1")}
           - bq_location: ${default(map.get(args, "bq_location"), "US")}
           - job_gap: ${default(map.get(args, "job_gap"), "prd-utpbi-s3-gap-vaso")}
-          - job_whisper: ${default(map.get(args, "job_whisper"), "prd-utpbi-queuesmart-audio-serialize-whisper")}
+          - stt_job_name: ${default(map.get(args, "stt_job_name"), "prd-utpbi-qsmart-transcribe")}
+          - stt_manifest_prefix: ${default(map.get(args, "stt_manifest_prefix"), "state/stt_manifests_vaso")}
+          - stt_enriched_table: ${default(map.get(args, "stt_enriched_table"), "prd-utpbi-data-operation.raw_queue_smart.queuesmart_mp3_enriched_vaso")}
+          - stt_hist_raw_table: ${default(map.get(args, "stt_hist_raw_table"), "prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_raw")}
+          - stt_hist_prd_table: ${default(map.get(args, "stt_hist_prd_table"), "prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_prd")}
           - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-queuesmart")}
           - manifest_prefix: ${default(map.get(args, "manifest_prefix"), "state/gap_vaso_manifests")}
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), -1)}
           - invoke_downstream: ${default(map.get(args, "invoke_downstream"), true)}
-          - whisper_max_tasks: ${default(map.get(args, "whisper_max_tasks"), 10)}
-          - whisper_audios_per_task: ${default(map.get(args, "whisper_audios_per_task"), 10)}
           - process_date: ${default(map.get(args, "process_date"), null)}
           - started_at: ${sys.now()}
           - ingest_summary: {}
           - sp_results: {}
-          - whisper_result: {}
-          - whisper_parent_count: 0
-          - whisper_task_count: 1
+          - stt_result: {}
+          - stt_count: 0
 
     - resolve_process_date:
         switch:
@@ -65,7 +70,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"queuesmart VASO pipeline START process_date=" + process_date + " gap=" + job_gap + " whisper=" + job_whisper}'
+          text: '${"queuesmart VASO pipeline START process_date=" + process_date + " gap=" + job_gap + " stt=" + stt_job_name}'
 
     # -------------------------------------------------------------------------
     # 1) gap_prepare → manifiesto legado-miss
@@ -160,7 +165,7 @@ main:
                   call: sys.log
                   args:
                     severity: WARNING
-                    text: "VASO manifiesto vacío — se omite worker; se continúa a consolidate/Whisper/analisis (idempotentes)"
+                    text: "VASO manifiesto vacío — se omite worker; se continúa a consolidate/STT/analisis (idempotentes)"
               - assign_empty_ingest:
                   assign:
                     - ingest_summary:
@@ -337,132 +342,183 @@ main:
                           - sp_results["consolidate_vaso"]: "ok"
 
     # -------------------------------------------------------------------------
-    # 4b) Contar padres a transcribir → taskCount Whisper
+    # 5) STT Chirp 3 (qsmart_transcribe) — mismo patrón que qs_s3_to_gcs / prod
+    #    prepare → meta count → worker N tasks (1 audio / task)
+    #    Escribe hist_*_whisper_vaso_* (tablas vaso; no toca gen_ia prod)
     # -------------------------------------------------------------------------
-    - count_whisper_parents:
+    - run_stt_prepare:
+        call: googleapis.run.v1.namespaces.jobs.run
+        args:
+          name: '${"namespaces/" + project_id + "/jobs/" + stt_job_name}'
+          location: ${location}
+          body:
+            overrides:
+              taskCount: 1
+              containerOverrides:
+                - env:
+                    - name: QS_JOB_ROLE
+                      value: prepare
+                    - name: SYNC_PROCESS_DATE
+                      value: ${process_date}
+                    - name: SYNC_TARGET_DATE
+                      value: ${process_date}
+                    - name: QS_ENRICHED_TABLE
+                      value: ${stt_enriched_table}
+                    - name: QS_HIST_RAW_TABLE
+                      value: ${stt_hist_raw_table}
+                    - name: QS_HIST_PRD_TABLE
+                      value: ${stt_hist_prd_table}
+                    - name: QS_MANIFEST_PREFIX
+                      value: ${stt_manifest_prefix}
+          connector_params:
+            timeout: 3600
+        result: stt_prepare_status
+
+    - normalize_stt_prepare:
+        assign:
+          - stt_prepare_exec: ${default(map.get(stt_prepare_status, "response"), stt_prepare_status)}
+          - stt_prepare_st: ${default(map.get(stt_prepare_exec, "status"), json.decode("{}"))}
+          - stt_prepare_failed: ${int(default(map.get(stt_prepare_st, "failedCount"), 0))}
+
+    - validate_stt_prepare:
+        switch:
+          - condition: ${stt_prepare_failed > 0}
+            steps:
+              - raise_stt_prepare:
+                  raise:
+                    message: "Cloud Run Job STT prepare vaso falló"
+                    failedCount: ${stt_prepare_failed}
+          - condition: true
+            next: read_stt_manifest_meta
+
+    - read_stt_manifest_meta:
         try:
           steps:
-            - query_parent_count:
-                call: googleapis.bigquery.v2.jobs.query
+            - get_stt_meta:
+                call: http.get
                 args:
-                  projectId: ${project_id}
-                  body:
-                    query: '${"SELECT COUNT(DISTINCT COALESCE(source_file_name, file_name)) AS n FROM `" + project_id + ".raw_queue_smart.queuesmart_mp3_enriched_vaso` WHERE process_day = DATE ''" + process_date + "'' AND gcs_uri IS NOT NULL"}'
-                    useLegacySql: false
-                    location: ${bq_location}
-                    timeoutMs: 60000
-                  connector_params:
-                    timeout: 120
-                result: parent_count_resp
-            - parse_parent_count:
+                  url: '${"https://storage.googleapis.com/storage/v1/b/" + gcs_bucket + "/o/" + text.url_encode(stt_manifest_prefix + "/" + process_date + ".meta.json") + "?alt=media"}'
+                  auth:
+                    type: OAuth2
+                result: stt_meta_http
+            - parse_stt_meta:
                 assign:
-                  - whisper_parent_count: ${int(default(parent_count_resp.rows[0].f[0].v, 0))}
+                  - stt_meta: ${stt_meta_http.body}
+                  - stt_count: ${int(default(map.get(stt_meta, "count"), 0))}
         except:
-          as: count_err
+          as: stt_meta_err
           steps:
-            - log_count_err:
+            - log_stt_meta_missing:
                 call: sys.log
                 args:
                   severity: WARNING
-                  text: '${"No se pudo contar padres Whisper; taskCount=1 — " + string(default(map.get(count_err, "message"), "n/a"))}'
-            - fallback_count:
+                  text: '${"Meta STT vaso no encontrado — count=0: " + string(default(map.get(stt_meta_err, "message"), "n/a"))}'
+            - assign_stt_zero:
                 assign:
-                  - whisper_parent_count: 0
+                  - stt_count: 0
 
-    - compute_whisper_tasks:
-        assign:
-          # ceil(n / per_task) = (n + per_task - 1) / per_task ; mínimo 1
-          - whisper_tasks_raw: ${int((whisper_parent_count + whisper_audios_per_task - 1) / whisper_audios_per_task)}
-          - whisper_task_count: ${whisper_tasks_raw}
-
-    - cap_whisper_tasks:
-        switch:
-          - condition: ${whisper_parent_count <= 0}
-            assign:
-              - whisper_task_count: 1
-          - condition: ${whisper_tasks_raw < 1}
-            assign:
-              - whisper_task_count: 1
-          - condition: ${whisper_tasks_raw > whisper_max_tasks}
-            assign:
-              - whisper_task_count: ${int(whisper_max_tasks)}
-          - condition: true
-            assign:
-              - whisper_task_count: ${int(whisper_tasks_raw)}
-
-    - log_whisper_plan:
+    - log_stt_manifest:
         call: sys.log
         args:
           severity: INFO
-          text: '${"VASO Whisper plan parents=" + string(whisper_parent_count) + " taskCount=" + string(whisper_task_count) + " max=" + string(whisper_max_tasks) + " per_task=" + string(whisper_audios_per_task)}'
+          text: '${"VASO STT manifiesto count=" + string(stt_count) + " job=" + stt_job_name}'
 
-    # -------------------------------------------------------------------------
-    # 5) Job Whisper (reemplaza Chirp / gen_ia) — paralelo por padres
-    # -------------------------------------------------------------------------
-    - run_whisper_job:
+    - maybe_skip_stt_worker:
+        switch:
+          - condition: ${stt_count == 0}
+            steps:
+              - log_stt_empty:
+                  call: sys.log
+                  args:
+                    severity: WARNING
+                    text: "VASO STT sin audios — se omite worker; se continúa a analisis"
+              - assign_stt_empty:
+                  assign:
+                    - stt_result:
+                        manifest_count: 0
+                        succeededCount: 0
+                        failedCount: 0
+                    - sp_results["stt"]: "skipped_empty"
+              - jump_analisis_empty:
+                  next: sp_analisis_vaso
+          - condition: true
+            next: run_stt_worker
+
+    - run_stt_worker:
         try:
           steps:
-            - call_whisper:
+            - call_stt_worker:
                 call: googleapis.run.v1.namespaces.jobs.run
                 args:
-                  name: '${"namespaces/" + project_id + "/jobs/" + job_whisper}'
+                  name: '${"namespaces/" + project_id + "/jobs/" + stt_job_name}'
                   location: ${location}
                   body:
                     overrides:
-                      taskCount: ${whisper_task_count}
+                      taskCount: ${stt_count}
                       containerOverrides:
                         - env:
-                            - name: FECHA_AUDIO
+                            - name: QS_JOB_ROLE
+                              value: worker
+                            - name: SYNC_PROCESS_DATE
                               value: ${process_date}
+                            - name: SYNC_TARGET_DATE
+                              value: ${process_date}
+                            - name: QS_ENRICHED_TABLE
+                              value: ${stt_enriched_table}
+                            - name: QS_HIST_RAW_TABLE
+                              value: ${stt_hist_raw_table}
+                            - name: QS_HIST_PRD_TABLE
+                              value: ${stt_hist_prd_table}
+                            - name: QS_MANIFEST_PREFIX
+                              value: ${stt_manifest_prefix}
                   connector_params:
                     timeout: 86400
-                result: whisper_status
-            - mark_whisper_ok:
+                result: stt_worker_status
+            - mark_stt_ok:
                 assign:
-                  - whisper_connector_ok: true
+                  - stt_connector_ok: true
         except:
-          as: whisper_err
+          as: stt_err
           steps:
-            - log_whisper_err:
+            - log_stt_err:
                 call: sys.log
                 args:
                   severity: ERROR
-                  text: '${"VASO Whisper Job falló: " + string(default(map.get(whisper_err, "message"), "n/a"))}'
-            - raise_whisper:
+                  text: '${"VASO STT worker falló: " + string(default(map.get(stt_err, "message"), "n/a"))}'
+            - raise_stt:
                 raise:
-                  message: "Cloud Run Job Whisper vaso falló"
-                  error: ${whisper_err}
+                  message: "Cloud Run Job STT vaso falló"
+                  error: ${stt_err}
 
-    - normalize_whisper:
+    - normalize_stt_worker:
         assign:
-          - whisper_exec: ${default(map.get(whisper_status, "response"), whisper_status)}
-          - whisper_st: ${default(map.get(whisper_exec, "status"), json.decode("{}"))}
-          - whisper_failed: ${int(default(map.get(whisper_st, "failedCount"), 0))}
-          - whisper_succeeded: ${int(default(map.get(whisper_st, "succeededCount"), 0))}
-          - whisper_result:
-              succeededCount: ${whisper_succeeded}
-              failedCount: ${whisper_failed}
-              taskCount: ${whisper_task_count}
-              parentCount: ${whisper_parent_count}
+          - stt_exec: ${default(map.get(stt_worker_status, "response"), stt_worker_status)}
+          - stt_st: ${default(map.get(stt_exec, "status"), json.decode("{}"))}
+          - stt_failed: ${int(default(map.get(stt_st, "failedCount"), 0))}
+          - stt_succeeded: ${int(default(map.get(stt_st, "succeededCount"), 0))}
+          - stt_result:
+              succeededCount: ${stt_succeeded}
+              failedCount: ${stt_failed}
+              taskCount: ${stt_count}
 
-    - validate_whisper:
+    - validate_stt_worker:
         switch:
-          - condition: ${whisper_failed > 0}
+          - condition: ${stt_failed > 0}
             steps:
-              - raise_whisper_failed:
+              - raise_stt_failed:
                   raise:
-                    message: "Whisper vaso failedCount > 0"
-                    result: ${whisper_result}
+                    message: "STT vaso failedCount > 0"
+                    result: ${stt_result}
           - condition: true
             steps:
-              - log_whisper_ok:
+              - log_stt_ok:
                   call: sys.log
                   args:
                     severity: INFO
-                    text: '${"VASO Whisper OK succeeded=" + string(whisper_succeeded)}'
-              - mark_whisper:
+                    text: '${"VASO STT OK succeeded=" + string(stt_succeeded)}'
+              - mark_stt:
                   assign:
-                    - sp_results["whisper"]: "ok"
+                    - sp_results["stt"]: "ok"
 
     # -------------------------------------------------------------------------
     # 6) SP analisis_ia_vaso
@@ -544,7 +600,7 @@ main:
               process_date: ${process_date}
               pipeline: queuesmart-vaso
               ingest: ${ingest_summary}
-              whisper: ${whisper_result}
+              stt: ${stt_result}
               sps: ${sp_results}
               invoke_downstream: ${invoke_downstream}
               elapsed_seconds: ${elapsed_seconds}

@@ -1,0 +1,212 @@
+﻿{
+    "calidad_transcripcion":  "VALIDA",
+    "contacto_efectivo":  true,
+    "interlocutor":  "PADRE_MADRE",
+    "tipo_contacto":  "SEGUIMIENTO",
+    "motivo_contacto":  "VENTA_INSCRIPCION",
+    "resumen_interaccion":  "El asesor contactó al padre del postulante Milton para gestionar su inscripción en Ingeniería Automotriz para la sede de Lima Norte, ofreciendo un 50% de descuento en inscripción y matrícula. El padre indicó que coordinaría y volvería a llamar.",
+    "consistencia_tipificacion":  null,
+    "residencia_departamento":  "Lima",
+    "residencia_provincia":  "Lima",
+    "residencia_distrito":  "Los Olivos",
+    "residencia_coincide_crm":  null,
+    "situacion_academica":  "ESCOLAR_5_SEC",
+    "situacion_laboral":  "TRABAJA_SIN_DETALLE",
+    "tipo_trabajo":  "DEPENDIENTE",
+    "cargo_declarado":  {
+                            "literal":  "No se menciona",
+                            "homologado":  "OPERATIVO"
+                        },
+    "rubro_laboral":  "OTRO",
+    "empresa_empleadora":  "No se menciona",
+    "convenio_aplicable":  "NINGUNO",
+    "institucion_procedencia":  "No se menciona",
+    "carrera_previa":  "No se menciona",
+    "anio_malla_origen":  "No se menciona",
+    "edad_declarada":  null,
+    "decisor_financiador":  {
+                                "decisor":  "PADRES",
+                                "financiador":  "PADRES",
+                                "decisor_presente":  "NO"
+                            },
+    "motivacion_estudiar":  {
+                                "motivacion":  "TRABAJO_EMPLEABILIDAD",
+                                "evidencia":  "ejercer una carrera, buscar un trabajo"
+                            },
+    "vinculo_previo_utp":  [
+                               "NINGUNO"
+                           ],
+    "carreras_interes":  [
+                             "ingenieria_automotriz",
+                             "ingenieria_mecanica"
+                         ],
+    "carrera_no_ofrecida":  {
+                                "carrera":  "ingenieria_automotriz",
+                                "tipo":  "NO_EN_SU_SEDE",
+                                "acepta_alternativa":  "SI"
+                            },
+    "indecision_carrera":  {
+                               "indeciso":  "NO",
+                               "carreras_en_duda":  [
+
+                                                    ]
+                           },
+    "modalidad_interes":  [
+                              "PRESENCIAL"
+                          ],
+    "restriccion_modalidad":  [
+                                  "DISTANCIA"
+                              ],
+    "zona_interes":  "02 UTP Lima Norte",
+    "horario_deseado":  [
+                            "NO_ESPECIFICA"
+                        ],
+    "periodo_ingreso":  "PERIODO_EN_CURSO",
+    "modalidad_ingreso":  "EXAMEN_ADMISION",
+    "brecha_oferta":  "SIN_SEDE_EN_CIUDAD",
+    "estado_lead":  "RA",
+    "resultado_real":  "POSTERGA",
+    "tipificacion_ia":  "RA: Lo conversará con sus padres",
+    "compromisos":  [
+
+                    ],
+    "responsabilidad_no_venta":  {
+                                     "origen":  "CLIENTE",
+                                     "submotivo":  "CONSULTAR_CON_TERCEROS"
+                                 },
+    "motivos_rechazo":  [
+                            {
+                                "codigo":  "NO_CAMPUS",
+                                "evidencia":  "en Arequipa, que sería el campus más cercano para ustedes, no contamos con esta carrera de Ingeniería Automotriz",
+                                "detalle":  "Busca Ingeniería Automotriz y en Arequipa no hay"
+                            }
+                        ],
+    "motivo_rechazo_principal":  "NO_CAMPUS",
+    "grupo_friccion":  "GEOGRAFICA",
+    "objeciones_textuales":  [
+
+                             ],
+    "momento_objecion":  "SIN_OBJECION",
+    "senal_abandono":  "NO_ABANDONA",
+    "consulta_con_terceros":  {
+                                  "flag":  1,
+                                  "con_quien":  "PADRES",
+                                  "evidencia":  "Ahorita va a coordinar y te vuelvo a llamar"
+                              },
+    "recontacto_solicitado":  false,
+    "informacion_solicitada":  [
+                                   "MALLA",
+                                   "PRECIOS"
+                               ],
+    "visitara_counter":  {
+                             "flag":  0,
+                             "sede":  "No se menciona"
+                         },
+    "canal_preferido":  {
+                            "canal":  "WHATSAPP",
+                            "asesor_acepta":  "SI"
+                        },
+    "motivos_preferencia":  [
+
+                            ],
+    "gatillador_principal":  "NINGUNO",
+    "atributo_argumentado":  "EMPLEABILIDAD",
+    "beneficio_economico":  [
+                                "DESCUENTO_PRONTO_PAGO"
+                            ],
+    "quien_recomienda":  "No se menciona",
+    "competidores":  [
+
+                     ],
+    "menciona_competencia":  false,
+    "sondeo_competencia":  {
+                               "flag":  0,
+                               "motivo_si_0":  "NO_PREGUNTO"
+                           },
+    "percepcion_precio_utp":  "ACCESIBLE",
+    "temas_consultados":  [
+                              "PENSION_COSTOS",
+                              "EXAMEN_ADMISION",
+                              "DURACION",
+                              "CONVENIOS_INTERNACIONALES"
+                          ],
+    "consulta_principal":  "Cuánto cuesta la pensión e inscripción",
+    "dudas_no_resueltas":  [
+
+                           ],
+    "comentario_mercado":  {
+                               "tag":  "OTRO",
+                               "texto":  "ayer ha habido examen en Arequipa, en la UNSA, pre-quinto"
+                           },
+    "palabras_clave_cliente":  [
+                                   {
+                                       "palabra":  "Ingeniería",
+                                       "frecuencia":  2
+                                   },
+                                   {
+                                       "palabra":  "Automotriz",
+                                       "frecuencia":  2
+                                   },
+                                   {
+                                       "palabra":  "Lima",
+                                       "frecuencia":  2
+                                   }
+                               ],
+    "sentimiento_cliente":  {
+                                "sentimiento":  "NEUTRO",
+                                "score":  0.0
+                            },
+    "nivel_frustracion":  "BAJO",
+    "percepcion_proceso":  [
+                               "SATISFECHO_ATENCION"
+                           ],
+    "riesgo_desercion":  {
+                             "riesgo":  "MEDIO",
+                             "evidencia":  "quedó en coordinar y devolver la llamada"
+                         },
+    "fuente_declarada":  "No se menciona",
+    "participacion_evento_utp":  "NINGUNO",
+    "oferta_cotizada":  {
+                            "monto_cotizado":  230.0,
+                            "concepto":  "DERECHO_POSTULACION",
+                            "descuentos_ofrecidos":  [
+                                                         "DESCUENTO_50_PAGO_HOY"
+                                                     ],
+                            "n_opciones":  1
+                        },
+    "tiempo_hasta_precio_seg":  null,
+    "silencios_seg":  0,
+    "secuencia_engagement":  {
+                                 "secuencia":  "IDEAL",
+                                 "quiebre_positivo_turno":  null,
+                                 "quiebre_negativo_turno":  null
+                             },
+    "documentos_pendientes":  [
+
+                              ],
+    "dificultad_documentos":  {
+                                  "dificultad":  "NINGUNA",
+                                  "evidencia":  ""
+                              },
+    "estado_examen":  "NO_PROGRAMADO",
+    "medio_pago":  "No se menciona",
+    "segundo_numero_obtenido":  false,
+    "intentos_cierre":  {
+                            "n_intentos":  1,
+                            "reaccion_ultimo":  "POSTERGA"
+                        },
+    "argumentos_urgencia":  [
+                                "DESCUENTO_TEMPORAL"
+                            ],
+    "informacion_complementaria_brindada":  [
+                                                "SEGURO_ESTUDIANTIL"
+                                            ],
+    "finalizacion_interaccion":  "CIERRE_ACORDADO",
+    "correccion_datos_ficha":  [
+
+                               ],
+    "situacion_convalidacion":  "NO_APLICA",
+    "tiempos_atencion":  null,
+    "carga_documento_llamada":  "NA",
+    "uso_preparados":  "INVITADO_ACEPTA"
+}

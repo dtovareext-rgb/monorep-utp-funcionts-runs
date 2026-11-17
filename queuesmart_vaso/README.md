@@ -2,7 +2,11 @@
 
 **Hub del pipeline VASO** QueeSmart (legado-miss: `.audio` ∪ prefijo ≠ 6).
 
-No toca Chirp STT ni tablas de análisis de producción.
+> **Deploy Cloud Build / Workflow en producción:** usar el repo **`speech_counter`**  
+> (`speech_counter/queuesmart_vaso`, `qs_s3_gap_vaso`, `qsmart_transcribe`).  
+> Este monorepo guarda DDL/SPs BQ y espejo de docs.
+
+No toca tablas STT/análisis de producción.
 
 Inventario completo: [docs/INDEX.md](docs/INDEX.md).
 
@@ -14,7 +18,7 @@ qs_s3_gap_vaso
 sp_queuesmart_mp3_consolidate_vaso
   → queuesmart_mp3_catalog_vaso
   → queuesmart_mp3_enriched_vaso
-cr_serialize_queuesmart (Whisper)
+qsmart_transcribe (STT Chirp 3 + diarización)
   → hist_queuesmart_mp3_whisper_vaso_raw / _prd
 sp_queuesmart_audio_analisis_ia_vaso
   → hist_queuesmart_audio_analisis_ia_vaso_raw / _prd
@@ -22,14 +26,14 @@ sp_queuesmart_audio_analisis_ia_vaso
 
 Workflow: [`workflows/vaso_pipeline.yaml`](workflows/vaso_pipeline.yaml) orquesta **las 4 etapas**.
 
-| Etapa | Prod | Vaso |
+| Etapa | Prod (`qs_s3_to_gcs`) | Vaso |
 |---|---|---|
 | Ingest S3 | `qs_s3_to_gcs` | `qs_s3_gap_vaso` → Job `prd-utpbi-s3-gap-vaso` |
 | Hist catalog | `hist_queesmart_mp3_catalog` | `hist_queesmart_mp3_catalog_vaso` |
 | Consolidate | `sp_queuesmart_mp3_consolidate` | `sp_queuesmart_mp3_consolidate_vaso` |
 | Catalog / enriched | `queuesmart_mp3_*` | `queuesmart_mp3_*_vaso` |
-| STT | Chirp `sp_queuesmart_mp3_gen_ia` | Whisper Job `…-whisper` |
-| Transcripciones | `hist_*_gen_ia_*` | `hist_*_whisper_vaso_*` |
+| STT | `qsmart_transcribe` / Chirp | mismo Job `prd-utpbi-qsmart-transcribe` (tablas vaso) |
+| Transcripciones | `hist_*_gen_ia_*` | `hist_*_whisper_vaso_*` (nombre histórico; contenido STT) |
 | Análisis | `sp_queuesmart_audio_analisis_ia` | `sp_queuesmart_audio_analisis_ia_vaso` |
 | Resultado | `hist_*_analisis_ia_*` | `hist_*_analisis_ia_vaso_*` |
 
@@ -40,21 +44,18 @@ Workflow: [`workflows/vaso_pipeline.yaml`](workflows/vaso_pipeline.yaml) orquest
 bash queuesmart_vaso/scripts/deploy_all_vaso.sh
 ```
 
-Equivale a crear, en orden:
-
-1. `hist_queesmart_mp3_catalog_vaso`
-2. `queuesmart_mp3_catalog_vaso`
-3. `queuesmart_mp3_enriched_vaso`
-4. `hist_queuesmart_mp3_whisper_vaso_*`
-5. `hist_queuesmart_audio_analisis_ia_vaso_*`
-6. SPs consolidate + analisis
-7. Workflow `queuesmart-vaso-pipeline`
-
-Jobs Cloud Run (una vez, Cloud Build):
+Jobs Cloud Run + Workflow (Cloud Shell, **raíz `speech_counter`**):
 
 ```bash
+cd ~/speech_counter   # ajusta ruta
+
 gcloud builds submit --config=qs_s3_gap_vaso/cloudbuild.yaml --project=prd-utpbi-data-operation .
-gcloud builds submit --config=cr_serialize_queuesmart/cloudbuild.yaml --project=prd-utpbi-data-operation .
+gcloud builds submit --config=qsmart_transcribe/cloudbuild.yaml --project=prd-utpbi-data-operation .
+
+gcloud workflows deploy queuesmart-vaso-pipeline \
+  --source=queuesmart_vaso/workflows/vaso_pipeline.yaml \
+  --location=us-central1 --project=prd-utpbi-data-operation \
+  --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
 ```
 
 ## Ejecutar un día (Workflow = camino feliz)
@@ -66,7 +67,9 @@ gcloud workflows run queuesmart-vaso-pipeline \
   --data='{"process_date":"2026-09-10"}'
 ```
 
-Sin `process_date` → ayer Lima. Args: `invoke_downstream`, `job_gap`, `job_whisper`, `max_failed_tasks`.
+Sin `process_date` → ayer Lima.
+
+Args útiles: `invoke_downstream`, `job_gap`, `stt_job_name`, `stt_manifest_prefix`, `max_failed_tasks`.
 
 Manual por pasos: [bigquery/examples/call_pipeline_vaso.sql](bigquery/examples/call_pipeline_vaso.sql).
 

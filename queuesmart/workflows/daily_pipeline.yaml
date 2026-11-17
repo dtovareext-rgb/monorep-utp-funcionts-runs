@@ -8,8 +8,9 @@
 #   3) SP backfill tickets tardíos (database NULL — quitar cuando el proveedor entregue al día)
 #   4) SP gen_ia (ML.TRANSCRIBE por lotes de 25 — anti-timeout)
 #   5) SP analisis Gemini
+#   6) SP resumen final por asesor → counter_resumen_final
 #
-# invoke_downstream_sps: true (default) → consolidate + gen_ia + analisis
+# invoke_downstream_sps: true (default) → consolidate + gen_ia + analisis + resumen
 #
 # Despliegue / run / scheduler: ver queuesmart/docs/guia-workflow-otra-pc.txt
 # =============================================================================
@@ -592,7 +593,84 @@ main:
                           - sp_results["analisis"]: "ok"
 
     # -------------------------------------------------------------------------
-    # 7) Resumen final
+    # 6) SP resumen final por asesor (Gemini sobre hist análisis del día)
+    # -------------------------------------------------------------------------
+    - sp_resumen_final:
+        steps:
+          - log_sp4_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_queuesmart_counter_resumen_final(" + process_date + ")"}'
+          - call_sp4:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_counter_resumen_final`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  labels:
+                    producto: queuesmart
+                    etapa: resumen-final
+                    servicio: flash-3-5
+                    pipeline: queuesmart-daily
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 14400
+              result: sp4_job
+          - wait_sp4:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp4:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp4_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp4_status
+          - check_sp4:
+              switch:
+                - condition: ${sp4_status.status.state == "DONE"}
+                  next: sp4_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp4:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp4:
+                        next: poll_sp4
+          - sp4_done_check:
+              switch:
+                - condition: ${"errorResult" in sp4_status.status}
+                  steps:
+                    - log_sp4_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP resumen_final FAILED: " + string(default(map.get(map.get(sp4_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp4:
+                        raise:
+                          message: "sp_queuesmart_counter_resumen_final falló"
+                          error: ${sp4_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp4_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP resumen_final (Counter) OK"
+                    - mark_sp4:
+                        assign:
+                          - sp_results["resumen_final"]: "ok"
+
+    # -------------------------------------------------------------------------
+    # 7) Cierre
     # -------------------------------------------------------------------------
     - finalize:
         assign:

@@ -1,0 +1,225 @@
+﻿{
+    "calidad_transcripcion":  "VALIDA",
+    "contacto_efectivo":  true,
+    "interlocutor":  "PADRE_MADRE",
+    "tipo_contacto":  "SEGUIMIENTO",
+    "motivo_contacto":  "VENTA_INSCRIPCION",
+    "resumen_interaccion":  "La madre de Claret consultó sobre la convalidación de su carrera técnica de farmacia para la UTP. El asesor indicó que se puede convalidar en la sede de Arequipa y ofreció un 50% de descuento en la inscripción. Al cierre, la madre solicitó tiempo para conversarlo con su esposo y se acordó un recontacto a las 11:00 am.",
+    "consistencia_tipificacion":  null,
+    "residencia_departamento":  "Puno",
+    "residencia_provincia":  "Puno",
+    "residencia_distrito":  "Pomata",
+    "residencia_coincide_crm":  null,
+    "situacion_academica":  "ESTUDIA_OTRA_INSTITUCION",
+    "situacion_laboral":  "NO_TRABAJA",
+    "tipo_trabajo":  "NO_TRABAJA",
+    "cargo_declarado":  {
+                            "literal":  "Estudiante",
+                            "homologado":  "OPERATIVO"
+                        },
+    "rubro_laboral":  "EDUCACION",
+    "empresa_empleadora":  "No se menciona",
+    "convenio_aplicable":  "NINGUNO",
+    "institucion_procedencia":  "No se menciona",
+    "carrera_previa":  "Técnico en farmacia",
+    "anio_malla_origen":  "No se menciona",
+    "edad_declarada":  20,
+    "decisor_financiador":  {
+                                "decisor":  "PADRES",
+                                "financiador":  "PADRES",
+                                "decisor_presente":  "NO"
+                            },
+    "motivacion_estudiar":  {
+                                "motivacion":  "CAMBIO_DE_CARRERA",
+                                "evidencia":  "ella quiere complementar con esa carrera"
+                            },
+    "vinculo_previo_utp":  [
+                               "NINGUNO"
+                           ],
+    "carreras_interes":  [
+                             "farmacia_y_bioquimica"
+                         ],
+    "carrera_no_ofrecida":  null,
+    "indecision_carrera":  {
+                               "indeciso":  "NO",
+                               "carreras_en_duda":  [
+
+                                                    ]
+                           },
+    "modalidad_interes":  [
+                              "PRESENCIAL"
+                          ],
+    "restriccion_modalidad":  [
+                                  "DISTANCIA"
+                              ],
+    "zona_interes":  "04 UTP Arequipa",
+    "horario_deseado":  [
+                            "NO_ESPECIFICA"
+                        ],
+    "periodo_ingreso":  "PERIODO_EN_CURSO",
+    "modalidad_ingreso":  "EXAMEN_ADMISION",
+    "brecha_oferta":  "SIN_BRECHA",
+    "estado_lead":  "RA",
+    "resultado_real":  "POSTERGA",
+    "tipificacion_ia":  "RA: Conversará con sus padres",
+    "compromisos":  [
+                        {
+                            "tipo":  "RECONTACTO",
+                            "fecha":  "HOY",
+                            "responsable":  "ASESOR",
+                            "accion_requerida":  "Volver a llamar a las 11 para confirmar inscripción tras conversar con el papá"
+                        }
+                    ],
+    "responsabilidad_no_venta":  {
+                                     "origen":  "CLIENTE",
+                                     "submotivo":  "CONSULTAR_CON_TERCEROS"
+                                 },
+    "motivos_rechazo":  [
+                            {
+                                "codigo":  "CONVALIDACION",
+                                "evidencia":  "un poquito su padre no quiere, quiere que convalide",
+                                "detalle":  "Duda sobre convalidación y tiempo de estudio"
+                            }
+                        ],
+    "motivo_rechazo_principal":  "CONVALIDACION",
+    "grupo_friccion":  "ACADEMICA",
+    "objeciones_textuales":  [
+                                 {
+                                     "objecion_texto":  "un poquito su padre no quiere, quiere que convalide",
+                                     "tipo_objecion":  "CONSULTAR_TERCEROS",
+                                     "rebate_texto":  "Sí se puede realizar la convalidación en la sede de Arequipa presentando los documentos requeridos",
+                                     "resuelta":  "NO"
+                                 }
+                             ],
+    "momento_objecion":  "POST_PRECIO",
+    "senal_abandono":  "POST_OBJECION",
+    "consulta_con_terceros":  {
+                                  "flag":  1,
+                                  "con_quien":  "PADRES",
+                                  "evidencia":  "para conversar bien con su papá. Ahorita no estamos con él"
+                              },
+    "recontacto_solicitado":  true,
+    "informacion_solicitada":  [
+                                   "CONVALIDACION",
+                                   "PRECIOS"
+                               ],
+    "visitara_counter":  {
+                             "flag":  0,
+                             "sede":  "No se menciona"
+                         },
+    "canal_preferido":  {
+                            "canal":  "WHATSAPP",
+                            "asesor_acepta":  "SI"
+                        },
+    "motivos_preferencia":  [
+
+                            ],
+    "gatillador_principal":  "NINGUNO",
+    "atributo_argumentado":  "EMPLEABILIDAD",
+    "beneficio_economico":  [
+                                "DESCUENTO_PRONTO_PAGO"
+                            ],
+    "quien_recomienda":  "No se menciona",
+    "competidores":  [
+                         {
+                             "institucion":  "UC",
+                             "relacion":  "EVALUANDO",
+                             "atributo_preferido":  null,
+                             "precio_mencionado":  null,
+                             "carrera":  "No se menciona",
+                             "percepcion":  "POSITIVA"
+                         }
+                     ],
+    "menciona_competencia":  true,
+    "sondeo_competencia":  {
+                               "flag":  0,
+                               "motivo_si_0":  "NO_PREGUNTO"
+                           },
+    "percepcion_precio_utp":  "ACCESIBLE",
+    "temas_consultados":  [
+                              "CONVALIDACION",
+                              "PENSION_COSTOS",
+                              "EXAMEN_ADMISION"
+                          ],
+    "consulta_principal":  "Quería saber si se puede convalidar con su carrera técnica de farmacia",
+    "dudas_no_resueltas":  [
+
+                           ],
+    "comentario_mercado":  {
+                               "tag":  "OTRO",
+                               "texto":  "su instituto dijo que nosotros solo tenemos convenio con la universidad continental"
+                           },
+    "palabras_clave_cliente":  [
+                                   {
+                                       "palabra":  "convalidar",
+                                       "frecuencia":  6
+                                   },
+                                   {
+                                       "palabra":  "carrera",
+                                       "frecuencia":  2
+                                   },
+                                   {
+                                       "palabra":  "técnica",
+                                       "frecuencia":  2
+                                   }
+                               ],
+    "sentimiento_cliente":  {
+                                "sentimiento":  "NEUTRO",
+                                "score":  0.0
+                            },
+    "nivel_frustracion":  "BAJO",
+    "percepcion_proceso":  [
+                               "SATISFECHO_ATENCION"
+                           ],
+    "riesgo_desercion":  {
+                             "riesgo":  "MEDIO",
+                             "evidencia":  "debe consultarlo con el padre que tiene dudas sobre la convalidación"
+                         },
+    "fuente_declarada":  "No se menciona",
+    "participacion_evento_utp":  "NINGUNO",
+    "oferta_cotizada":  {
+                            "monto_cotizado":  320.0,
+                            "concepto":  "DERECHO_POSTULACION",
+                            "descuentos_ofrecidos":  [
+                                                         "DESCUENTO_50_PAGO_HOY"
+                                                     ],
+                            "n_opciones":  1
+                        },
+    "tiempo_hasta_precio_seg":  null,
+    "silencios_seg":  0,
+    "secuencia_engagement":  {
+                                 "secuencia":  "IDEAL",
+                                 "quiebre_positivo_turno":  null,
+                                 "quiebre_negativo_turno":  null
+                             },
+    "documentos_pendientes":  [
+                                  "CERTIFICADO_ESTUDIOS",
+                                  "DOCUMENTO_IDENTIDAD",
+                                  "RECORD_NOTAS"
+                              ],
+    "dificultad_documentos":  {
+                                  "dificultad":  "NINGUNA",
+                                  "evidencia":  "termina en diciembre y le entregarán sus documentos"
+                              },
+    "estado_examen":  "NO_PROGRAMADO",
+    "medio_pago":  "BANCA_MOVIL",
+    "segundo_numero_obtenido":  true,
+    "intentos_cierre":  {
+                            "n_intentos":  1,
+                            "reaccion_ultimo":  "POSTERGA"
+                        },
+    "argumentos_urgencia":  [
+                                "DESCUENTO_TEMPORAL"
+                            ],
+    "informacion_complementaria_brindada":  [
+                                                "PLAZO_DOCUMENTOS"
+                                            ],
+    "finalizacion_interaccion":  "CIERRE_ACORDADO",
+    "correccion_datos_ficha":  [
+
+                               ],
+    "situacion_convalidacion":  "EN_EVALUACION",
+    "tiempos_atencion":  null,
+    "carga_documento_llamada":  "NO_CARGADO_COMPROMISO",
+    "uso_preparados":  "INVITADO_ACEPTA"
+}

@@ -1,7 +1,8 @@
 -- =============================================================================
--- SP: Gen IA análisis audio QueeSmart VASO (Etapa 2 Whisper)
+-- SP: Gen IA análisis audio QueeSmart VASO (Etapa 2 — tras STT Chirp)
 --
--- Lee:  hist_queuesmart_mp3_whisper_vaso_prd  (NO Chirp gen_ia)
+-- Lee:  hist_queuesmart_mp3_whisper_vaso_prd
+--       (tablas vaso; productor actual = qsmart_transcribe / STT API v2)
 -- Escribe: hist_queuesmart_audio_analisis_ia_vaso_raw / _prd
 -- Prompt: mismo canal_counter_prompt en sys_prompts
 -- NO toca tablas de análisis ni STT de producción.

@@ -1,0 +1,143 @@
+uri=gs://prd-utp-stg-genesys-audios-b3k7w1n9x4v6p0j2t8q5m1z/data/input/genesys_audios_descarga_raw/fecha_descarga=2026-11-02/hora_descarga=10/e094b619-6e02-496d-8011-3104025a2a67_54518962-7a60-48c6-b721-29dbeaca9cd3.ogg
+conversation_id=e094b619-6e02-496d-8011-3104025a2a67
+cola_nombre=Nacional RA 2027
+
+----- TRANSCRIPCION -----
+[Asesor:1.4]: Hola, ¿qué tal? Muy buenos días. Me estoy comunicando con el joven
+[Cliente:6.3]: Milton
+[Asesor:8.8]: Puzac.
+[Cliente:10.5]: ¿Qué tal?
+[Asesor:12.1]: Muy buenos días, mi estimado. Le saluda Cristian Salas, del área de vacantes de la Universidad UTP.
+[Cliente:17.6]: Mi
+[Asesor:18.1]: estimado, en este caso le estamos llamando porque validamos que estaban solicitando información, ¿es correcto?
+[Cliente:24.0]: Sí.
+[Asesor:25.2]: Perfecto. Me comenta, por favor, ¿cuál es la carrera de interés de su niño?
+[Cliente:30.2]: Ingeniería automotriz.
+[Asesor:32.0]: Ingeniería automotriz, correcto. Actualmente, esta carrera, mi estimado, solamente lo estamos contando en los campos de Lima. En Lima Centro, Lima Este, Ate,
+[Cliente:41.9]: San
+[Asesor:42.1]: Marino de Urigancho, Lima Norte, Lima Sur. Aquí, en este caso, en Arequipa, que sería el campus más cercano para ustedes, no contamos con esta carrera de Ingeniería Automotriz. Pero sí validamos que él ha colocado otra carrera de interés, que es Ingeniería Mecánica. ¿Esa sería su segunda carrera de interés de su niño?
+[Cliente:62.4]: Sí,
+[Asesor:64.9]: también. Ok. En la carrera de Ingeniería Mecánica, mi estimado, sí estamos contando aquí en nuestro campus de Arequipa. Le comento que él está en quinto año de secundario, por lo cual su ingreso es un ingreso preferencial a alumnos de quinto año. Este ingreso preferencial, la universidad les está entregando el 50 % de descuento en la inscripción y en la matrícula. La inscripción del precio regular de 330, mi estimado, usted el día de hoy solamente estaría pagando, en este caso, 160. La inscripción, con el descuento, 160 estaría pagando. La matrícula, en este caso, que se paga después del examen de admisión, el examen de admisión que es de manera virtual, el 22 de noviembre. Después, en este caso del examen, tendrían que efectuar el pago de la matrícula. El pago de la matrícula de
+[Cliente:116.7]: 330,
+[Asesor:117.9]: usted solo pagaría, en este caso, 165, porque también está al 50 % de descuento. Ambos pagos, inscripción y matrícula, están con este descuento. Como le había indicado, la inscripción sería el primer pago que tendría que realizar el día de hoy, para que su niño ya pueda estar inscrito con nosotros y se pueda conectar este jueves a nuestro programa de preparación. Nosotros tenemos una PRE, que es de forma gratuita para todos nuestros alumnos inscritos. Esta PRE que estamos teniendo, mi estimado, su niño ingresa, como le indico, de forma virtual en el horario de 7 de la noche hasta las 9. Son dos horas semanales en las que él tiene que ingresar con los mismos profesores de la universidad, las cuales le van a dar la teoría para dicho examen del 22 de noviembre. Ahora, el examen de admisión, como le vuelvo a recalcar, es de forma virtual, son 36 preguntas. Va a caer un día domingo a las 9 de la mañana. Tiene que, en este caso, ingresar a su plataforma y rendir este examen. Al día siguiente, el pago de la matrícula. La matrícula de 330, con el descuento, usted solamente pagaría 165. Después del examen. ¿Hasta ahí todo correcto, mi estimado?
+[Cliente:185.6]: Ya, pero... ¿Cómo mensualmente cuánto se prece solamente
+[Asesor:190.7]: en el matrícula? Claro. Perfecto. Entonces, con el tema de la pensión, ¿cuánto está costando la carrera de ingeniería? La carrera de ingeniería, mi estimado, le está costando el precio regular de 720. La pensión es 720. Ahora, si
+[Cliente:205.4]: usted
+[Asesor:205.5]: paga un día antes de la fecha de pago, la pensión baja a 684. Pagando un día antes de la fecha de pago. ¿Correcto?
+[Cliente:216.2]: Ya.
+[Asesor:217.5]: Correcto. Ahora, para que él pueda ya, en este caso, estar inscrito con nosotros, mi estimado, primero tendríamos que llenar su ficha de datos. Pero, ¿usted tiene hasta ahí alguna consulta o duda adicional?
+[Cliente:229.1]: Ya. Esto, ¿cuántos meses o cuántos años tiene que prepararse para...?
+[Asesor:234.3]: Claro. ¿Cuántos tiempos dura la carrera? La carrera le está durando, mi estimado, cinco años.
+[Cliente:241.4]: Ya, cinco años.
+[Asesor:242.7]: Son cinco años,
+[Cliente:243.6]: en
+[Asesor:243.7]: este caso, de carrera. La pensión, como lo indico, es por cada... En este caso, son cinco cuotas por cada ciclo. El ciclo dura de marzo a julio. Y el segundo ciclo dura de agosto a diciembre. ¿Correcto?
+[Cliente:258.1]: Ya.
+[Asesor:259.6]: Correcto. Ya,
+[Cliente:260.4]: ¿cómo...? ¿Cuántos meses tiene que prepararse, digamos, para que dé examen?
+[Asesor:265.7]: Él se va a preparar este jueves, mi estimado. Este jueves está iniciando su programa de preparación. Nosotros ya hemos comenzado con el programa de preparados, nuestra PRE. Tenemos una PRE, como lo indico. La PRE ya comenzó, en este caso, el mes pasado. Los alumnos que ya se encuentran inscritos se han estado preparándose. Y estos jueves tenemos clase nuevamente. Para que él pueda ingresar a esta clase, tendría que ya estar inscrito. Tendría que, en este caso, usted haya realizado el pago de su inscripción de los 160, que es el derecho a su vacante. ¿Correcto?
+[Cliente:296.5]: ¿Lo que voy a preparar es por un mes, ¿dí o no? No,
+[Asesor:299.9]: en este caso, hasta que él termine su colegio, hasta marzo de 2027. Una semana antes de que comience sus clases de manera presencial en la universidad, va a llevar su programa de preparados. Ahora, pero joven, ¿qué pasa si él rinde el examen el 22 de noviembre y de repente sale bajo en conocimientos, ¿no? Quizás él no está bien preparado, ¿no? Y por eso tiene un bajo rendimiento. ¿Qué estaría sucediendo? ¿Voy a tener que pagar nuevamente su examen, su inscripción? ¿Voy a tener que pagarlo nuevamente? No. No tiene que pagarlo nuevamente. Al contrario, si él sale bajo en el examen, la universidad lo va a reforzar. En este caso, le va a entregar su programa de nivelación. Este programa de nivelación, mi estimado, tampoco tiene costo. Es de forma gratuita, como le comento. No tiene que pagar ningún adicional para este programa de nivelación.
+[Cliente:346.5]: Ahora,
+[Asesor:347.0]: adicional a ello, también la universidad le brinda lo que es el curso de inglés y el curso de ofimática completamente gratuito. Durante todos estos meses,
+[Cliente:355.3]: mi
+[Asesor:355.4]: estimado, que le queda a su niño, él se va a estar preparando. Se va a estar preparando en noviembre, diciembre, enero, febrero, y hasta una semana antes de que inicie sus feces en marzo, va a llevar todos estos programas de preparación. Durante todos estos meses, usted no paga ningún adicional, no paga ningún, en este caso, no paga ninguno por ninguno de estos programas. Ni tanto preparativos, ni los cursos extracurriculares. No paga, solo paga inscripción y matrícula. Nada más. La pensión, eso sí lo paga en marzo, ya cuando comience a estudiar.
+[Cliente:386.6]: ¿Es personal virtual o presidencial es el preparación?
+[Asesor:391.5]: No, el programa de preparado sí es virtual, como le indicaba. Es en el horario de 7 a 9 de la noche. Esto es por vía Zoom. Él puede conectarse con cualquier dispositivo, sea su celular, computadora, laptop, tablet, con cualquier dispositivo, él se puede conectar. Es de forma virtual, como le indico, en el horario de 7 a 9 de la noche, los días jueves. ¿Correcto hasta ahí? Aló.
+[Cliente:419.9]: Aló, sí. ¿Y ahora con qué empresas son convenios?
+[Asesor:424.1]: Nosotros, en este caso, somos parte del Grupo Intercor, mi estimado. El Grupo Intercor es uno de los grupos más grandes dentro de nuestro país. ¿Usted trabaja dentro de alguna de estas empresas del Grupo Intercor, de repente?
+[Cliente:435.6]: Negativo, negativo. No, no, no.
+[Asesor:437.2]: Ok, comprendo. En este caso, nosotros, con lo que viene a ser el Grupo Intercor, mi estimado, que es una de estas empresas como el Banco Interban, Financiera O, Escoxabank, Plaza Bea, Macro, Promaro, Oex, Encafarma, Mifarma, Cineplanes. No, todas estas empresas no tienen, en este caso, al Grupo Intercor. Ahora, para lo que es, en este caso, la carrera de su niño, nosotros, lo que viene a ser la carrera de Ingeniería Mecánica, nosotros, actualmente, para esta carrera, nosotros le entregamos certificaciones progresivas.
+[Cliente:467.1]: Adicional
+[Asesor:467.5]: a
+[Cliente:467.7]: ello,
+[Asesor:468.1]: también le entregamos, en este caso, lo que es el curso de inglés. El curso de inglés, mi estimado, usted sabe que es muy importante para que él pueda salir con el grado de licenciado, para que él pueda sacar su título, tiene que llevar el inglés como segunda lengua dentro de lo que es
+[Cliente:482.7]: su
+[Asesor:482.8]: carrera. Si él no lo lleva, en este caso, no podría estudiar, en este caso, sacar su título. Es muy importante que él lleve. En otras universidades, en este caso, no les brinda en el curso de inglés. Les cobran adicional para que lo lleve. En vez de nosotros, no le cobramos ningún adicional. Al contrario, nosotros le implementamos dentro de lo que es, en este caso, su malla curricular. Adicional a ello, también le entregamos otros certificados, que es el certificado, en este caso, el instructor de Steam Química, que es el
+[Cliente:514.3]: primer
+[Asesor:514.5]: certificado. El segundo certificado, que también le entregamos, es de Dibujo Técnico. En este caso, el tercer certificado que le entregamos es de Física. El otro es de Matemática. Excel y Intermedio, que es muy importante para que él pueda, en este caso, también tener mayor valor dentro del mercado laboral. Y también tenemos, en este caso, el texto certificado de Básica de Dibujo Técnico Mecánico.
+[Cliente:536.3]: Que
+[Asesor:536.7]: esto es muy importante para que él también tenga realce al momento de buscar un trabajo. O sea, estas certificaciones, como les digo, son de forma gratuita. Que la universidad les va entregando mientras ellos van,
+[Cliente:548.2]: en
+[Asesor:548.4]: este caso, pasando el cuarto ciclo, quinto ciclo, el sexto ciclo, la universidad les va dando el certificado. Y, aparte de ello, también tenemos programas de empleabilidad, que nosotros acompañamos a los estudiantes a que puedan conseguir un trabajo. El primer programa que tenemos es Mi Primer Empleo, que trabaja, él puede trabajar desde el primer ciclo. Desde el primer ciclo, él puede trabajar para cualquier empresa del Grupo Intercor. En este caso, y adicional a ello, si él trabaja para cualquier empresa del Grupo Intercor, la universidad le brinda un descuento en el pago de su pensión. Solo si es parte, en
+[Cliente:584.5]: este
+[Asesor:584.7]: caso, del Grupo Intercor. Ahora, también tenemos lo que es la ruta laboral virtual. Las oportunidades de trabajo laborales, en este caso, dentro de las mejores empresas de nuestro país, ¿no? Como el Banco Interbán, Financiera O, España, ¿no? También, en este caso, las empresas industriales, que también él puede acceder. Y el otro que también tenemos, otro programa, es Generación Top, que nosotros capacitamos con calidad para poder potenciar su talento. O sea, le damos, en este caso, el acompañamiento, en lo que es crear su primer CV. Ellos, en este caso, el primer CV que ellos hacen, lo hacen con el acompañamiento de los asesores de la universidad, ¿no? En este caso,
+[Cliente:622.5]: con
+[Asesor:622.6]: el personal especializado, con los profesores. Ellos van, en este caso, armando su expediente. En este caso, certificaciones que la universidad le brinda, las experiencias laborales
+[Cliente:631.6]: que
+[Asesor:631.7]: ellos
+[Cliente:631.9]: también
+[Asesor:632.1]: van a llevar durante, en este caso, los cinco años de carrera. También la universidad les apoya con ellos. Ahora, también tenemos el último programa, que es el Impulsa. El Impulsa es, en
+[Cliente:641.2]: este
+[Asesor:641.3]: caso, desarrolla tu liderazgo,
+[Cliente:643.8]: su potencial,
+[Asesor:644.6]: tu innovación y transfórmate en el sector empresarial, ¿no? Que la universidad les da, en este caso, estas habilidades blandas, que ellos van a poder, en este caso, ayudarlo de mucho al momento de poder conseguir un trabajo. Se sabe que hay miles, en este caso, de personalidades y ellos, con estas habilidades blandas, van a poder transformar y, en este caso, van a poder también potenciar su sector, en este caso, empresarial, ¿no? Si ellos, de repente, también quieren irse por ese lado. Entonces, eso, como la universidad les brinda como beneficios, para que ellos también puedan, en este caso, también, no solamente ejercer una carrera, sino también puedan, en este caso, continuar estudiando. Hasta ahí tiene otra consulta o duda adicional, mi estimado. Aló. No,
+[Cliente:692.4]: disculpe, para la misa, me he dicho, es para Ingeniería Automotriz.
+[Asesor:698.0]: En este caso, la carrera de Ingeniería Automotriz, mi estimado, solamente hay en los campos de Lima. Como le indico,
+[Cliente:704.7]: en
+[Asesor:704.8]: los campos de Lima, en este caso, con lo que viene a ser esta carrera,
+[Cliente:709.4]: sí
+[Asesor:709.6]: hay, como le indico, pero, ¿usted tendría la disponibilidad de que su niño pueda estudiar en Lima?
+[Cliente:716.2]: De todas maneras, debería, pero ya. Ah,
+[Asesor:720.0]: ok. En este caso, en nuestro campus de Lima, claro, nosotros, dentro de todos los campos a nivel nacional que tenemos, porque nosotros tenemos más de, tenemos 15 campos a nivel nacional, en este caso, todos los campos tienen laboratorios en los cuales ellos pueden, en este caso, ejercer su carrera, ¿no? Ellos ya no necesitan, de repente, quizás, pagar algún adicional para que puedan ver un laboratorio, algún material. No, al contrario, nosotros tenemos los laboratorios completamente equipados para que ellos solamente vayan a hacer sus prácticas con los profesores. Correcto. Por ese lado, es una muy buena opción, porque a veces en otras universidades les piden tal material, que tienen que comprar esto, tienen que hacer una chanchita, porque vamos a tener que alquilar tal equipo,
+[Cliente:761.0]: o
+[Asesor:761.1]: tenemos que ir a una empresa para poder ver esa máquina que ellos tienen. No, al contrario, nosotros tenemos, como le indico, nuestros laboratorios bien implementados para que ellos puedan desarrollar su carrera. ¿Él estaría estudiando en nuestro campus de Arequipa o, de repente, en algún campus de Lima?
+[Cliente:777.2]: De Lima.
+[Asesor:780.2]: Bueno, en
+[Cliente:780.3]: este
+[Asesor:780.5]: caso, ¿cuál sería su campus, mi estimado? El más cercano para ustedes. ¿En qué parte de Lima estarían ustedes residiendo, o su niño residiendo?
+[Cliente:789.5]: Acerca de que eso sería, ¿no? Donde está
+[Asesor:792.1]: ubicado
+[Cliente:792.5]: por un fin de semana.
+[Asesor:798.1]: Tenemos el campus de Lima Norte, el campus de Lima Sur, el campus, en este caso, de Ate, el campus de Lima Centro y San Juan de Yurigancho.
+[Cliente:808.3]: ¿Norte
+[Asesor:808.8]: sería? Lima Norte, que está ubicado en Los Alivos.
+[Cliente:813.8]: Sí, por ahí.
+[Asesor:814.5]: ¿Ok?
+[Cliente:815.6]: En
+[Asesor:816.0]: este campus de Lima Norte, mi estimado, como le indico, la pensión es diferente, ¿no? El costo para la carrera de automotriz, en este caso, la pensión está costando 850. Eso sería la pensión, 850, pero si usted paga un día antes, la pensión baja a 807 .50 céntimos. Esto es pagando un día antes de la fecha de pago. La inscripción y la matrícula están con el mismo descuento, pero la matrícula cambia. La matrícula, en este caso, le está costando el precio regular de 415, pero con el descuento, usted solo pagaría 207 .50 céntimos. Eso es con el tema de la matrícula, ¿correcto? Pero la inscripción, igual, también está, en este caso, cambiando. La matrícula de 230, usted solo pagaría 115, pero esto es en el campus de Lima Norte, ¿correcto?
+[Cliente:869.7]: ¿Y a esto está cuánto años? ¿Igual que en el 5?
+[Asesor:872.0]: Claro, pero en este caso, nosotros somos una universidad, mi estimado. Nosotros damos carreras de
+[Cliente:876.9]: 5
+[Asesor:877.1]: años, en este caso no somos
+[Cliente:878.5]: un
+[Asesor:878.7]: instituto técnico, ¿no?
+[Cliente:880.4]: Un
+[Asesor:880.8]: pedagógico, no. Nosotros somos una universidad licenciada.
+[Cliente:884.2]: Nuestras
+[Asesor:884.7]: carreras son, en este caso, universitarias, son de 5 años.
+[Cliente:889.4]: ¿Ya? ¿Esto es como técnico saldría o como...?
+[Asesor:893.7]: No, no es técnico, mi estimado. Nosotros somos una universidad, no somos un instituto. Somos una universidad. Él va a salir como ingeniero automotriz.
+[Cliente:904.9]: Pero... ¿ya no daría solamente si están poniendo directamente? ¿O daría un... como examen como ayer, por ejemplo, ayer ha habido examen en Arequipa, en la UNSA, pre -quinto. Claro,
+[Asesor:917.7]: pre
+[Cliente:917.8]: -quinto. Entonces,
+[Asesor:919.9]: no
+[Cliente:920.1]: le ha
+[Asesor:920.4]: alcanzado
+[Cliente:922.5]: el punto.
+[Asesor:922.8]: A ver, le comento. Si él va a estudiar en Lima, en este caso, si él va a estudiar en Lima, el examen de admisión es de manera virtual. ¿Correcto? Ya no tendría que acercarse a la universidad a rendir el examen. Para lo que es el examen de admisión que hemos tenido el día de ayer, domingo, el examen ha sido pre -quintos para alumnos de quinto año en la carrera de medicina humana. ¿Correcto? Correcto. Ahora, el examen que él va a, en este caso, rendir, que va a ser el 22 de noviembre, el examen de admisión, este 22 de noviembre, es de manera virtual. Y
+[Cliente:959.7]: hay
+[Asesor:959.8]: que rendirlo de forma virtual. Porque él va a estudiar en Lima. ¿Correcto? Bueno, solamente para medicina humana, en este caso, el examen de admisión es presencial. Solo para medicina humana. Para todas las carreras
+[Cliente:974.3]: en
+[Asesor:974.5]: general, no tiene ingeniería, negocios, derechos, psicología, el examen de admisión es de manera virtual. Solo medicina es presencial. Entonces, él, el 22 de noviembre, tiene que rendir su examen de admisión. ¿Correcto?
+[Cliente:989.9]: Ya, si no aprueba, si se alcanza a puntaje.
+[Asesor:993.8]: Claro, si no alcanza a puntaje, como
+[Cliente:996.0]: le
+[Asesor:996.2]: indico, va a llevar su programa de nivelación. Tiene que llevar sí o sí su programa de nivelación para que él se pueda nivelar, para que él pueda, en este caso, reforzarse, obviamente, porque no puede ingresar a la universidad con ese conocimiento, ¿no? Si está bajo el conocimiento, si está bajo, de repente, ¿no? En lo que es el área de racionamiento matemático, racionamiento verbal, la universidad lo va a reforzar. Le va a entregar el programa de nivelación, que es gratuito. ¿Correcto? O sea, después del examen, ellos se van a seguir preparándose para que en marzo no tengan complicaciones, ¿no? Porque
+[Cliente:1028.0]: tú
+[Asesor:1028.1]: sabes que el grado de la universidad con el grado académico del colegio es muy diferente. La universidad es más complejo.
+[Cliente:1035.2]: Los
+[Asesor:1035.4]: temas son más complejos, son más grados de dificultad. Entonces, para ello, la universidad los está preparando ahorita, durante todos estos meses, para que ellos no tengan complicaciones en marzo. ¿Correcto?
+[Cliente:1046.9]: Sí.
+[Asesor:1048.3]: Correcto. En este caso, para que él ya pueda prepararse el día de hoy, porque el día de hoy, él tendría que recuperar la clase que hemos tenido la
+[Cliente:1054.7]: primera
+[Asesor:1054.9]: pasada, ya debería estar inscrito. ¿Usted ya se encontraría interesado en poder realizar este proceso de inscripción? Primero tenemos que llenar
+[Cliente:1061.5]: sus
+[Asesor:1061.6]: datos.
+[Cliente:1063.1]: Sí, te vuelvo a llamar. Ahorita va a coordinar y te vuelvo a llamar.
+[Asesor:1066.7]: Perfecto. Entonces, le voy a mandar esta información por el WhatsApp,
+[Cliente:1069.8]: y
+[Asesor:1069.8]: también la malla curricular, para que usted pueda, en este caso, también evaluarlo. Lo que sí me gustaría, mi estimado, ¿en qué horario yo le podría retomar la llamada, para poder conocer su respuesta?
+[Cliente:1082.8]: Yo le llamo, yo le llamo, yo le llamo.
+[Asesor:1085.9]: Comprendo. Listo. Muchas gracias, igualmente.
+[Cliente:1089.3]: Gracias. Gracias.

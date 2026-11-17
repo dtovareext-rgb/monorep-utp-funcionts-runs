@@ -1,0 +1,216 @@
+﻿{
+    "calidad_transcripcion":  "VALIDA",
+    "contacto_efectivo":  true,
+    "interlocutor":  "POSTULANTE",
+    "tipo_contacto":  "PRIMER_CONTACTO",
+    "motivo_contacto":  "VENTA_INSCRIPCION",
+    "resumen_interaccion":  "Ítalo, egresado de colegio en 2024, consultó por la carrera de Ingeniería Electrónica en modalidad semipresencial para la sede Lima Norte. El asesor brindó información detallada sobre la malla curricular, certificaciones progresivas e inglés, concretando la inscripción y la recopilación de datos.",
+    "consistencia_tipificacion":  null,
+    "residencia_departamento":  "Ica",
+    "residencia_provincia":  "Chincha",
+    "residencia_distrito":  "Tambo de Mora",
+    "residencia_coincide_crm":  null,
+    "situacion_academica":  "EGRESADO_COLEGIO_RECIENTE",
+    "situacion_laboral":  "TRABAJA_SIN_DETALLE",
+    "tipo_trabajo":  "INDEPENDIENTE",
+    "cargo_declarado":  {
+                            "literal":  "independiente",
+                            "homologado":  "NEGOCIO_PROPIO"
+                        },
+    "rubro_laboral":  "OTRO",
+    "empresa_empleadora":  "No se menciona",
+    "convenio_aplicable":  "NINGUNO",
+    "institucion_procedencia":  "SENATI",
+    "carrera_previa":  "Computación / un ciclo de instituto",
+    "anio_malla_origen":  "No se menciona",
+    "edad_declarada":  19,
+    "decisor_financiador":  {
+                                "decisor":  "POSTULANTE",
+                                "financiador":  "POSTULANTE",
+                                "decisor_presente":  "SI"
+                            },
+    "motivacion_estudiar":  {
+                                "motivacion":  "TRABAJO_EMPLEABILIDAD",
+                                "evidencia":  "hacer tarjeta para los declaradores"
+                            },
+    "vinculo_previo_utp":  [
+                               "NINGUNO"
+                           ],
+    "carreras_interes":  [
+                             "ingenieria_electronica"
+                         ],
+    "carrera_no_ofrecida":  null,
+    "indecision_carrera":  {
+                               "indeciso":  "NO",
+                               "carreras_en_duda":  [
+
+                                                    ]
+                           },
+    "modalidad_interes":  [
+                              "SEMIPRESENCIAL"
+                          ],
+    "restriccion_modalidad":  [
+                                  "TRABAJO"
+                              ],
+    "zona_interes":  "02 UTP Lima Norte",
+    "horario_deseado":  [
+                            "NOCHE"
+                        ],
+    "periodo_ingreso":  "PERIODO_EN_CURSO",
+    "modalidad_ingreso":  "EXAMEN_ADMISION",
+    "brecha_oferta":  "SIN_BRECHA",
+    "estado_lead":  "SI",
+    "resultado_real":  "FICHA_SIN_PAGO",
+    "tipificacion_ia":  "SI",
+    "compromisos":  [
+                        {
+                            "tipo":  "PAGO",
+                            "fecha":  "HOY",
+                            "responsable":  "PROSPECTO",
+                            "accion_requerida":  "Realizar el pago de inscripción de 115 soles y subir documentos"
+                        }
+                    ],
+    "responsabilidad_no_venta":  {
+                                     "origen":  "NA",
+                                     "submotivo":  "NA"
+                                 },
+    "motivos_rechazo":  [
+
+                        ],
+    "motivo_rechazo_principal":  null,
+    "grupo_friccion":  null,
+    "objeciones_textuales":  [
+
+                             ],
+    "momento_objecion":  "SIN_OBJECION",
+    "senal_abandono":  "NO_ABANDONA",
+    "consulta_con_terceros":  {
+                                  "flag":  0,
+                                  "con_quien":  "No se menciona",
+                                  "evidencia":  ""
+                              },
+    "recontacto_solicitado":  false,
+    "informacion_solicitada":  [
+
+                               ],
+    "visitara_counter":  {
+                             "flag":  0,
+                             "sede":  "No se menciona"
+                         },
+    "canal_preferido":  {
+                            "canal":  "WHATSAPP",
+                            "asesor_acepta":  "SI"
+                        },
+    "motivos_preferencia":  [
+
+                            ],
+    "gatillador_principal":  "NINGUNO",
+    "atributo_argumentado":  "EMPLEABILIDAD",
+    "beneficio_economico":  [
+                                "DESCUENTO_PRONTO_PAGO"
+                            ],
+    "quien_recomienda":  "No se menciona",
+    "competidores":  [
+                         {
+                             "institucion":  "SENATI",
+                             "relacion":  "ESTUDIO_ANTES",
+                             "atributo_preferido":  null,
+                             "precio_mencionado":  null,
+                             "carrera":  "No se menciona",
+                             "percepcion":  "POSITIVA"
+                         }
+                     ],
+    "menciona_competencia":  true,
+    "sondeo_competencia":  {
+                               "flag":  1,
+                               "motivo_si_0":  null
+                           },
+    "percepcion_precio_utp":  "ACCESIBLE",
+    "temas_consultados":  [
+                              "DURACION",
+                              "MODALIDAD",
+                              "EXAMEN_ADMISION",
+                              "CONVALIDACION"
+                          ],
+    "consulta_principal":  "Qué pasaría si he estudiado un ciclo en Senati",
+    "dudas_no_resueltas":  [
+
+                           ],
+    "comentario_mercado":  {
+                               "tag":  "DEMANDA_LABORAL",
+                               "texto":  "Tiene bastante demanda laboral en el mercado"
+                           },
+    "palabras_clave_cliente":  [
+                                   {
+                                       "palabra":  "ingeniería",
+                                       "frecuencia":  2
+                                   },
+                                   {
+                                       "palabra":  "electrónica",
+                                       "frecuencia":  2
+                                   },
+                                   {
+                                       "palabra":  "Senati",
+                                       "frecuencia":  1
+                                   }
+                               ],
+    "sentimiento_cliente":  {
+                                "sentimiento":  "POSITIVO",
+                                "score":  0.8
+                            },
+    "nivel_frustracion":  "BAJO",
+    "percepcion_proceso":  [
+                               "SATISFECHO_ATENCION"
+                           ],
+    "riesgo_desercion":  {
+                             "riesgo":  "BAJO",
+                             "evidencia":  "proceso de inscripción avanzado positivamente"
+                         },
+    "fuente_declarada":  "No se menciona",
+    "participacion_evento_utp":  "NINGUNO",
+    "oferta_cotizada":  {
+                            "monto_cotizado":  230.0,
+                            "concepto":  "DERECHO_POSTULACION",
+                            "descuentos_ofrecidos":  [
+                                                         "DESCUENTO_50_PAGO_HOY"
+                                                     ],
+                            "n_opciones":  1
+                        },
+    "tiempo_hasta_precio_seg":  null,
+    "silencios_seg":  0,
+    "secuencia_engagement":  {
+                                 "secuencia":  "IDEAL",
+                                 "quiebre_positivo_turno":  null,
+                                 "quiebre_negativo_turno":  null
+                             },
+    "documentos_pendientes":  [
+                                  "CERTIFICADO_ESTUDIOS",
+                                  "DOCUMENTO_IDENTIDAD"
+                              ],
+    "dificultad_documentos":  {
+                                  "dificultad":  "NINGUNA",
+                                  "evidencia":  "tiene a la mano su certificado de quinto de secundaria"
+                              },
+    "estado_examen":  "PROGRAMADO",
+    "medio_pago":  "No se menciona",
+    "segundo_numero_obtenido":  false,
+    "intentos_cierre":  {
+                            "n_intentos":  1,
+                            "reaccion_ultimo":  "ACEPTA"
+                        },
+    "argumentos_urgencia":  [
+                                "DESCUENTO_TEMPORAL"
+                            ],
+    "informacion_complementaria_brindada":  [
+                                                "PLAZO_DOCUMENTOS",
+                                                "SEGURO_ESTUDIANTIL"
+                                            ],
+    "finalizacion_interaccion":  "CIERRE_ACORDADO",
+    "correccion_datos_ficha":  [
+
+                               ],
+    "situacion_convalidacion":  "NO_APLICA",
+    "tiempos_atencion":  null,
+    "carga_documento_llamada":  "NO_CARGADO_COMPROMISO",
+    "uso_preparados":  "INVITADO_ACEPTA"
+}

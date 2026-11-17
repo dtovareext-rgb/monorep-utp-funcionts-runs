@@ -1,0 +1,194 @@
+uri=gs://prd-utp-stg-genesys-audios-b3k7w1n9x4v6p0j2t8q5m1z/data/input/genesys_audios_descarga_raw/fecha_descarga=2026-11-02/hora_descarga=09/7bebf228-9a7f-451c-8001-dffe4fd5e23a_a802c579-b6bc-4de0-b5b5-937dc98b35e0.ogg
+conversation_id=7bebf228-9a7f-451c-8001-dffe4fd5e23a
+cola_nombre=ANeutros_1A7_Hablados
+
+----- TRANSCRIPCION -----
+[Cliente:1.3]: ¿Aló? ¿Aló?
+[Asesor:6.5]: Hola, ¿qué tal? Muy buen día. Te saludamos de la UTP. Mi nombre es Renzo Carranza. ¿Qué tal?
+[Cliente:13.1]: ¿Utep?
+[Asesor:14.2]: Sí, de la universidad. ¿Qué tal? ¿Usted es Claret?
+[Cliente:19.9]: Soy su mamá. Hace rato nos hemos comunicado con la señorita Kelly. ¿Eli?
+[Asesor:26.4]: Ok. Sí. Lo que pasa es que sabemos que ya tienen información. Lo que sucede es que queríamos darle ya la opción de que Claret pueda estudiar con nosotros y que pueda aprovechar el descuento que tiene el día de hoy del 50%. ¿Correcto? ¿Le indicaron este descuento?
+[Cliente:46.1]: Descuento del 50%.
+[Asesor:48.0]: Sí,
+[Cliente:48.6]: sí lo he indicado hoy.
+[Asesor:50.2]: Ok, perfecto. ¿Y por qué no llegó a inscribirse? Cuénteme. ¿Algo que no le gustó de la propuesta, tal vez?
+[Cliente:56.9]: No, sí está bien, sino que un poquito su padre no quiere, quiere que convalide. Como ella ya está por terminar la carrera técnico y más cinco años va a perder tiempo, dos años de más va a ser. En eso estamos ahí, estamos conversando.
+[Asesor:76.3]: Claro. ¿Ella ya tiene una carrera técnica?
+[Cliente:79.0]: Sí, sí, va a terminar ya en diciembre.
+[Asesor:82.2]: En diciembre. Ok, podríamos convalidar, no hay problema. ¿Dónde se encuentran ustedes? ¿En Lima, en provincia?
+[Cliente:90.7]: En provincia, acá en Puno, Pomata y Lave.
+[Asesor:94.6]: Ok, actualmente en Puno no tenemos una sede como tal para que estudie la carrera y la carrera es farmacia y bioquímica, ¿verdad? La que quiere estudiar.
+[Cliente:103.3]: Sí, ella quiere complementar con esa carrera. La de farmacia, técnico en farmacia está siguiendo. Ya va a terminar bien.
+[Asesor:112.2]: Claro, claro, entiendo, entiendo. Ahora, pero como le digo, para ello tendríamos que estudiar en Arequipa, porque en Arequipa es la sede más cercana a Puno. Bueno, ¿habría algún problema que su hija pueda viajar o no?
+[Cliente:126.5]: Sí, si en caso que habría esa de convalidar, yo creo, yo sí haría lo más posible para que ella pudiera estudiar ahí.
+[Asesor:135.1]: Ok, perfecto, porque yo le podría ayudar para que ella pueda viajar, bueno, pueda ya estudiar la carrera, pero tendríamos como le digo que viajar. Sí,
+[Cliente:144.8]: yo normal haría los más posibles para que ella pueda viajar, pero me gustaría que convalide. Ahorita en eso estamos conversando con mi
+[Asesor:151.9]: esposa. Sí podría ser la convalidación, como le digo, pero la convalidación sería a partir de cuando ella ya termine su carrera. Me dice que termine en diciembre. Pues ahora, lo más importante, por ejemplo, yo visualizo que en Arequipa solamente me quedan cuatro vacantes disponibles, nada más, para esta carrera de farmacia y bioquímica. Acá lo que tendríamos que hacer es que su hija pueda ya inscribirse de una vez, porque si ella pierde las vacantes, perdería el ciclo. Ya no tendríamos más vacantes disponibles. Y acá lo importante es que su hija pueda seguir avanzando y no, de repente, perder un ciclo y terminar la carrera luego, pues, ¿no? Acá la cosa es que su hija no pierda tiempo.
+[Cliente:198.7]: Ya, y esta es la consulta con la señorita que he conversado, es de la sede de Tacna.
+[Asesor:206.4]: Ah, en Tacna, me dice. Lo que pasa es que en Tacna, esa es una sede nueva, ahí todavía no podemos convalidar. ¿No le dijo eso?
+[Cliente:215.7]: Sí, sí me dijo eso. Por eso ahí estábamos conversando, no se puede convalidar, dice
+[Asesor:220.8]: estábamos. Claro, pero en Arequipa sí se puede convalidar. Por ello le di la primera opción a Arequipa, porque Arequipa es una sede que no es nueva. Ya tiene, bueno, en Arequipa ya tenemos esa sede hace buen tiempo y ahí sí podemos hacer convalidaciones.
+[Cliente:237.0]: Ya, y ahora, ¿cómo hacía para la cuestión de su título? Porque su título va a demorar, no va a salir, pues, termina diciembre y después de una semana va a salir. Jueve demorado, dependiendo cómo lo afligemos, ¿no? Dos meses.
+[Asesor:252.4]: Claro, lo que pasa es que para cuando su hija termine le van a dar primero su constancia de egresada. Con esa
+[Cliente:260.5]: constancia
+[Asesor:261.1]: de egresada es suficiente con ese documento. Su título lo puede sacar luego, si ella desea no hay problema, pero con la constancia de egresada es suficiente. Que presente esa constancia y eso es suficiente, como le digo.
+[Cliente:274.5]: Ah, ya, ya, ya, ya. Entonces, ¿va a tener que dar un examen? Sí,
+[Asesor:283.3]: justamente a eso quería llegar. ¿Su hija qué edad tiene?
+[Cliente:287.7]: Veinte años.
+[Asesor:289.0]: Veinte años, perfecto. Ahora, la carrera se tiene que llevar sí o sí presencial. ¿Cómo se llama su hija?
+[Cliente:295.7]: Claret Haylen Arocupita Flores.
+[Asesor:298.4]: ¿Sabe su DNI? ¿Me lo podría indicar?
+[Cliente:301.7]: Sí, pero es la misma la edad.
+[Asesor:304.5]: Ok, ok.
+[Cliente:306.7]: Buenos días.
+[Asesor:308.2]: Hola, buenos días, Claret. ¿Cuál es tu número de DNI?
+[Cliente:311.6]: 60, 17, 31, 14.
+[Asesor:315.9]: 60, 17, 31, 14. A ver, dame un segundito.
+[Cliente:321.9]: Un segundito,
+[Asesor:323.5]: por favor. 60, 17, 31, 14. Es Claret Haylen Arocupita Flores, ¿verdad?
+[Cliente:333.0]: Sí. Perfecto.
+[Asesor:335.7]: Bien. Me dice tu mamá, Claret, que ya estás por culminar tu carrera técnica, ¿verdad? Felicidades por ahí.
+[Cliente:346.4]: Sí.
+[Asesor:346.8]: Ahora, para
+[Cliente:347.9]: que nosotros podamos
+[Asesor:348.8]: convalidar, como le estoy diciendo a tu mami, es muy importante estudiar la carrera, pero en la sede de Arequipa, porque en Tacna, al ser una sede nueva, todavía no podemos hacer convalidaciones. Pero en cambio en Arequipa sí podemos hacer. ¿Ok? Ahora, me dice que tú tienes 20 años, ¿verdad? Perfecto. Bien, te comento. Te comento. Para la convalidación, una vez que tú ya hayas terminado en diciembre, a partir de ese momento, a ti te van a entregar ya todos los documentos respecto a tu carrera técnica. Es ahí donde nosotros recién vamos a poder mostrar o entregar los documentos a lo que es la universidad para poder proceder con la convalidación. ¿Ok? Por ahora, Claret, tenemos solo 5 vacantes en Arequipa. Tendríamos que separar la tuya desde ya y tendrías que dar un examen de admisión. ¿Ok?
+[Cliente:405.6]: ¿Y el examen es virtual o no es virtual?
+[Asesor:409.1]: No, el examen es virtual. No te preocupes. Lo puedes dar de donde estés, desde casa. No hay problema. Ahora, tú no te preocupes para el examen, Claret, que para el examen te preparamos. Vas a tener clases de manera virtual por las noches por los mismos docentes de la universidad. Este programa se llama Preparados. ¿Ok? Acá vamos a ver todos los temas que van a venir en el examen. También vas a tener, por ejemplo, también lo que es, Claret, en este caso, tu valotario. Vas a contar también con lo que es un reforzamiento de todos los conocimientos que ya tienes para que de esa manera llegues tú a lo que es el examen. El día 22 de noviembre es el examen, cada de domingo. ¿Ok? Y en este caso puedas rendir un examen de manera exitoso. Pues no, para que de esa manera ya puedas ingresar. Y una vez que culmines tu carrera técnica, ahí recién procederíamos con la documentación y posteriormente con la convalidación. ¿Ok? Pero lo importante acá, Claret, es que tú puedas reservar tu vacante, que solamente nos quedan cinco, como te indicaba. ¿Correcto? Perfecto. Entonces, Claret, tu mamá está escuchando, ¿verdad? Ok. Señora, ¿cómo se llama tu mamá? Discúlpeme.
+[Cliente:494.3]: Lidis.
+[Asesor:496.0]: Lidis.
+[Cliente:498.0]: Sí, Lidis.
+[Asesor:499.3]: ¿Qué tal, señora Lidis? Entonces, respecto al tema del examen, del reforzamiento y demás, ¿hay alguna duda o consulta o todo está claro?
+[Cliente:510.9]: Todo está claro. Lo que no me queda algo cierto es que en la convalidación, ¿cuántos años más va a tener
+[Asesor:522.1]: que
+[Cliente:522.4]: estudiar?
+[Asesor:523.0]: Ok. Primero tendríamos que ver cuántos son los cursos que podemos convalidar. ¿En qué instituto estudia su hija?
+[Cliente:532.3]: Instituto Sebastián Pasano Pasano.
+[Asesor:535.5]: ¿Sebastián Pasano Pasano?
+[Cliente:539.1]: Sí.
+[Asesor:539.5]: Ok. A ver, me dice que acaba en diciembre de este año.
+[Cliente:547.5]: Diciembre es casi a mediados de enero, por ahí ya vamos a acabar.
+[Asesor:551.8]: Ok, ok. A ver, vamos un segundito. Sebastián, un momento. Un momentito, por favor. Para nosotros poder ver cuántos cursos son los que tenemos que convalidar, Claret tiene que presentar los siguientes documentos. Primero, constancia regresada, eso le van a entregar cuando termine la carrera. El certificado de estudios de su carrera técnica también se le entregan cuando termine. Y por último, el sílabo sellado y firmado. Ok.
+[Cliente:618.7]: Ya.
+[Asesor:620.0]: Ok. A ver, ahora, lo que yo puedo hacer es que primero tendríamos que tener esos documentos para poder ver cuántos cursos son los que vamos a convalidar.
+[Cliente:634.3]: Ok. Oye, y dependiendo de los cursos, ¿se va a convalidar, se va a saber la cantidad de años que va a seguir estudiando?
+[Asesor:641.9]: Efectivamente. Lo que pasa es que en el sílabus, por ejemplo, en el sílabus es un documento donde aparecen todos los cursos que su hija ha llevado desde que inició su carrera hasta que la terminó. Es ahí, con ese sílabus nosotros vamos a poder hacer la evaluación junto con la malla curricular actual. Es ahí donde vamos a ver cuántos cursos vamos a convalidar y a qué ciclo pertenece cada uno de ellos. Y vamos a saber también cuántos años son los que va a estudiar con nosotros para que ella salga con su título de química farmacéutica. Ok.
+[Cliente:670.7]: Ya. Y el bachiller, ¿cómo sale?
+[Asesor:673.8]: El bachiller es inmediato. Ni bien termina la carrera, se le entrega el bachiller. Y luego de ello, el título ya, ¿no?
+[Cliente:681.8]: Y el bachiller, ¿con qué va a salir? Me dijo que sale con otro nombre la señalita.
+[Asesor:687.6]: Sale un bachiller, sale el bachiller universitario. El título sale como química farmacéutica.
+[Cliente:695.0]: Ah, ya.
+[Asesor:697.0]: Ok.
+[Cliente:697.5]: Ya. Perfecto.
+[Asesor:699.1]: Entonces, como le digo, señora Liris, tengo solo cinco vacantes disponibles. Si estas cinco vacantes se llegan a ocupar, pues su
+[Cliente:707.8]: hija
+[Asesor:708.0]: ya perdería la opción de estudiar con nosotros en Arequipa. Ok. Ahora, incluso yo estoy colocando el DNI de Claret para lo que viene a ser la carrera y me sale que le puedo dar, como le digo, los dos descuentos que tengo. Le voy a indicar los costos, ok, en Arequipa y le indico el descuento también. ¿Está bien?
+[Cliente:729.2]: Ya.
+[Asesor:730.2]: Perfecto. Son tres inversiones las que te pedimos, ¿sí? La primera inversión es la inscripción. La inscripción es un pago que se hace por única vez en toda la carrera. Luego ya no lo paga, ¿ok?
+[Cliente:741.3]: Ajá.
+[Asesor:742.1]: Perfecto. El cual sería 320 la inscripción, ¿sí? Luego viene la matrícula. La matrícula es un pago que se hace cada inicio de ciclo. En el caso de Claret es de 330. Esto no lo paga ahora, sino después de haber dado el examen de admisión. Y por último está la pensión. La pensión es de 760. Y esto lo pagaría todavía en marzo que iniciamos clase. No lo paga ahora. ¿De acuerdo?
+[Cliente:773.1]: Ya.
+[Asesor:773.8]: Ahora, el 50 % de descuento que le estaba indicando es en la inscripción y también en la matrícula, en dos
+[Cliente:780.2]: montos,
+[Asesor:781.0]: ¿sí? Es decir, ya no pagaría el monto, como le menciono, de 320 de inscripción, sino solo 160. Ese es el único pago que se le indica para el día de hoy. 160 solamente. Con estos 160 ya tendría tres beneficios. Primero, al reservarle la vacante que solamente quedan cuatro. Segundo, el derecho al examen de admisión. Y por último, lo que es el acceso al programa de preparación para que ella pueda rendir un excelente examen. ¿De acuerdo?
+[Cliente:815.4]: Ya.
+[Asesor:816.4]: Perfecto. Pues a ese, perdón, pues a ello, ello es lo que le estamos brindando ahora. ¿Sí?
+[Cliente:825.3]: Ya.
+[Asesor:826.1]: ¿Me escucha?
+[Cliente:827.2]: Sí, sí, sí. Perfecto.
+[Asesor:829.5]: Entonces, lo que haríamos el día de hoy simplemente es llenar lo que es su ficha, porque también la matrícula tiene el descuento, donde ya no pagarías el monto de 330, sino solamente 165 soles. ¿Ok? Y
+[Cliente:848.6]: como
+[Asesor:848.9]: le digo, ahora lo que haríamos simplemente es el llenado de la ficha. ¿Ok? Llenamos la ficha, luego generamos el descuento del 50%. Realizamos el pago de los 160, señora Lidys. Este pago se hace a través del banco BCP, Intervam, BBVA o Scotiab. ¿Usted, por ejemplo, con cuál de estos cuatro bancos trabaja?
+[Cliente:870.2]: El BCP.
+[Asesor:871.7]: Perfecto. A través del banco BCP, el pago se hace mediante pago de servicios. Así como si pagara su línea de teléfono, el agua, la luz, lo mismo. ¿Ok?
+[Cliente:880.7]: Pero
+[Asesor:880.9]: en vez de colocar el nombre de esas empresas, colocamos el nombre de la universidad que es UTP. Luego de ello, señora Lidys, a lo que es el correo, le va a llegar, bueno, su comprobante y demás. ¿Ok? Y al correo también le vamos a enviar sus usuarios. ¿Sí? Yo tengo acá un correo electrónico que es linefloca .gmail .com. ¿Ese es tu correo?
+[Cliente:904.5]: Es el mío. De mi hija es otro.
+[Asesor:907.4]: Ah, pero ¿en cuál colocamos? ¿El de usted o el de su hija?
+[Cliente:910.5]: De mi hija.
+[Asesor:911.7]: Ok. Pásame a Claret para que me dicte su correo.
+[Cliente:917.6]: Este es Claret Arocutipa. Ya.
+[Asesor:922.2]: A Claret Arocutipa.
+[Cliente:924.7]: Aroba gmail .com.
+[Asesor:927.6]: Claret Arocutipa arroba gmail .com. Perfecto. Bien, entonces, Claret, como le digo a tu mamá, tendríamos que hacer el día de hoy ya el hecho de reservar tu vacante, que solo quedan cuatro, como te comento, para que tú ya puedas rendir tu examen el día 22 y mientras tanto vayas llevando las clases virtuales. Solamente se te va a pedir por ahora dos documentos nada más. Ya cuando termines el instituto vas a colocar la documentación que te mencioné para lo que es la convalidación. Por ahora, solamente la foto de tu DNI por ambos lados y tu certificado de estudios de colegio. Ok. Solamente esos dos. ¿De
+[Cliente:967.5]: acuerdo?
+[Asesor:969.6]: Ahora, ¿hasta ahí dudas, consultas, Claret, señora Liris, o todo está claro?
+[Cliente:978.3]: Todo está claro.
+[Asesor:980.5]: Perfecto. Entonces,
+[Cliente:981.8]: señora
+[Asesor:982.0]: Claret, lo que haríamos ahora es llenar la
+[Cliente:984.2]: ficha
+[Asesor:984.5]: de postulante de su hija,
+[Cliente:986.9]: ¿sí, señora Liris?
+[Asesor:987.8]: Luego de ello, ya con el llenado de la ficha, procedemos con los dos descuentos, realizamos el pago de los 160 y al correo de Claret le envío a los usuarios para que ella pueda ingresar ya al portal a dejar la documentación.
+[Cliente:1003.0]: Ok.
+[Asesor:1003.8]: Posteriormente da su examen y tendrá sus clases de manera virtual, como le comento. ¿De acuerdo?
+[Cliente:1010.4]: Ya. Pero me daría un plazito porque para conversar bien con su papá. Ahorita no estamos con él. Ah,
+[Asesor:1018.6]: ok. ¿Y qué es lo que tendría que conversar de repente? Cuénteme. ¿Tal vez tiene alguna duda, alguna consulta?
+[Cliente:1026.9]: Él tal vez cómo pensará también. Ahorita las dos nomás nos estábamos averiguando. Seguramente con la otra señorita nos hemos contactado. Entonces vamos a ir a conversar con su papá. Estábamos en ese estado.
+[Asesor:1044.1]: Ah, ok, ok, ok. Entiendo.
+[Cliente:1047.3]: A
+[Asesor:1048.1]: ver, dame un segundito. Ahora, ¿su papá no sabe que usted quiere convalidar? Bueno, ¿que su hija quiere convalidar? ¿O sí sabe ello?
+[Cliente:1058.3]: No, no sabe, sino que es que nos estaban diciendo que no puede convalidar sin caso que no tiene título. Estábamos pensando en la... Lo
+[Asesor:1069.0]: que pasa es que
+[Cliente:1069.0]: la directora de su instituto dijo que nosotros solo tenemos convenio con la universidad continental. Eso es lo que nos dijo.
+[Asesor:1078.3]: Ok, lo que pasa es que nosotros íbamos a poder realizar la convalidación del instituto, porque lo acabo de ver y si se puede. Solamente tenemos que tener los documentos, como le menciono. Ok. Ahora, lo que se refería de repente la señorita que la atendió es que en la sede de Tacna no se puede convalidar, porque es una sede nueva, como le comento. Pero de poder convalidarse sí se puede. Por ello es que yo le decía que la sede donde sí se va a poder hacer la gestión es en Arequipa. Ahí sí no hay ningún problema.
+[Cliente:1112.6]: Ya. Ok,
+[Asesor:1114.0]: por ello mismo, ¿no? Le comentaba para que de esa manera podamos ayudarla y de esa manera ya su hija pueda
+[Cliente:1120.7]: reservar
+[Asesor:1121.1]: su vacante, que solamente,
+[Cliente:1122.4]: como
+[Asesor:1122.5]: le digo,
+[Cliente:1122.8]: me
+[Asesor:1122.9]: quedan cuatro.
+[Cliente:1125.8]: Pero me cuesta un tiempo, por favor, para conversar bien a las... ¿Qué es ahorita?
+[Asesor:1131.7]: Son las 9 y 28 de la mañana.
+[Cliente:1135.7]: A las 11 o más o menos me podría volver a llamar, tal vez, para ya confirmar.
+[Asesor:1141.2]: Claro, claro que sí, señora. No hay problema. ¿Este número de quién es? ¿De usted, señora Liris, o de Claret?
+[Cliente:1146.5]: Sí, mía, mía.
+[Asesor:1148.7]: ¿Y cuál es el número de Claret?
+[Cliente:1152.3]: El que le dicto yo.
+[Asesor:1154.2]: A
+[Cliente:1154.3]: ver,
+[Asesor:1154.6]: dictame.
+[Cliente:1155.8]: Apúntame 935.
+[Asesor:1158.2]: Ya.
+[Cliente:1160.1]: 14 -08 -01.
+[Asesor:1162.8]: Ok. Ahora, ¿con quién puedo yo comunicarme
+[Cliente:1166.0]: por
+[Asesor:1166.2]: WhatsApp? ¿Con tío Claret o con
+[Cliente:1168.3]: tu
+[Asesor:1168.4]: mamá?
+[Cliente:1170.0]: Con cualquiera, normal.
+[Asesor:1172.8]: Ok. A ver, Claret, te voy a hablar al WhatsApp ahorita, ¿sí?
+[Cliente:1179.0]: Un
+[Asesor:1179.5]: segundito, para que me confirme si te llegó mi mensaje. Te acabo de enviar un pequeño mensajito, Claret. ¿Puedes ver si te llegó, por favor?
+[Cliente:1195.5]: Sí me llegó, del número 986.
+[Asesor:1199.8]: Exacto. ¿Podrías responder el mensaje, Claret? Un hola, tal vez.
+[Cliente:1204.8]: Bien. Yo le respondí.
+[Asesor:1211.0]: Sí. Vete, buenos días. Bien, Claret. Yo me voy a estar comunicando contigo, Claret, y también con
+[Cliente:1215.8]: tu mamá,
+[Asesor:1216.7]: ¿ok? Señora, me dice que a las 11, entonces.
+[Cliente:1220.7]: Sí. Perfecto.
+[Asesor:1223.3]: Entonces, converse con
+[Cliente:1224.5]: su esposo,
+[Asesor:1226.5]: ¿sí? Yo a las 11 me comunico. Si en caso tienen la respuesta antes, sea positiva o negativa, le agradeceré que por WhatsApp, Claret, me avises, ¿ok? Si es positivo, pues yo te llamo en ese momento y hacemos la gestión para que aproveches los descuentos y separar ya tu vacante de una vez, ¿de acuerdo?
+[Cliente:1245.9]: Ya. Y una consulta más. ¿Por qué el precio está más en Arequipa y en Tacna? Dijo, un poco menos.
+[Asesor:1253.2]: Sí, en Tacna está 230 en inscripción y con descuento es 115.
+[Cliente:1258.5]: En
+[Asesor:1258.8]: cambio, en Arequipa, lo que pasa es por el tema de que en Tacna, primero, es una sede nueva y
+[Cliente:1264.9]: es el
+[Asesor:1265.2]: tema también de la zona. Más que
+[Cliente:1268.3]: todo
+[Asesor:1268.6]: es por ello. Pero luego, la calidad de enseñanza y demás es totalmente igual, la misma.
+[Cliente:1276.3]: Ah, ya, ya, ya. Ok.
+[Asesor:1279.4]: Ahora, pero como le digo, tiene el descuento, así que no va a pagar el monto regular,
+[Cliente:1284.1]: sino
+[Asesor:1284.4]: con el descuento incluido.
+[Cliente:1286.2]: ¿De
+[Asesor:1286.4]: acuerdo?
+[Cliente:1288.3]: Ya. Ok.
+[Asesor:1290.0]: Perfecto. Entonces, señora Elidis, converse con su esposo. Cualquier duda o consulta le dice a Claret para que me lo mencione por WhatsApp para yo poder ayudarlo. Y si tiene la respuesta antes de las 11, pues mucho mejor. Sea positiva o negativa, yo estaré esperando ella. ¿Ok? Ya,
+[Cliente:1307.3]: ya. Gracias.
+[Asesor:1308.8]: Perfecto. Entonces, estamos en comunicación. Que tengan buen día. Hasta luego.
+[Cliente:1312.8]: Hasta luego.

@@ -134,18 +134,235 @@ def filter_and_normalize_message(message: Dict[str, Any], allowed_fields: Set[st
     Returns:
         Dict[str, Any]: Mensaje filtrado y normalizado
     """
+    aliases = {
+        "Time Wait Operator": "time_wait_operator",
+        "time wait operator": "time_wait_operator",
+    }
+    normalized_in = {}
+    for key, value in message.items():
+        normalized_in[aliases.get(key, key)] = value
+
     filtered_message = {}
 
-    # Incluir solo los campos que están en la lista de campos permitidos
+    # Faltantes → null (JSON), no "". "" rompe DATE/INTEGER/TIMESTAMP en load BQ.
     for field_name in allowed_fields:
-        if field_name in message and message[field_name] is not None:
-            # Si el campo existe y tiene valor, incluirlo
-            filtered_message[field_name] = message[field_name]
+        if field_name in normalized_in and normalized_in[field_name] is not None:
+            filtered_message[field_name] = normalized_in[field_name]
         else:
-            # Si el campo no existe o es None, colocar cadena vacía
-            filtered_message[field_name] = ""
+            filtered_message[field_name] = None
 
     return filtered_message
+
+
+def _parse_hms_to_seconds(raw: str) -> int | None:
+    """'00:09:05' / '0:09:05' → segundos. No confundir con fechas."""
+    s = raw.strip()
+    if not re.fullmatch(r"\d{1,2}:\d{2}(:\d{2})?", s):
+        return None
+    parts = [int(p) for p in s.split(":")]
+    if len(parts) == 2:
+        h, m, sec = 0, parts[0], parts[1]
+    else:
+        h, m, sec = parts[0], parts[1], parts[2]
+    if m >= 60 or sec >= 60:
+        return None
+    return h * 3600 + m * 60 + sec
+
+
+def coerce_value_for_bq(value: Any, field_type: str) -> Any:
+    """
+    Coerce strings de la API a tipos BQ.
+    Soporta formato viejo y nuevo:
+      - INTEGER: \"0\" | \"00:00:04\" (duración → segundos)
+      - TIMESTAMP/DATE: placeholders → null
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip() == "":
+        return None
+
+    t = (field_type or "STRING").upper()
+    if t in ("INTEGER", "INT64"):
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        s = str(value).strip()
+        as_sec = _parse_hms_to_seconds(s)
+        if as_sec is not None:
+            return as_sec
+        try:
+            return int(float(s))
+        except (TypeError, ValueError):
+            return None
+    if t in ("FLOAT", "FLOAT64", "NUMERIC", "BIGNUMERIC"):
+        if isinstance(value, (int, float)):
+            return float(value)
+        s = str(value).strip()
+        as_sec = _parse_hms_to_seconds(s)
+        if as_sec is not None:
+            return float(as_sec)
+        try:
+            return float(s)
+        except (TypeError, ValueError):
+            return None
+    if t == "BOOLEAN":
+        if isinstance(value, bool):
+            return value
+        s = str(value).strip().lower()
+        if s in ("1", "true", "t", "yes", "y", "si", "sí"):
+            return True
+        if s in ("0", "false", "f", "no", "n"):
+            return False
+        return None
+    if t in ("TIMESTAMP", "DATETIME", "DATE"):
+        s = str(value).strip()
+        if s.lower() in {"not closed yet", "null", "none", "nan", "n/a"}:
+            return None
+        return s
+    return value
+
+
+def coerce_message_types(
+    message: Dict[str, Any], schema: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Aplica tipos del schema JSON a un mensaje (API suele mandar todo como string)."""
+    type_by_name = {str(f.get("name", "")).strip(): f.get("type", "STRING") for f in schema}
+    out: Dict[str, Any] = {}
+    for key, value in message.items():
+        ft = type_by_name.get(key)
+        out[key] = coerce_value_for_bq(value, ft) if ft else value
+    return out
+
+
+# Alias / nested roots para listaCasosReporteAtenciones → lcra_*
+# (API post-2026-06-29 dejó de enviar lcra_* planos; filter rellenaba "").
+_LCRA_NESTED_ROOTS = {
+    "listacasosreporteatenciones",
+    "lista_casos_reporte_atenciones",
+    "lista casos reporte atenciones",
+    "lcra",
+}
+
+_LCRA_SUFFIX_TO_COLUMN = {
+    "campus": "lcra_campus",
+    "celular_in": "lcra_celular_in",
+    "celular in": "lcra_celular_in",
+    "dni": "lcra_dni",
+    "edad": "lcra_edad",
+    "fecha_cli": "lcra_fecha_cli",
+    "fecha cliente": "lcra_fecha_cli",
+    "fecha_cliente": "lcra_fecha_cli",
+    "flujo": "lcra_flujo",
+    "flujo_completo": "lcra_flujo_completo",
+    "flujo completo": "lcra_flujo_completo",
+    "hora_cli": "lcra_hora_cli",
+    "hora cliente": "lcra_hora_cli",
+    "hora_cliente": "lcra_hora_cli",
+    "lead": "lcra_lead",
+    "origen": "lcra_origen",
+    "postulante": "lcra_postulante",
+    "tipo_cli": "lcra_tipo_cli",
+    "tipo cliente": "lcra_tipo_cli",
+    "tipo_cliente": "lcra_tipo_cli",
+    "traza": "lcra_traza",
+    "traza_seg": "lcra_traza_seg",
+    "traza seg": "lcra_traza_seg",
+    "traza_txt": "lcra_traza_txt",
+    "traza txt": "lcra_traza_txt",
+}
+
+
+def _norm_field_key(key: str) -> str:
+    return re.sub(r"[\s_\-]+", " ", str(key).strip().lower()).strip()
+
+
+def _is_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip() == "":
+        return True
+    return False
+
+
+def _resolve_lcra_column(key: str) -> str | None:
+    """Resuelve un nombre de campo API a columna lcra_* si aplica."""
+    raw = str(key).strip()
+    if raw.startswith("lcra_"):
+        return raw
+
+    norm = _norm_field_key(raw)
+    if norm in _LCRA_SUFFIX_TO_COLUMN:
+        return _LCRA_SUFFIX_TO_COLUMN[norm]
+
+    # "listaCasosReporteAtenciones Lead" / "listaCasosReporteAtenciones_Lead"
+    prefix_variants = (
+        "listacasosreporteatenciones ",
+        "lista casos reporte atenciones ",
+        "lcra ",
+    )
+    for prefix in prefix_variants:
+        if norm.startswith(prefix):
+            suffix = norm[len(prefix) :].strip()
+            return _LCRA_SUFFIX_TO_COLUMN.get(suffix)
+
+    # camelCase lcraLead → lcra_lead
+    camel = re.sub(r"(?<!^)(?=[A-Z])", "_", raw).lower()
+    if camel.startswith("lcra_") and camel in _LCRA_SUFFIX_TO_COLUMN.values():
+        return camel
+    if camel.startswith("lcra"):
+        maybe = "lcra_" + camel[4:].lstrip("_")
+        if maybe in _LCRA_SUFFIX_TO_COLUMN.values():
+            return maybe
+
+    return None
+
+
+def normalize_reporte_atenciones_lcra(message: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Flatten / alias de listaCasosReporteAtenciones hacia lcra_* antes del filtro de schema.
+    Conserva lcra_* ya poblados; no pisa valores no vacíos.
+    """
+    out = dict(message)
+
+    def _assign(column: str, value: Any) -> None:
+        if column and not _is_blank(value) and _is_blank(out.get(column)):
+            out[column] = value
+
+    # 1) Objeto / lista anidada bajo root listaCasos*
+    for key, value in list(message.items()):
+        root_norm = _norm_field_key(key)
+        root_compact = root_norm.replace(" ", "")
+        if root_norm not in _LCRA_NESTED_ROOTS and root_compact not in {
+            "listacasosreporteatenciones",
+            "lcra",
+        }:
+            continue
+
+        nested_items: List[Dict[str, Any]] = []
+        if isinstance(value, dict):
+            nested_items = [value]
+        elif isinstance(value, list):
+            nested_items = [item for item in value if isinstance(item, dict)]
+
+        for nested in nested_items:
+            for nk, nv in nested.items():
+                column = _resolve_lcra_column(nk)
+                if column is None:
+                    # Intentar prefijo implícito del root
+                    column = _resolve_lcra_column(f"listaCasosReporteAtenciones {nk}")
+                if column:
+                    _assign(column, nv)
+
+    # 2) Keys planas con nombre legacy / alias
+    for key, value in list(message.items()):
+        column = _resolve_lcra_column(key)
+        if column:
+            _assign(column, value)
+
+    return out
 
 
 def convert_time_format(message: Dict[str, Any], config: Dict[str, Any], table_type: str = None) -> Dict[str, Any]:
@@ -387,8 +604,9 @@ def create_bigquery_table(gcs_uri: str, gcp_config: Dict[str, Any], table_id: st
 
         # Verificar si la tabla existe
         table_exists = False
+        existing_table = None
         try:
-            client.get_table(table_ref)
+            existing_table = client.get_table(table_ref)
             table_exists = True
             print(f"Tabla {table_ref} ya existe, saltando creación")
             # Mostrar información de particiones si la tabla existe
@@ -495,12 +713,22 @@ def create_bigquery_table(gcs_uri: str, gcp_config: Dict[str, Any], table_id: st
             write_disposition=getattr(bigquery.WriteDisposition, write_disposition),
         )
 
-        # Usar el esquema definido en la carpeta tablas si está disponible
-        if schema:
-            job_config.schema = [bigquery.SchemaField(field['name'], field['type'], mode=field['mode']) for field in schema]
+        # Tabla existente: usar SU schema (evita drift ej. fecha_evento ausente en JSON local).
+        # Tabla nueva: schema de tablas/*.json o autodetect.
+        job_config.ignore_unknown_values = True
+        if table_exists and existing_table is not None and existing_table.schema:
+            job_config.schema = list(existing_table.schema)
+            print(
+                f"Usando esquema de tabla destino ({len(existing_table.schema)} campos); "
+                f"no el JSON local (puede estar desfasado)"
+            )
+        elif schema:
+            job_config.schema = [
+                bigquery.SchemaField(field['name'], field['type'], mode=field['mode'])
+                for field in schema
+            ]
             print(f"Usando esquema definido en tablas/{table_id}.json")
         else:
-            # Fallback a detección automática si no hay esquema
             job_config.autodetect = True
             print("Usando detección automática de esquema (no se encontró esquema personalizado)")
 
@@ -611,6 +839,10 @@ def extract_data_with_access_key(fecha_inicio: str, table_type: str, config: Dic
         for i, message in enumerate(messages):
             # Convertir formato de fecha
             converted_message = convert_time_format(message, config, table_type)
+
+            # Alias/flatten lcra_* (reporteAtenciones / type=cases)
+            if table_name == "reporteAtenciones" or table_type == "cases":
+                converted_message = normalize_reporte_atenciones_lcra(converted_message)
 
             # Filtrar y normalizar campos según las definiciones de tabla
             if allowed_fields:
@@ -723,6 +955,12 @@ def process_table(table_name: str, table_config: Dict[str, Any], gcp_config: Dic
         print(f"No se encontraron registros para la tabla {table_name}")
         return
 
+    # Coerce tipos (API manda INTEGER como "0") antes de JSONL / load BQ
+    schema_for_coerce = load_table_schema(table_name)
+    if schema_for_coerce:
+        messages = [coerce_message_types(m, schema_for_coerce) for m in messages]
+        print(f"Tipos coercidos según schema ({len(schema_for_coerce)} campos)")
+
     # Guardar en formato JSONL
     save_to_jsonl(messages, output_file)
 
@@ -785,12 +1023,37 @@ def generate_date_list(current_date: str, days_back: int) -> List[str]:
     return dates
 
 
-def process_date(fecha: str) -> bool:
+def generate_date_range(start_date: str, end_date: str) -> List[str]:
+    """Lista inclusiva YYYY-MM-DD desde start_date hasta end_date (ascendente)."""
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    if start > end:
+        start, end = end, start
+
+    dates: List[str] = []
+    cur = start
+    while cur <= end:
+        dates.append(cur.strftime("%Y-%m-%d"))
+        cur += timedelta(days=1)
+    return dates
+
+
+def _resolve_tables_filter(tables_filter: Set[str] | None = None) -> Set[str] | None:
+    if tables_filter is not None:
+        return tables_filter
+    raw = os.environ.get("BACKFILL_TABLES", "").strip()
+    if not raw:
+        return None
+    return {t.strip() for t in raw.split(",") if t.strip()}
+
+
+def process_date(fecha: str, tables_filter: Set[str] | None = None) -> bool:
     """
     Procesa datos para una fecha específica
 
     Args:
         fecha (str): Fecha en formato YYYY-MM-DD
+        tables_filter: Si se pasa (o via BACKFILL_TABLES), solo esas tablas
 
     Returns:
         bool: True si la ejecución fue exitosa, False en caso contrario
@@ -801,11 +1064,13 @@ def process_date(fecha: str) -> bool:
         # Cargar configuración
         config = load_config('config/config.json')
         gcp_config = config.get('gcp', {})
+        allowed_tables = _resolve_tables_filter(tables_filter)
         print(
             f"[onemarketer-api] fecha={fecha} | "
             f"SA runtime={get_runtime_service_account_email()} | "
             f"project={gcp_config.get('project_id', '')} | "
-            f"dataset={gcp_config.get('dataset_id', '')}"
+            f"dataset={gcp_config.get('dataset_id', '')} | "
+            f"tables={sorted(allowed_tables) if allowed_tables else 'ALL'}"
         )
 
         # Procesar cada tabla configurada
@@ -813,6 +1078,9 @@ def process_date(fecha: str) -> bool:
         for table_name, table_config in config.items():
             if table_name == 'gcp':
                 continue  # Saltar configuración de GCP
+
+            if allowed_tables and table_name not in allowed_tables:
+                continue
 
             if isinstance(table_config, dict) and 'enabled' in table_config:
                 # Procesar la tabla

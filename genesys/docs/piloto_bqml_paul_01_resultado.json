@@ -1,0 +1,278 @@
+﻿{
+    "A. Control del dato y contexto de la interacción":  {
+                                                             "calidad_transcripcion":  "VALIDA",
+                                                             "contacto_efectivo":  "SI",
+                                                             "interlocutor":  "POSTULANTE",
+                                                             "tipo_contacto":  "PRIMER_CONTACTO",
+                                                             "motivo_contacto":  "VENTA_INSCRIPCION",
+                                                             "resumen_interaccion":  "El prospecto se contactó interesado en Ingeniería Electrónica presencial en Lima Norte. El asesor le brindó información de la carrera, horarios y costos con descuento, procediendo a registrar sus datos para la inscripción.",
+                                                             "consistencia_tipificacion":  ""
+                                                         },
+    "B. Perfil del prospecto":  {
+                                    "residencia_departamento":  "Lima",
+                                    "residencia_provincia":  "Lima",
+                                    "residencia_distrito":  "Los Olivos",
+                                    "residencia_coincide_crm":  "",
+                                    "situacion_academica":  "EGRESADO_COLEGIO_RECIENTE",
+                                    "situacion_laboral":  "TIEMPO_COMPLETO",
+                                    "tipo_trabajo":  "INDEPENDIENTE",
+                                    "cargo_declarado":  {
+                                                            "literal":  "No se menciona",
+                                                            "homologado":  "No se menciona"
+                                                        },
+                                    "rubro_laboral":  "No se menciona",
+                                    "empresa_empleadora":  "No se menciona",
+                                    "convenio_aplicable":  [
+                                                               "NINGUNO"
+                                                           ],
+                                    "institucion_procedencia":  "SENATI",
+                                    "carrera_previa":  "Un ciclo en Senati",
+                                    "anio_malla_origen":  "No se menciona",
+                                    "edad_declarada":  19,
+                                    "decisor_financiador":  {
+                                                                "decisor":  "POSTULANTE",
+                                                                "financiador":  "POSTULANTE",
+                                                                "decisor_presente":  "SI"
+                                                            },
+                                    "motivacion_estudiar":  {
+                                                                "valor":  "TRABAJO_EMPLEABILIDAD",
+                                                                "evidencia":  "En hacer tarjeta para los declaradores. Tiene una muy buena rama."
+                                                            },
+                                    "vinculo_previo_utp":  [
+                                                               "NINGUNO"
+                                                           ]
+                                },
+    "C. Producto buscado":  {
+                                "carreras_interes":  [
+                                                         "INGENIERÍA ELECTRÓNICA"
+                                                     ],
+                                "carrera_no_ofrecida":  {
+                                                            "carrera":  "No se menciona",
+                                                            "tipo":  "NA",
+                                                            "acepta_alternativa":  "No se menciona"
+                                                        },
+                                "indecision_carrera":  {
+                                                           "indeciso":  "NO",
+                                                           "carreras_en_duda":  [
+
+                                                                                ]
+                                                       },
+                                "modalidad_interes":  [
+                                                          "SEMIPRESENCIAL"
+                                                      ],
+                                "restriccion_modalidad":  [
+                                                              "TRABAJO"
+                                                          ],
+                                "zona_interes":  "02 UTP Lima Norte",
+                                "horario_deseado":  [
+                                                        "NOCHE"
+                                                    ],
+                                "periodo_ingreso":  "PROXIMO_ANIO",
+                                "modalidad_ingreso":  "EXAMEN_ADMISION",
+                                "brecha_oferta":  ""
+                            },
+    "D. Estado y resultado":  {
+                                  "estado_lead":  "SI",
+                                  "resultado_real":  "FICHA_SIN_PAGO",
+                                  "tipificacion_ia":  "Se inscribira como postulante",
+                                  "compromisos":  [
+                                                      {
+                                                          "tipo":  "PAGO",
+                                                          "fecha":  null,
+                                                          "hora":  null,
+                                                          "franja":  "HOY",
+                                                          "responsable":  "PROSPECTO",
+                                                          "accion_requerida":  "Realizar el pago de la inscripción de 115 soles"
+                                                      }
+                                                  ],
+                                  "responsabilidad_no_venta":  {
+                                                                   "motivo":  "NA",
+                                                                   "submotivo":  "NA"
+                                                               }
+                              },
+    "E. Motivos de rechazo o indecisión (barreras)":  {
+                                                          "motivos_rechazo":  [
+
+                                                                              ],
+                                                          "motivo_rechazo_principal":  "NA",
+                                                          "grupo_friccion":  "",
+                                                          "objeciones_textuales":  [
+
+                                                                                   ],
+                                                          "momento_objecion":  "SIN_OBJECION",
+                                                          "senal_abandono":  "NO_ABANDONA"
+                                                      },
+    "F. Seguimiento del RA":  {
+                                  "consulta_con_terceros":  {
+                                                                "flag":  0,
+                                                                "con_quien":  "NA",
+                                                                "evidencia":  "No se menciona"
+                                                            },
+                                  "recontacto_solicitado":  0,
+                                  "informacion_solicitada":  [
+
+                                                             ],
+                                  "visitara_counter":  {
+                                                           "flag":  0,
+                                                           "sede":  "NA"
+                                                       },
+                                  "canal_preferido":  {
+                                                          "canal":  "No se menciona",
+                                                          "asesor_acepta":  "No se menciona"
+                                                      }
+                              },
+    "G. Motivos de preferencia (drivers)":  {
+                                                "motivos_preferencia":  [
+                                                                            {
+                                                                                "codigo":  "HORARIOS_FLEXIBLES",
+                                                                                "evidencia":  "tengo flexibilidad con los horarios por estudios.",
+                                                                                "detalle":  "Horario nocturno de gente que trabaja"
+                                                                            }
+                                                                        ],
+                                                "gatillador_principal":  "HORARIOS_FLEXIBLES",
+                                                "atributo_argumentado":  "FLEXIBILIDAD_ACOMPANAMIENTO",
+                                                "beneficio_economico":  [
+                                                                            "DESCUENTO_PRONTO_PAGO"
+                                                                        ],
+                                                "quien_recomienda":  "No se menciona"
+                                            },
+    "H. Competencia":  {
+                           "competidores":  [
+
+                                            ],
+                           "menciona_competencia":  "",
+                           "sondeo_competencia":  {
+                                                      "flag":  0,
+                                                      "motivo_si_0":  "NO_PREGUNTO"
+                                                  },
+                           "percepcion_precio_utp":  "No se menciona"
+                       },
+    "I. Consultas, dudas y mercado":  {
+                                          "temas_consultados":  [
+                                                                    "PENSION_COSTOS",
+                                                                    "HORARIOS",
+                                                                    "CONVALIDACION"
+                                                                ],
+                                          "consulta_principal":  "¿Qué pasaría si yo he estudiado un ciclo, pero en este Cenati?",
+                                          "dudas_no_resueltas":  [
+
+                                                                 ],
+                                          "comentario_mercado":  {
+                                                                     "tag":  "DEMANDA_LABORAL",
+                                                                     "texto":  "Tiene una muy buena rama."
+                                                                 },
+                                          "palabras_clave_cliente":  ""
+                                      },
+    "J. Experiencia y sentimiento":  {
+                                         "sentimiento_cliente":  "POSITIVO",
+                                         "nivel_frustracion":  "BAJO",
+                                         "percepcion_proceso":  [
+                                                                    "SATISFECHO_ATENCION"
+                                                                ],
+                                         "riesgo_desercion":  {
+                                                                  "valor":  "BAJO",
+                                                                  "evidencia":  "Todo correcto."
+                                                              }
+                                     },
+    "K. Journey y fuente":  {
+                                "fuente_declarada":  "No se menciona",
+                                "participacion_evento_utp":  "No se menciona"
+                            },
+    "L. Dinámica de la conversación y oferta":  {
+                                                    "oferta_cotizada":  {
+                                                                            "monto_cotizado":  230,
+                                                                            "concepto":  "DERECHO_POSTULACION",
+                                                                            "descuentos_ofrecidos":  [
+                                                                                                         "DESCUENTO_50_PAGO_HOY"
+                                                                                                     ],
+                                                                            "n_opciones":  1
+                                                                        },
+                                                    "tiempo_hasta_precio_seg":  {
+                                                                                    "segundos":  514,
+                                                                                    "clasificacion":  "TARDIO"
+                                                                                },
+                                                    "silencios_seg":  "",
+                                                    "secuencia_engagement":  {
+                                                                                 "fases":  [
+                                                                                               "EXPLORACION",
+                                                                                               "EVALUACION",
+                                                                                               "NEGOCIACION",
+                                                                                               "CIERRE"
+                                                                                           ],
+                                                                                 "quiebre_positivo_turno":  null,
+                                                                                 "quiebre_negativo_turno":  null
+                                                                             }
+                                                },
+    "N. Complementarios de pautas de calidad (no propuestos por las áreas)":  {
+                                                                                  "documentos_pendientes":  [
+                                                                                                                "CERTIFICADO_ESTUDIOS"
+                                                                                                            ],
+                                                                                  "dificultad_documentos":  {
+                                                                                                                "valor":  "NINGUNA",
+                                                                                                                "evidencia":  "Sí."
+                                                                                                            },
+                                                                                  "estado_examen":  "PROGRAMADO",
+                                                                                  "medio_pago":  "No se menciona",
+                                                                                  "segundo_numero_obtenido":  "SI",
+                                                                                  "intentos_cierre":  {
+                                                                                                          "n_intentos":  2,
+                                                                                                          "reaccion_ultimo":  "ACEPTA"
+                                                                                                      },
+                                                                                  "argumentos_urgencia":  [
+                                                                                                              "DESCUENTO_TEMPORAL"
+                                                                                                          ],
+                                                                                  "informacion_complementaria_brindada":  [
+                                                                                                                              "PLAZO_PAGO_MATRICULA"
+                                                                                                                          ],
+                                                                                  "finalizacion_interaccion":  "CIERRE_ACORDADO",
+                                                                                  "correccion_datos_ficha":  [
+
+                                                                                                             ],
+                                                                                  "situacion_convalidacion":  "NO_APLICA",
+                                                                                  "tiempos_atencion":  "",
+                                                                                  "carga_documento_llamada":  "NO_CARGADO_COMPROMISO",
+                                                                                  "uso_preparados":  "INVITADO_ACEPTA"
+                                                                              },
+    "P. Pauta de charlas de Prospección (colegios) – una fila por atributo":  {
+                                                                                  "saludo_agradecimiento":  "NA",
+                                                                                  "presentacion_utp":  "NA",
+                                                                                  "entrega_diploma_lo_lograste":  "NA",
+                                                                                  "invita_referir":  "NA",
+                                                                                  "anuncia_inscripciones":  "NA",
+                                                                                  "preferencia_educativa_n1":  "NA",
+                                                                                  "preferencia_empresas_top5":  "NA",
+                                                                                  "universidades_intercambio":  "NA",
+                                                                                  "convenios_internacionales":  "NA",
+                                                                                  "acompanamiento_academico":  "NA",
+                                                                                  "acompanamiento_emocional":  "NA",
+                                                                                  "vida_universitaria":  "NA",
+                                                                                  "oferta_carreras":  "NA",
+                                                                                  "facultades_campus":  "NA",
+                                                                                  "facultad_medicina":  "NA",
+                                                                                  "programa_harvard":  "NA",
+                                                                                  "carreras_salud_alternativas":  "NA",
+                                                                                  "modalidades_estudio":  "NA",
+                                                                                  "bus_puerta_puerta":  "NA",
+                                                                                  "modalidades_ingreso":  "NA",
+                                                                                  "invita_visitar_campus":  "NA",
+                                                                                  "ficha_llenado":  "NA",
+                                                                                  "ficha_nombre_apellido":  "NA",
+                                                                                  "ficha_celular_correo":  "NA",
+                                                                                  "ficha_opcion_carrera":  "NA",
+                                                                                  "ficha_datos_padres":  "NA",
+                                                                                  "entrega_brochure":  "NA",
+                                                                                  "redes_sociales":  "NA",
+                                                                                  "central_admisiones":  "NA",
+                                                                                  "mensaje_urgencia":  "NA",
+                                                                                  "sorteo_qr":  "NA",
+                                                                                  "despedida":  "NA",
+                                                                                  "ec_incentivo_regalo":  "NA",
+                                                                                  "ec_informacion_incorrecta":  "NA",
+                                                                                  "ec_lenguaje_inapropiado":  "NA",
+                                                                                  "ec_facultad_medicina_sede":  {
+                                                                                                                    "sede":  "NA",
+                                                                                                                    "menciona_medicina":  "NA",
+                                                                                                                    "menciona_harvard":  "NA"
+                                                                                                                }
+                                                                              }
+}

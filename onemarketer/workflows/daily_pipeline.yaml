@@ -7,6 +7,7 @@
 #   2) SP gen_ia — STT por lotes de 25
 #   3) SP caso_conversacion — Gemini
 #   4) SP backfill atenciones (skill/channel — reporteAtenciones llega ~2 días tarde)
+#   5) SP resumen final por asesor → escrito_resumen_final
 #
 # invoke_downstream_sps: true (default) → STT + Gemini tras ETL
 # skip_etl: false (default) → si true, solo corre SPs (reproceso Gen IA)
@@ -362,6 +363,83 @@ main:
                     - mark_sp3:
                         assign:
                           - sp_results["backfill_atenciones"]: "ok"
+
+    # -------------------------------------------------------------------------
+    # 5) SP resumen final por asesor (Gemini sobre hist caso del día)
+    # -------------------------------------------------------------------------
+    - sp_resumen_final:
+        steps:
+          - log_sp4_start:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_onemarketer_escrito_resumen_final(" + process_date + ")"}'
+          - call_sp4:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_onemarketer_escrito_resumen_final`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  labels:
+                    producto: onemarketer
+                    etapa: resumen-final
+                    servicio: flash-3-5
+                    pipeline: onemarketer-daily
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 14400
+              result: sp4_job
+          - wait_sp4:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_sp4:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${sp4_job.jobReference.jobId}
+                location: ${bq_location}
+              result: sp4_status
+          - check_sp4:
+              switch:
+                - condition: ${sp4_status.status.state == "DONE"}
+                  next: sp4_done_check
+                - condition: true
+                  steps:
+                    - sleep_sp4:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_sp4:
+                        next: poll_sp4
+          - sp4_done_check:
+              switch:
+                - condition: ${"errorResult" in sp4_status.status}
+                  steps:
+                    - log_sp4_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SP resumen_final FAILED: " + string(default(map.get(map.get(sp4_status, "status"), "errorResult"), "unknown"))}'
+                    - raise_sp4:
+                        raise:
+                          message: "sp_onemarketer_escrito_resumen_final falló"
+                          error: ${sp4_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - log_sp4_ok:
+                        call: sys.log
+                        args:
+                          severity: INFO
+                          text: "SP resumen_final (escrito) OK"
+                    - mark_sp4:
+                        assign:
+                          - sp_results["resumen_final"]: "ok"
 
     - finalize:
         assign:

@@ -172,7 +172,7 @@ BEGIN
     ),
     STRUCT(
       'ml_generate_text_llm_result STRING' AS output_schema,
-      32768 AS max_output_tokens,
+      8192 AS max_output_tokens,
       0 AS temperature
     )
   ) AS ia;

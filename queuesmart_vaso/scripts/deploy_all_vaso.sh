@@ -1,6 +1,6 @@
 ﻿#!/usr/bin/env bash
 # Deploy completo stacks VASO QueeSmart (BQ + Workflow).
-# No despliega Cloud Run Jobs (gap / Whisper): usar sus cloudbuild.
+# No despliega Cloud Run Jobs (gap / qsmart_transcribe STT): usar sus cloudbuild.
 #
 # Uso:
 #   cd monorep-utp-funcionts-runs
@@ -23,7 +23,7 @@ run_bq() {
   bq query --use_legacy_sql=false --location="$LOCATION_BQ" --project_id="$PROJECT" < "$ROOT/$f"
 }
 
-# 1) Tablas (orden: hist ingest → consolidated → whisper → analisis)
+# 1) Tablas (orden: hist ingest → consolidated → STT vaso → analisis)
 run_bq "queuesmart_vaso/bigquery/tables/hist_queesmart_mp3_catalog_vaso.sql"
 run_bq "queuesmart_vaso/bigquery/tables/queuesmart_mp3_catalog_vaso.sql"
 run_bq "queuesmart_vaso/bigquery/tables/queuesmart_mp3_enriched_vaso.sql"
@@ -44,7 +44,7 @@ gcloud workflows deploy "$WF_NAME" \
 
 echo "=== OK deploy_all_vaso ==="
 echo "Jobs Cloud Run (si faltan):"
-echo "  qs_s3_gap_vaso/cloudbuild.yaml  → prd-utpbi-s3-gap-vaso"
-echo "  cr_serialize_queuesmart/cloudbuild.yaml → prd-utpbi-queuesmart-audio-serialize-whisper"
+echo "  qs_s3_gap_vaso/cloudbuild.yaml     → prd-utpbi-s3-gap-vaso"
+echo "  qsmart_transcribe/cloudbuild.yaml  → prd-utpbi-qsmart-transcribe (STT Chirp)"
 echo "Run:"
 echo "  gcloud workflows run $WF_NAME --location=$LOCATION_WF --project=$PROJECT --data='{\"process_date\":\"YYYY-MM-DD\"}'"

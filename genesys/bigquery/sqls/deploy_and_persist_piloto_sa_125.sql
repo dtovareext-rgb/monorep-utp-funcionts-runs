@@ -1,0 +1,42 @@
+﻿-- =============================================================================
+-- Deploy + persistir piloto BQ ML (muestra 01) — Speech Analytics 125
+-- Location: US
+-- Orden: 1) tables 2) procedure 3) view 4) este script (tras tener tmp_sa_paul_ia
+--        o re-ejecutar generate). Versión autocontenida abajo.
+-- =============================================================================
+
+-- 1) DDL
+--   < genesys/bigquery/tables/hist_speech_analytics_125_process_data_raw.sql
+--   < genesys/bigquery/tables/hist_speech_analytics_125_process_data_prd.sql
+--   < genesys/bigquery/procedures/sp_speech_analytics_125_parse.sql
+--   < genesys/bigquery/views/v_speech_analytics_125_crm.sql
+
+-- 2) Insert RAW desde el resultado del piloto (reusa generate si hace falta)
+--    Si aún tienes tmp_sa_paul_ia en la sesión, usa el INSERT corto.
+--    Si no, corre el bloque COMPLETE abajo.
+
+-- --- INSERT corto (misma sesión del piloto) ---
+-- DELETE FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_speech_analytics_125_process_data_raw`
+-- WHERE process_date = DATE '2026-11-02'
+--   AND uri = 'gs://prd-utp-stg-genesys-audios-b3k7w1n9x4v6p0j2t8q5m1z/data/input/genesys_audios_descarga_raw/fecha_descarga=2026-11-02/hora_descarga=18/ab10de08-60da-4f06-91fc-50c5b9cc4d34_2a1249de-de70-43ad-a7e1-ffb669f81ebe.ogg';
+--
+-- INSERT INTO `prd-utpbi-data-operation.adf_speech_analytics.hist_speech_analytics_125_process_data_raw`
+-- SELECT
+--   fecha_descarga AS process_date,
+--   fecha_descarga,
+--   hora_descarga,
+--   uri,
+--   conversation_id,
+--   cola_nombre,
+--   'speech_analytics_extraccion_125_paul_v1' AS prompt_name,
+--   ml_generate_text_llm_result AS json_text,
+--   SAFE.PARSE_JSON(REGEXP_REPLACE(REGEXP_REPLACE(ml_generate_text_llm_result, r'^```json\s*', ''), r'\s*```$', '')) AS evaluacion_json,
+--   CAST(NULL AS STRING) AS ml_status,
+--   DATETIME(CURRENT_TIMESTAMP(), 'America/Lima') AS load_date
+-- FROM tmp_sa_paul_ia;
+--
+-- CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_speech_analytics_125_parse`(DATE '2026-11-02');
+--
+-- SELECT process_date, uri, calidad_transcripcion, contacto_efectivo, estado_lead, zona_interes
+-- FROM `prd-utpbi-data-operation.adf_speech_analytics.hist_speech_analytics_125_process_data_prd`
+-- WHERE process_date = DATE '2026-11-02';

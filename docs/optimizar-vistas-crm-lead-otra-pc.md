@@ -43,9 +43,9 @@ Vista dependiente (no hace falta tocarla): `v_queuesmart_lead_conversaciones` so
 
 ---
 
-## 2) OneMarketer — reescribir + deploy
+## 2) OneMarketer — solo deploy
 
-Mismo anti-patrón en **dos** vistas:
+El SQL ya está reescrito en el repo (mismo patrón QueueSmart). Vistas:
 
 | Vista | Dataset | Archivo |
 |-------|---------|---------|
@@ -210,8 +210,8 @@ LIMIT 200;
 
 - [ ] Pull del monorepo en la otra PC
 - [ ] Deploy QueueSmart `v_queuesmart_counter_crm_lead`
-- [ ] Reescribir OneMarketer `v_onemarketer_caso_crm_lead` (sin OR)
-- [ ] Reescribir OneMarketer `v_onemarketer_lead_conversaciones` (sin OR)
+- [x] Reescribir OneMarketer `v_onemarketer_caso_crm_lead` (sin OR)
+- [x] Reescribir OneMarketer `v_onemarketer_lead_conversaciones` (sin OR)
 - [ ] Deploy ambas vistas OM
 - [ ] Comparar slot time + `leadid` / `match_method` en un día muestra
 

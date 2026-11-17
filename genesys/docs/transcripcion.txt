@@ -1,0 +1,153 @@
+﻿fecha_descarga=2026-11-02
+hora_descarga=18
+uri=gs://prd-utp-stg-genesys-audios-b3k7w1n9x4v6p0j2t8q5m1z/data/input/genesys_audios_descarga_raw/fecha_descarga=2026-11-02/hora_descarga=18/ab10de08-60da-4f06-91fc-50c5b9cc4d34_2a1249de-de70-43ad-a7e1-ffb669f81ebe.ogg
+conversation_id=ab10de08-60da-4f06-91fc-50c5b9cc4d34
+cola_nombre=ALeadsDiaCero
+transcript_chars=19933
+
+----- TRANSCRIPCION -----
+[Asesor:4.9]: Hola, ¿qué tal? ¿Cómo estás? Muy buenas noches. Me está saludando Giovanna Toledo de la Universidad Tecnológica del Perú -TP. Me estoy comunicando con Ítalo, ¿es correcto? Sí. Hola, Ítalo, ¿cómo estás? Nos has dejado tus datos. ¿Quieres estudiar una carrera universitaria? Coméntame, ¿qué carrera quieres estudiar para poderte ayudar?
+[Cliente:25.7]: Ingeniería electrónica.
+[Asesor:27.8]: Ingeniería electrónica, qué bonita carrera. Coméntame, ¿sería esta tu primera carrera que vas a estudiar o tú ya cuentas con una carrera técnica o universitaria?
+[Cliente:37.3]: Primera carrera.
+[Asesor:38.9]: Primera carrera. Coméntame, Ítalo, ¿tú ya terminaste el quinto año de secundaria? ¿Hace cuánto tiempo, por favor?
+[Cliente:48.4]: Sí, lo terminé en el año 2024.
+[Asesor:51.6]: ¿Hace dos años? Ok. Ok, perfecto, vamos a ayudarte con ello. Ahora, ¿en qué departamento te encuentras, Ítalo?
+[Cliente:60.0]: En Los Olivos.
+[Asesor:61.5]: En Los Olivos. Tú quieres estudiar presencial, ¿cierto?
+[Cliente:68.3]: Ajá, sí,
+[Asesor:69.9]: es
+[Cliente:69.9]: presencial.
+[Asesor:70.8]: Presencial, porque esa carrera es presencial. Ingeniería electrónica. Y dime, ¿qué es lo que te motiva a estudiar esta carrera? ¿Qué es lo que más te gusta de la carrera de ingeniería electrónica?
+[Cliente:81.3]: En hacer tarjeta para los declaradores. Tiene una muy buena rama.
+[Asesor:91.7]: Sí, es muy interesante. Qué bueno, qué bueno. Entonces, ¿tú quieres decir que tú estás, tu DNI, ¿qué departamento indica? ¿Qué distrito, exactamente? Distrito
+[Cliente:102.0]: en ICA, Chincha.
+[Asesor:104.6]: Ah, tu DNI pertenece a ICA, ¿correcto? Pero tú quieres estudiar en la sede de Lima Norte.
+[Cliente:111.2]: Claro, porque vivo acá.
+[Asesor:113.5]: Ah, vives aquí en Lima.
+[Cliente:114.8]: Ajá, sí.
+[Asesor:115.5]: Ah, ok, perfecto, perfecto. Ok, vamos a ayudarte con ello. Ingeniería electrónica. Si contamos con la carrera, te comento, ¿sí? Es una carrera para que tú estudies cinco años. Es una carrera universitaria, ¿sí? Un ciclo aquí en UTP lo haces en cinco meses. Al año tú haces dos ciclos, ¿correcto? ¿Claro hasta ahí?
+[Cliente:136.2]: Sí. Perfecto.
+[Asesor:137.7]: Ahora, comentarte que cuentas con la flexibilidad de poder adelantar cursos. El poder adelantar cursos te permite a ti reducir la carga académica y con ello reducir el tiempo de estudio. ¿Sí? ¿Claro hasta ahí?
+[Cliente:150.6]: Sí. Sí.
+[Asesor:151.4]: Perfecto. Un alumno regular puede terminar la carrera adelantando cursos en verano y en cada inicio puede terminar la carrera hasta en un aproximado de más o menos, estamos hablando, cuatro años. ¿Sí? ¿Claro hasta ahí?
+[Cliente:167.2]: Sí. Perfecto.
+[Asesor:169.0]: Ahora, dentro de lo que es la carrera que tú estás eligiendo, ingeniería electrónica, vas a contar con lo siguiente. Esta carrera es muy bonita, ¿sí? Tiene bastante demanda laboral en el mercado, ¿sí? Sí, porque no solamente es para crear tarjetas, la carrera de ingeniería electrónica va mucho más allá que ellos, ¿cierto? Entonces,
+[Cliente:188.2]: es
+[Asesor:188.5]: mucho más, es mucho más completa. Esta carrera, pues, tú vas a diseñar circuitos, hacer mantenimiento de equipos electrónicos, implementar nuevos sistemas electrónicos. Por ejemplo, estudiando la carrera vas a poder diseñar placas de circuitos impresos para celulares, computadoras, sistemas de telecomunicaciones o equipos médicos. También vas a poder analizar los posibles fallos de los circuitos para garantizar el correcto funcionamiento, probar el funcionamiento de equipos electrónicos, escribir software para controlar el hardware de los equipos electrónicos, desarrollar sistemas de automatización y control para procesos industriales. Por eso le digo que va mucho más allá de ellos, ¿sí? Ahora, con respecto a lo que es los sistemas eléctricos, electrónicos y procesamiento de señales, ¿sí? Vas a aprender acerca de ellos, cómo se procesan las señales eléctricas, los sistemas, los sistemas de telecomunicaciones. También vas a aprender acerca de lo que es la automatización, cómo controlar y automatizar procesos industriales para mejorar la eficiencia y la calidad. También vas a estudiar el funcionamiento del sistema de comunicación, transmitores, receptores, ¿correcto? Todo ello. Ahora, te comento algo adicional. Esta carrera, conforme tú la vas estudiando, después del segundo año, ¿sí? Mira, después del segundo año que tú has estudiado, cuarto ciclo, vas a contar con certificaciones. Certificaciones que de manera progresiva la universidad te va a ir otorgando, ¿sí? ¿Para qué? Para que tú ya puedas trabajar o hacer pequeñas prácticas en una empresa, ¿sí? La primera certificación que obtienes es diseñador de sistemas embebidos, ¿sí? Esa es la primera certificación. Te vas a certificar en ello, después del segundo año. La siguiente certificación es analista en procesamiento de señales e imágenes. Esa es la segunda certificación que vas a obtener. Y la tercera certificación es especialista en sistemas de automatización y control. ¿Claro hasta ahí? ¿Sí?
+[Cliente:326.0]: Sí.
+[Asesor:326.8]: Estas tres certificaciones llegan a ti después del segundo año, antes de que tú termines la carrera universitaria. Cuando tú terminas tu carrera universitaria, ahí recién obtienes tu título de ingeniero electrónico. ¿Sí? ¿Hasta ahí claro?
+[Cliente:342.8]: Sí, claro.
+[Asesor:344.3]: Perfecto. Ahora, también te comento que dentro de la malla curricular tú vas a llevar el curso del idioma inglés. Recuerda que vas a ver circuitos, parte de programación, automatización. Muchas veces ellos llegan a inglés, ¿cierto? Y
+[Cliente:358.3]: tienes
+[Asesor:358.6]: que tener conocimiento de ello. Ahora, con respecto al idioma inglés, la universidad te va a brindar el curso del idioma inglés por dos años hasta un nivel intermedio. No solamente para que tú tengas como base en la carrera que estás estudiando, sino para que cuando tú termines tu carrera universitaria, ¿sí? Mira, cuando tú termines tu carrera universitaria, ¿sí? Puedas realizar lo que es tu tesis para la titulación, ¿sí? Y de esa manera, no tener que dilatar el tiempo de tu carrera, ni tampoco hacer un gasto adicional por el idioma. ¿Sí? ¿Claro está ahí?
+[Cliente:391.8]: Sí, claro.
+[Asesor:392.9]: Perfecto. Ahora, en la modalidad que tú estás eligiendo aquí en la sede Lima Norte, sí contamos con la carrera de ingeniería electrónica, ¿sí? A ver, Lima Norte, a ver, vamos a ver en qué turno lo tengo, ¿sí? ¿Tú estás trabajando actualmente? ¿De qué hora a qué hora trabajas?
+[Cliente:412.4]: De 8 a 6, pero tengo flexibilidad con los horarios por estudios.
+[Asesor:422.9]: Ya, pero dime, tú quieres estudiar, a ver, yo tengo la modalidad para la carrera de ingeniería electrónica para que estudies en el turno de la mañana, o, mira lo que te digo, estudies tres veces en la semana, asistas a la modalidad para gente que trabaja. La modalidad para gente que trabaja es un horario en turno de la noche o fines de semana. No es en la mañana, porque la modalidad para gente que trabaja es un horario para las personas durante el día, trabaja que en la noche estudies. ¿Esa modalidad te gustaría?
+[Cliente:452.3]: Sí. Ya,
+[Asesor:453.8]: esta modalidad, en la noche, esta modalidad te permite asistir a la universidad tres veces a la semana, en la noche. Sí. El rango de horario es entre seis y media de la tarde a diez y media de la noche. Dentro de ese rango de horario tú vas a tener la clase. Puede ser hipotéticamente. Puede ser que el día lunes te toque, no sé, mira, de seis y media a ocho y media, porque tú vas por horas pedagógicas. El día miércoles
+[Cliente:480.2]: que
+[Asesor:480.3]: te toque de siete a nueve y el día viernes que te toque de ocho a diez, o mejor dicho, no, algo así. No lo sabemos, pero tú asistes, mira, por ciclo llevas seis cursos. Tres cursos vas a llevar los presenciales en la universidad, ¿correcto? Y los otros tres cursos los vas a llevar grabados dentro de tu plataforma de UTP. ¿Qué quiere decir? Me conecto para los cursos virtuales, me conecto para los cursos presenciales, me voy a la universidad. Y para los virtuales, en el momento que yo tenga tiempo, hago y desarrollo. ¿Esa modalidad está bien para ti? ¿Sí?
+[Cliente:512.9]: Sí.
+[Asesor:514.3]: Perfecto. Ahora, hay un detalle. Nosotros tenemos un proceso de admisión. Nuestro proceso de admisión se está realizando el día 22 de noviembre. El examen de admisión es 100 % virtual, ¿correcto? Entonces, para este proceso de admisión, la universidad, ¿sí? Te está brindando lo siguiente. Mira, hoy la universidad, como tú vas a dar examen, te está brindando el 50 % de descuento en lo que es tu inscripción y el 50 % de descuento en lo que es tu matrícula. ¿Qué quiere decir? Realizar hoy tu inscripción estimado ítalo, vas a pagar menos. El costo regular de la carrera para la inscripción es 230 soles, tu inscripción. Pero si lo realizas ahora, solamente vas a pagar la mitad, 115 soles. ¿Claro hasta ahí?
+[Cliente:569.7]: Sí.
+[Asesor:570.8]: ¿Ya? Correcto. Luego de ello, vas a subir a la plataforma de UTP la imagen de tu DNI de ambos lados. Y adicional a ello, ¿tienes a la mano por casualidad tu certificado de quinto año secundaria?
+[Cliente:585.1]: Sí.
+[Asesor:586.4]: Perfecto. Se sube a la plataforma tu certificado de quinto, ¿sí? Una vez que tú ya subiste tu certificado de quinto, te vamos a enviar tu valotario y un enlace para que te conectes a un taller de preparación. Porque miren, este proceso la universidad te va a preparar, ¿sí? Entonces, tu taller de preparación va a ser de 7 a 8 de la noche y es virtual. Tú no tienes que acercarte a la universidad para nada en el proceso de admisión. Solamente te vas a acercar cuando tú inicies clase. ¿Claro hasta ahí? Sí. Perfecto. Entonces, realizas tu inscripción, pagas ahora los 115, te enviamos el valotario, te conectas de 7 a 8 de la noche, correcto, para el taller virtual. Llega el 22 de noviembre, das tu examen de admisión, lo puedes dar desde tu celular, desde tu laptop, desde tu PC, desde tus tabletas, desde cualquier equipo que tú tengas. Es con la cámara apagada. Son 36 preguntas. Es un examen preferencial, razonamiento matemático y razonamiento verbal. Das el examen el 22 de noviembre, al día siguiente, el 23 de noviembre, estás pagando la matrícula, pero con el 50 % de descuento. ¿Qué quiere decir? Que vas a pagar cuánto. La matrícula tiene como costo para la carrera 395. Pero como te estás inscribiendo ahora con el 50%, tu matrícula también aplica el 50%. Vas a pagar 197 ,50. ¿Claro hasta ahí?
+[Cliente:669.8]: Sí.
+[Asesor:670.8]: Perfecto. Muy bien. Una vez que tú ya pagaste tu matrícula, vas a llevar talleres adicionales. Vas a llevar talleres de Microsoft Office, taller de introducción a las plataformas y talleres de inglés. Todos los talleres que de aquí en adelante, después de tu matrícula, obtengas, son completamente sin costo. Ahora, nuestras clases se están iniciando en el mes de marzo del 2027. Cuando inicies clases, recién vas a pagar la mensualidad. Ahora no hay pago de mensualidad. ¿Correcto? En el caso de tu mensualidad, tu mensualidad tiene como costo 825 soles. Esa va a ser tu mensualidad. La cual se va a pagar en el mes de marzo en adelante. Pero recuerda algo adicional, Ítalo. Tienes un descuento del 5 % cada vez que pagues anticipado la fecha del vencimiento. ¿Cómo así? Hipotéticamente hablando. Resulta que me toca pagar el 30 de marzo. ¿Sí? Pero yo tengo el dinero el 29 y pago el 29 en mi mensualidad. Hazlo. Págalo el 29 para que obtengas el 5 % de descuento y reduzca tu mensualidad ya no de 825, sino va a ser 783 ,80. ¿Claro está ahí?
+[Cliente:745.6]: Sí, claro.
+[Asesor:747.4]: Perfecto. Entonces, Ítalo, vamos a ayudarte ahora con tu proceso de inscripción. ¿Sí? Para que puedas realizar tu inscripción, ingresemos tus datos y te envíen tus credenciales. ¿Cuál es tu número de DNI, Ítalo, para ayudarte con ello?
+[Cliente:760.8]: Antes tenía una consulta.
+[Asesor:763.0]: Una
+[Cliente:763.2]: consulta.
+[Asesor:764.2]: Dime tu consulta.
+[Cliente:765.0]: ¿Qué pasaría si yo he estudiado un ciclo, pero en este Cenati?
+[Asesor:774.5]: ¿Tú has estudiado un ciclo en Cenati?
+[Cliente:777.1]: Sí.
+[Asesor:778.3]: ¿Ya? Normal. Normal. Puedes estudiar, no hay ningún problema.
+[Cliente:785.1]: Pero iniciaría desde el primer ciclo igual.
+[Asesor:790.8]: Claro, lo que pasa es que Cenati es un instituto.
+[Cliente:794.5]: Ajá.
+[Asesor:795.0]: Y estás llevando la carrera a nivel universitario, que es diferente. Y solamente has hecho un ciclo. O sea, el primer ciclo. ¿Y lo terminaste o no lo terminaste?
+[Cliente:809.6]: Sí.
+[Asesor:811.7]: Entonces, mi recomendación es que estudies una carrera universitaria. ¿Por qué? Porque con una carrera universitaria tú te titulas como ingeniero. Y de ahí tú ya no tienes que hacer ningún otro procedimiento, sino que de ahí sigues creciendo. Haces tu maestría, tu doctorado y sigues creciendo.
+[Cliente:829.8]: En
+[Asesor:830.4]: cambio, con una carrera técnica tienes que llegar a un nivel universitario para que hagas lo que te he comentado. Es doble tiempo, doble gasto.
+[Cliente:841.2]: En
+[Asesor:842.8]: cambio, esto es una sola inversión para ti. ¿Alguna otra pregunta, Ítalo?
+[Cliente:853.3]: No.
+[Asesor:854.8]: Ok. Entonces, continuamos con tu inscripción. ¿Sí? Brindame tu DNI. ¿Cuál es el número para poderte ayudar con ello?
+[Cliente:861.6]: 60 -22 -93 -26.
+[Asesor:867.1]: ¿Cuántas tú con seguro o de salud o CIS?
+[Cliente:873.6]: Salud.
+[Asesor:874.9]: Salud. Ah, o sea, en la empresa donde estás trabajando sí te brinde salud. Ya, vamos a validarlo. Si te brinde salud, hago que te exoneren del seguro universitario en UTP. ¿Sí? Déjame validarlo.
+[Cliente:886.7]: Sí.
+[Asesor:887.2]: Vamos
+[Cliente:887.2]: a
+[Asesor:887.5]: validar. Ítalo Luciano Villalta Nestares, ¿correcto?
+[Cliente:891.9]: Sí.
+[Asesor:892.8]: Ok. Sí cuentas con seguro. Ahora, indícame por favor tu fecha de nacimiento, Ítalo. ¿Tú cuándo naciste?
+[Cliente:901.1]: 0 -8 -10 -2007.
+[Asesor:905.5]: ¿8 de octubre del 2007? ¿Así lo entiendo?
+[Cliente:909.8]: Sí. 0
+[Asesor:911.0]: -8 de octubre del 2007, correcto. ¿Estás trabajando en la empresa actual de manera dependiente o independiente?
+[Cliente:922.2]: Independiente.
+[Asesor:923.7]: Independiente, ok. ¿Cuál es tu correo electrónico, por favor? Indícame.
+[Cliente:929.5]: Italo Villalta arroba iClub .com
+[Asesor:933.6]: iClub. A ver, vamos a ver. Italo Villalta arroba iClub .com, correcto. Te voy a compartir al WhatsApp tu correo electrónico. Confírmame, por favor, si está bien escrito. Si hay algo para modificar, también indícame, ¿sí? Ahí te lo estoy compartiendo, por favor. Un momento, chécalo ahí, mira. Valídalo. Al WhatsApp te lo estoy compartiendo. Confírmame, por favor,
+[Cliente:957.5]: está bien escrito. Sí, estoy.
+[Asesor:960.9]: Perfecto. Ahora, vamos a continuar. Indícame, el quinto año de secundaria, ¿tú lo terminaste en el departamento de Lima o en provincia?
+[Cliente:972.8]: Provincia, Chincha.
+[Asesor:974.4]: En Ica, Ica, ¿verdad?
+[Cliente:976.9]: Ajá, Ica.
+[Asesor:977.9]: Provincia, Chincha. ¿Y
+[Cliente:980.0]: en
+[Asesor:980.0]: qué distrito de Chincha?
+[Cliente:982.2]: Tambo de Mora.
+[Asesor:983.8]: Tambo de Mora, vamos a colocarlo acá. ¿Cómo se llama el colegio donde estudiaste?
+[Cliente:989.5]: Ernesto Belir, Luis.
+[Asesor:991.6]: ¿Ernesto? Belir
+[Cliente:993.5]: Ruiz.
+[Asesor:995.2]: Ernesto Belir. ¿Y queda en Tambo de Mora?
+[Cliente:998.4]: No, en Chincha.
+[Asesor:1000.1]: Ah, en Chincha. Ok, vamos a colocarlo acá, entonces queda en Chincha. ¿Chincha alto o Chincha baja?
+[Cliente:1007.2]: Chincha alta.
+[Asesor:1008.4]: Chincha, Chincha alto. Vamos a ponerlo acá. Es, Enrique, me dijiste, ¿verdad?
+[Cliente:1016.1]: Ernesto Belir Ruiz.
+[Asesor:1018.3]: Ernesto Belir Ruiz. Ok. ¿En qué año? ¿2024 me dijiste exterminarte es el quinto año, ¿cierto?
+[Cliente:1025.6]: Sí.
+[Asesor:1026.8]: Correcto. Ya, entonces hasta ahí todo esto, ok. Ahora, vamos a continuar con ello. La carrera que vas a estudiar va a ser en la modalidad semipresencial para que asistas tres veces en la semana en la sede en Lima Norte en el turno de la noche. ¿Correcto? Y vas a
+[Cliente:1045.1]: recibir
+[Asesor:1045.4]: un examen de admisión, que es un examen preferencial. La carrera es Ingeniería Electrónica. Tu dirección de domicilio, según tu DNI, ¿cómo sale? Calle, Girón, Avenida, Centro Poblado, Anexo, ¿cómo sale en tu DNI?
+[Cliente:1062.7]: Calle 2 de Mayo.
+[Asesor:1064.6]: Calle 2 de Mayo. Calle 2 de Mayo tiene un número o es sin número? Manzanas.
+[Cliente:1074.6]: Sin número.
+[Asesor:1075.5]: Sin número, ok. ¿Esto sí está en Ica, Chincha, Tambo de Mora?
+[Cliente:1081.1]: Tambo de Mora, Tambo de Mora.
+[Asesor:1082.7]: Ok, perfecto. Indícame, por favor, ¿tú por casualidad presentas alguna discapacidad que la universidad UTP deba saber para colocarlo aquí en la ficha?
+[Cliente:1095.2]: No.
+[Asesor:1096.5]: No, qué bueno, gracias a Dios. Indícame, por favor, tus padres. Uno de los dos cuenta con estudios superiores universitarios?
+[Cliente:1106.1]: No.
+[Asesor:1107.2]: No, ok, vamos a colocarlo. Bríndame, por favor, solamente nombre de tu papá y nombre de tu mamá. ¿Cuáles son sus nombres? Por favor. Pablo
+[Cliente:1117.3]: y Paola.
+[Asesor:1120.4]: Pablo y Paola. Vamos a colocar acá. Pablo y Paola. Ahora, en caso de una emergencia, ¿a qué persona de contacto colocamos en la ficha? A tu papá, a tu mamá, tal vez a un hermano, una hermana, un tío, una tía, ¿a quién sería?
+[Cliente:1138.7]: A mi mamá.
+[Asesor:1140.0]: A tu mamá, a la señora Paola. Indícame, por favor, el número de teléfono de la señora Paola, tu mamita, ¿cuál es?
+[Cliente:1147.3]: 9 -0 -6.
+[Asesor:1149.3]: Ok.
+[Cliente:1151.2]: 3 -7 -1.
+[Asesor:1152.4]: 3 -7 -1.
+[Cliente:1154.1]: 2 -11.
+[Asesor:1155.8]: 2 -11. El quinto año de secundaria, ¿qué lo terminaste? ¿Lo terminaste en el turno de la mañana o en el turno de la tarde?
+[Cliente:1164.6]: De la mañana.
+[Asesor:1165.9]: De la mañana. Valido contigo tus datos, estimado Ítalo. Por favor, escucha, por favor. Tu nombre completo es Ítalo. Ítalo se escribe con Cristina. Luciano Villalta Nestares. Nestares es la primera con S y la segunda con Z, ¿cierto?
+[Cliente:1181.0]: Sí.
+[Asesor:1182.4]: Tu correo electrónico, perdón, tu DNI, 6022 -9326, ¿es correcto?
+[Cliente:1189.1]: Sí.
+[Asesor:1190.0]: Ya. Tu fecha de nacimiento, 8 de octubre del 2007. Trabajas de manera independiente y cuentas con secundaria completa. Tu teléfono es 936 -597 -263. Tu correo electrónico, italovillalta .iclub .com. Estudiaste en el colegio Ernesto Beliz Ruiz, en Chicha Alta, en ICA. Terminaste el quinto año del 2024. Vas a estudiar la carrera de Ingeniería Electrónica en la modalidad semipresencial para asistencia en el turno de la noche, tres veces a la semana en la sede Lima Norte. Tu dirección de domicilio es calle 2 de Mayo, Tambo de Mora, Chincha, ICA. No presentas ninguna discapacidad, gracias a Dios. Tus papitos no cuentan con estudios superiores universitarios. El nombre de tu papito es Pablo y tu mamita Paola. Tú responsable de tus pagos y en caso de una emergencia hemos colocado a tu mamita, la señora Paola, de teléfono 906 -371 -211. Confírmame, ¿toda la información que he mencionado está correcta o hay algo que debamos de modificar, Ítalo, por favor?
+[Cliente:1261.8]: Todo correcto.
+[Asesor:1263.2]: Perfecto. Ahora, para poder validar esa información, te voy a compartir parte de tu ficha para que tú lo puedas visualizar y me confirmas si está bien escrito, ¿sí? Por favor, dame un momento. Ahí te estoy compartiendo el WhatsApp. Válida, por favor, tus datos. ¿Está bien escrito? Tu apellido, tu DNI, tu fecha de nacimiento, ¿sí?
+[Cliente:1288.8]: Sí, sí, sí.
+[Asesor:1320.8]: El cliente generado por este pago se envía a mi persona al WhatsApp que estamos conversando para poder ayudarlo e incorporarlo en tu ficha. E inmediatamente te llegan tus credenciales y te ayudamos a subir tu documentación a la plataforma.

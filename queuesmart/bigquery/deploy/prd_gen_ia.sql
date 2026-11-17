@@ -68,6 +68,13 @@
 -- bq query --use_legacy_sql=false --location=US \
 --   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia.sql
 --
+-- -- 4) Resumen final por asesor
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/tables/counter_resumen_final.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/procedures/sp_queuesmart_counter_resumen_final.sql
+--
 -- Orquestación diaria:
 --   1. Cloud Run qs_s3_to_gcs (ffmpeg + loudnorm → hist catálogo)
 --   2. CALL raw_queue_smart.sp_queuesmart_mp3_consolidate(ayer)

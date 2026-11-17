@@ -5,7 +5,7 @@ Todo el pipeline paralelo (legado-miss) vive bajo este paquete + 2 Jobs hermanos
 ## Diagrama
 
 ```text
-qs_s3_gap_vaso (Job)
+qs_s3_gap_vaso (Job) — FLAC+loudnorm (mismo patrón qs_s3_to_gcs)
         │  escribe
         ▼
 hist_queesmart_mp3_catalog_vaso          ← DDL aquí + qs_s3_gap_vaso
@@ -14,7 +14,7 @@ sp_queuesmart_mp3_consolidate_vaso
         ├── queuesmart_mp3_catalog_vaso
         └── queuesmart_mp3_enriched_vaso
                 │
-cr_serialize_queuesmart (Job Whisper)
+qsmart_transcribe (Job STT Chirp 3)
         ├── hist_queuesmart_mp3_whisper_vaso_raw
         └── hist_queuesmart_mp3_whisper_vaso_prd
                 │
@@ -32,7 +32,7 @@ Orquestador: `workflows/vaso_pipeline.yaml` → Workflow `queuesmart-vaso-pipeli
 | `bigquery/tables/hist_queesmart_mp3_catalog_vaso.sql` | Hist ingest S3→GCS vaso |
 | `bigquery/tables/queuesmart_mp3_catalog_vaso.sql` | Catalog consolidado vaso |
 | `bigquery/tables/queuesmart_mp3_enriched_vaso.sql` | Enriched + tickets vaso |
-| `bigquery/tables/hist_queuesmart_mp3_whisper_vaso.sql` | Whisper raw+prd |
+| `bigquery/tables/hist_queuesmart_mp3_whisper_vaso.sql` | STT vaso raw+prd (nombre histórico) |
 | `bigquery/tables/hist_queuesmart_audio_analisis_ia_vaso.sql` | Análisis Gemini raw+prd |
 | `bigquery/procedures/sp_queuesmart_mp3_consolidate_vaso.sql` | Consolidate |
 | `bigquery/procedures/sp_queuesmart_audio_analisis_ia_vaso.sql` | Análisis IA |
@@ -44,8 +44,8 @@ Orquestador: `workflows/vaso_pipeline.yaml` → Workflow `queuesmart-vaso-pipeli
 
 | Paquete | Job | Qué hace |
 |---|---|---|
-| [`qs_s3_gap_vaso/`](../qs_s3_gap_vaso/) | `prd-utpbi-s3-gap-vaso` | S3→GCS solo legado-miss |
-| [`cr_serialize_queuesmart/`](../cr_serialize_queuesmart/) | `prd-utpbi-queuesmart-audio-serialize-whisper` | Whisper → tablas vaso |
+| [`qs_s3_gap_vaso/`](../../speech_counter/qs_s3_gap_vaso/) o `speech_counter/qs_s3_gap_vaso` | `prd-utpbi-s3-gap-vaso` | S3→GCS solo legado-miss |
+| [`qsmart_transcribe/`](../../speech_counter/qsmart_transcribe/) | `prd-utpbi-qsmart-transcribe` | STT Chirp 3 → tablas vaso (env overrides) |
 
 ## Tablas BQ (todas vaso; ninguna prod)
 
@@ -55,7 +55,7 @@ Orquestador: `workflows/vaso_pipeline.yaml` → Workflow `queuesmart-vaso-pipeli
 - `queuesmart_mp3_enriched_vaso`
 
 **adf_speech_analytics**
-- `hist_queuesmart_mp3_whisper_vaso_raw` / `_prd`
+- `hist_queuesmart_mp3_whisper_vaso_raw` / `_prd` (STT vaso)
 - `hist_queuesmart_audio_analisis_ia_vaso_raw` / `_prd`
 
 ## Deploy de todo
@@ -70,8 +70,8 @@ Luego (si aún no existen los Jobs):
 # Gap S3
 gcloud builds submit --config=qs_s3_gap_vaso/cloudbuild.yaml --project=prd-utpbi-data-operation .
 
-# Whisper
-gcloud builds submit --config=cr_serialize_queuesmart/cloudbuild.yaml --project=prd-utpbi-data-operation .
+# STT (mismo Job que prod; el workflow pasa tablas vaso por env)
+gcloud builds submit --config=qsmart_transcribe/cloudbuild.yaml --project=prd-utpbi-data-operation .
 ```
 
 ## Run end-to-end

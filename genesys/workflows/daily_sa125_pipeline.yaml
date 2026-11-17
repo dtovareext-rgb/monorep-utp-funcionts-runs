@@ -1,0 +1,351 @@
+# =============================================================================
+# Cloud Workflows — Pipeline diario Speech Analytics 125 (prompt Paul)
+#
+# Prerrequisito: genesys_audios_serialize_markov del process_date ya cargado
+#   (cr_serialize_markov / pipeline Markov previo).
+#
+# 1) COUNT candidatos (serialize con transcripción)
+# 2) init: DELETE RAW del día
+# 3) loop: batch(offset, batch_size) — AI.GENERATE_TABLE → RAW
+# 4) parse: RAW → PRD
+#
+# Args opcionales:
+#   process_date     YYYY-MM-DD (default: ayer America/Lima)
+#   batch_size       default 20
+#   start_offset     default 0 (reproceso desde un lote)
+#   skip_init        true = no borrar RAW del día (reanudar)
+#
+# Deploy:
+#   gcloud workflows deploy genesys-sa125-daily \
+#     --location=us-central1 \
+#     --source=genesys/workflows/daily_sa125_pipeline.yaml \
+#     --project=prd-utpbi-data-operation \
+#     --service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+#
+# Run:
+#   gcloud workflows run genesys-sa125-daily --location=us-central1 --data='{}'
+#   gcloud workflows run genesys-sa125-daily --location=us-central1 \
+#     --data='{"process_date":"2026-11-02","batch_size":20}'
+#
+# Reanudar si falló el lote offset=40:
+#   {"process_date":"2026-11-02","start_offset":40,"skip_init":true}
+#
+# Scheduler (después de serialize; ej. 09:00 America/Lima → procesa ayer):
+#   gcloud scheduler jobs create http prd-sch-genesys-sa125-daily \
+#     --project=prd-utpbi-data-operation \
+#     --location=us-central1 \
+#     --schedule="0 9 * * *" \
+#     --time-zone="America/Lima" \
+#     --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/genesys-sa125-daily/executions" \
+#     --http-method=POST \
+#     --oauth-service-account-email=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com \
+#     --message-body='{}'
+# =============================================================================
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
+          - bq_location: ${default(map.get(args, "bq_location"), "US")}
+          - batch_size: ${int(default(map.get(args, "batch_size"), 20))}
+          - start_offset: ${int(default(map.get(args, "start_offset"), 0))}
+          - skip_init: ${default(map.get(args, "skip_init"), false)}
+          - process_date: ${default(map.get(args, "process_date"), null)}
+          - started_at: ${sys.now()}
+          - batches_ok: 0
+          - sp_results: {}
+
+    - resolve_process_date:
+        switch:
+          - condition: ${process_date != null}
+            next: log_start
+          - condition: true
+            steps:
+              - compute_yesterday:
+                  assign:
+                    # Lima = UTC-5. sys.now()-18000 ≈ Lima; -86400 = ayer.
+                    - process_date: ${text.substring(time.format(sys.now() - 104400), 0, 10)}
+
+    - log_start:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"genesys sa125 START process_date=" + process_date + " batch_size=" + string(batch_size) + " start_offset=" + string(start_offset)}'
+
+    - count_ia:
+        call: googleapis.bigquery.v2.jobs.query
+        args:
+          projectId: ${project_id}
+          body:
+            query: '${"SELECT COUNT(*) AS n FROM `" + project_id + ".raw_genesys_audios.genesys_audios_serialize_markov` WHERE fecha_descarga = DATE ''" + process_date + "'' AND uri IS NOT NULL AND NULLIF(TRIM(serialized_level_1), '''') IS NOT NULL"}'
+            useLegacySql: false
+            location: ${bq_location}
+            timeoutMs: 60000
+            labels:
+              pipeline: genesys_sa125
+              sp: count_ia
+        result: count_job
+
+    - parse_count:
+        assign:
+          - ia_count: ${int(count_job.rows[0].f[0].v)}
+
+    - log_count:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"Candidatos SA125 (serialize con tx) = " + string(ia_count) + " process_date=" + process_date}'
+
+    - maybe_skip_ia:
+        switch:
+          - condition: ${ia_count == 0}
+            steps:
+              - log_empty:
+                  call: sys.log
+                  args:
+                    severity: WARNING
+                    text: "Sin transcripciones serialize — se omite generate y parse"
+              - mark_empty:
+                  assign:
+                    - sp_results["ia"]: "skipped_empty"
+              - skip_to_end:
+                  next: finalize
+          - condition: true
+            next: maybe_init
+
+    - maybe_init:
+        switch:
+          - condition: ${skip_init == true}
+            next: init_loop
+          - condition: true
+            next: sp_init
+
+    - sp_init:
+        steps:
+          - log_init:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_speech_analytics_125_init(" + process_date + ")"}'
+          - call_init:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_sa125
+                    sp: sa125_init
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_speech_analytics_125_init`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 600
+              result: init_job
+          - wait_init:
+              call: sys.sleep
+              args:
+                seconds: 3
+          - poll_init:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${init_job.jobReference.jobId}
+                location: ${bq_location}
+              result: init_status
+          - check_init:
+              switch:
+                - condition: ${init_status.status.state == "DONE"}
+                  next: init_done
+                - condition: true
+                  steps:
+                    - sleep_init:
+                        call: sys.sleep
+                        args:
+                          seconds: 5
+                    - loop_init:
+                        next: poll_init
+          - init_done:
+              switch:
+                - condition: ${"errorResult" in init_status.status}
+                  steps:
+                    - raise_init:
+                        raise:
+                          message: "sp_speech_analytics_125_init falló"
+                          error: ${init_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - mark_init:
+                        assign:
+                          - sp_results["init"]: "ok"
+
+    - init_loop:
+        assign:
+          - offset: ${start_offset}
+
+    - loop_batches:
+        switch:
+          - condition: ${offset < ia_count}
+            next: sp_batch
+          - condition: true
+            next: sp_parse
+
+    - sp_batch:
+        steps:
+          - log_batch:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP batch offset=" + string(offset) + " size=" + string(batch_size) + " of " + string(ia_count)}'
+          - call_batch:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_sa125
+                    sp: sa125_batch
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_speech_analytics_125_batch`(DATE ''" + process_date + "'', " + string(offset) + ", " + string(batch_size) + ");"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 7200
+              result: batch_job
+          - wait_batch:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_batch:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${batch_job.jobReference.jobId}
+                location: ${bq_location}
+              result: batch_status
+          - check_batch:
+              switch:
+                - condition: ${batch_status.status.state == "DONE"}
+                  next: batch_done
+                - condition: true
+                  steps:
+                    - sleep_batch:
+                        call: sys.sleep
+                        args:
+                          seconds: 15
+                    - loop_poll_batch:
+                        next: poll_batch
+          - batch_done:
+              switch:
+                - condition: ${"errorResult" in batch_status.status}
+                  steps:
+                    - log_batch_err:
+                        call: sys.log
+                        args:
+                          severity: ERROR
+                          text: '${"SA125 batch FAILED offset=" + string(offset) + " — reanudar con start_offset=" + string(offset) + " skip_init=true"}'
+                    - raise_batch:
+                        raise:
+                          message: "sp_speech_analytics_125_batch falló"
+                          offset: ${offset}
+                          error: ${batch_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - bump:
+                        assign:
+                          - offset: ${offset + batch_size}
+                          - batches_ok: ${batches_ok + 1}
+                          - sp_results["batches_ok"]: ${batches_ok}
+                    - next_batch:
+                        next: loop_batches
+
+    - sp_parse:
+        steps:
+          - log_parse:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_speech_analytics_125_parse(" + process_date + ")"}'
+          - call_parse:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_sa125
+                    sp: sa125_parse
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_speech_analytics_125_parse`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 1800
+              result: parse_job
+          - wait_parse:
+              call: sys.sleep
+              args:
+                seconds: 3
+          - poll_parse:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${parse_job.jobReference.jobId}
+                location: ${bq_location}
+              result: parse_status
+          - check_parse:
+              switch:
+                - condition: ${parse_status.status.state == "DONE"}
+                  next: parse_done
+                - condition: true
+                  steps:
+                    - sleep_parse:
+                        call: sys.sleep
+                        args:
+                          seconds: 8
+                    - loop_parse:
+                        next: poll_parse
+          - parse_done:
+              switch:
+                - condition: ${"errorResult" in parse_status.status}
+                  steps:
+                    - raise_parse:
+                        raise:
+                          message: "sp_speech_analytics_125_parse falló"
+                          error: ${parse_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - mark_parse:
+                        assign:
+                          - sp_results["parse"]: "ok"
+
+    - finalize:
+        assign:
+          - ended_at: ${sys.now()}
+          - elapsed_seconds: ${ended_at - started_at}
+          - summary:
+              process_date: ${process_date}
+              ia_count: ${default(ia_count, 0)}
+              batch_size: ${batch_size}
+              batches_ok: ${batches_ok}
+              sps: ${sp_results}
+              elapsed_seconds: ${elapsed_seconds}
+
+    - log_summary:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"genesys sa125 OK process_date=" + string(process_date) + " ia_count=" + string(default(ia_count, 0)) + " batches_ok=" + string(batches_ok) + " elapsed_s=" + string(elapsed_seconds)}'
+
+    - return_summary:
+        return: ${summary}

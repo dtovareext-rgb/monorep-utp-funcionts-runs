@@ -30,6 +30,12 @@
 -- bq query --use_legacy_sql=false --location=US \
 --   < onemarketer/bigquery/procedures/sp_onemarketer_backfill_atenciones.sql
 --
+-- bq query --use_legacy_sql=false --location=US \
+--   < onemarketer/bigquery/tables/escrito_resumen_final.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < onemarketer/bigquery/procedures/sp_onemarketer_escrito_resumen_final.sql
+--
 -- Workflow (recomendado):
 --   gcloud workflows deploy onemarketer-daily-pipeline ...
 --   (ETL CF → SP STT lotes → SP Gemini → SP backfill atenciones)

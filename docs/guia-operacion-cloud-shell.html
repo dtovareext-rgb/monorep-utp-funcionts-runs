@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Guía Cloud Shell — Speech Analytics UTP</title>
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; font-size: 12pt; color: #1a1a1a; line-height: 1.35; }
+    h1 { font-size: 22pt; color: #0b3d5c; }
+    h2 { font-size: 16pt; color: #0b3d5c; border-bottom: 1.5pt solid #0b3d5c; padding-bottom: 4pt; margin-top: 22pt; }
+    h3 { font-size: 13.5pt; color: #145a86; margin-top: 16pt; }
+    p { margin: 8pt 0; }
+    table { border-collapse: collapse; width: 100%; margin: 10pt 0 16pt; font-size: 11pt; }
+    th { background: #0b3d5c; color: #fff; text-align: left; padding: 6pt 8pt; }
+    td { border: 0.5pt solid #c5c5c5; padding: 5pt 8pt; vertical-align: top; }
+    tr:nth-child(even) td { background: #f4f7fa; }
+    .nota { background: #fff6d6; border-left: 4pt solid #d4a017; padding: 8pt 10pt; margin: 12pt 0; }
+    .ok { background: #e8f5e9; border-left: 4pt solid #2e7d32; padding: 8pt 10pt; margin: 12pt 0; }
+    .paso { background: #eef6fb; border-left: 4pt solid #145a86; padding: 8pt 10pt; margin: 12pt 0; }
+    .caja { background: #f3f3f3; padding: 8pt 10pt; font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; white-space: pre-wrap; }
+    ul, ol { margin: 6pt 0 10pt 22pt; }
+    li { margin: 3pt 0; }
+    .portada { text-align: center; margin: 36pt 0 24pt; }
+    .sub { color: #555; font-size: 12pt; }
+  </style>
+</head>
+<body>
+
+<div class="portada">
+  <h1>Guía Cloud Shell<br/>Speech Analytics UTP</h1>
+  <p class="sub">Qué es cada cosa, cómo abrir Cloud Shell,<br/>y por qué casi todos los comandos llevan <b>impersonate</b></p>
+  <p class="sub">Proyecto: <b>prd-utpbi-data-operation</b> · SA: <b>genesys-audio-processor@…</b><br/>octubre 2026 · misma guía que el Word</p>
+</div>
+
+<h2>1. Para quién es esto</h2>
+<p>Si nunca usaste Cloud Shell: es una <b>terminal Linux dentro del navegador</b> (icono <code>&gt;_</code> arriba a la derecha en console.cloud.google.com). Ahí corres <code>gcloud</code> (Workflows, Jobs) y <code>bq</code> (BigQuery).</p>
+<p>Esta guía explica primero el vocabulario, después <b>impersonate</b> (lo más importante) y al final los comandos listos para copiar.</p>
+
+<div class="nota">
+<b>Regla de oro.</b> El código vive en Git. Lo que corre en producción es lo <b>desplegado</b>. Si cambias un SQL en tu PC y no haces <code>bq query … &lt; archivo.sql</code>, el Workflow sigue usando la versión vieja.
+</div>
+
+<h2>2. Diccionario rápido</h2>
+<table>
+  <tr><th>Nombre</th><th>Qué es</th></tr>
+  <tr><td>Cloud Shell</td><td>Terminal en el navegador. Ya trae <code>gcloud</code> y <code>bq</code> instalados. Tu usuario de Google es quien “abre” la sesión.</td></tr>
+  <tr><td>gcloud</td><td>Comando para Workflows, Cloud Run, Scheduler, Functions.</td></tr>
+  <tr><td>bq</td><td>Comando para BigQuery: desplegar SP/vistas o hacer <code>CALL</code>.</td></tr>
+  <tr><td>Tu usuario</td><td>Tu correo (@utp / @gmail). Con él entras a Cloud Shell. <b>No</b> es quien corre el pipeline diario.</td></tr>
+  <tr><td>Service Account (SA)</td><td>Usuario-robot. El pipeline corre como <code>genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com</code>.</td></tr>
+  <tr><td>Impersonate</td><td>“Haz este comando <b>como si fueras la SA</b>”. Tu usuario pide un token temporal de la SA; Google ejecuta el API call con esa identidad.</td></tr>
+  <tr><td>Workflow</td><td>Orquestador: prepare → worker → SPs. Nombre QS: <code>queuesmart-daily-pipeline</code>.</td></tr>
+  <tr><td>SP</td><td>Stored procedure en BigQuery. Se despliega con CREATE OR REPLACE y se corre con CALL.</td></tr>
+  <tr><td>process_date</td><td>Día de los <b>datos</b> (YYYY-MM-DD), no “hoy”. Scheduler 02:00 del 17 → procesa el 16.</td></tr>
+  <tr><td>Job</td><td>Cloud Run Job (contenedor que copia/convierte y se apaga). QS: <code>prd-utpbi-s3-to-gcs-micro-batch</code>.</td></tr>
+  <tr><td>Dataset</td><td>Carpeta BQ. SPs Gen IA: <code>adf_speech_analytics</code> (location <b>US</b>). Tablas Counter: <code>raw_queue_smart</code>.</td></tr>
+</table>
+
+<h2>3. Impersonate — léelo entero</h2>
+
+<h3>3.1 El problema que resuelve</h3>
+<p>Hay <b>dos identidades</b>:</p>
+<table>
+  <tr><th></th><th>Quién</th><th>Para qué sirve</th></tr>
+  <tr><td>Tú</td><td><code>diego@…</code> (tu login de Cloud Shell)</td><td>Abrir la terminal, leer el repo. Suele <b>no</b> tener permiso para CALL SPs de prod ni para lanzar el Workflow “en nombre del pipeline”.</td></tr>
+  <tr><td>El robot</td><td><code>genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com</code></td><td>Es la SA del Workflow, de los Jobs y de los jobs de BigQuery. Tiene jobUser, dataEditor, run.developer, etc.</td></tr>
+</table>
+<p>Si corres <code>gcloud workflows run …</code> <b>sin</b> impersonate, Google intenta hacerlo como <b>tú</b>. Puede fallar por 403, o peor: crear recursos “tuyos” que el Scheduler (que sí usa la SA) no ve igual.</p>
+<p><b>Impersonate</b> = “Google, yo soy Diego, pero ejecuta este comando como genesys-audio-processor”.</p>
+
+<div class="paso">
+<b>Analogía.</b> Tienes la llave de la oficina (Token Creator). No eres el vigilante, pero puedes pedirle al edificio: “abre la puerta como si yo fuera el vigilante”. El edificio anota: Diego pidió actuar como genesys. El trabajo lo hace el vigilante.
+</div>
+
+<h3>3.2 Qué permiso necesitas TÚ</h3>
+<p>Sobre la SA <code>genesys-audio-processor@…</code> tu usuario necesita:</p>
+<p><b>roles/iam.serviceAccountTokenCreator</b> (crear token de esa SA).</p>
+<p>Sin ese rol verás algo como:</p>
+<div class="caja">PERMISSION_DENIED: Not found; Unable to impersonate
+Permission 'iam.serviceAccounts.getAccessToken' denied</div>
+<p>Eso no se arregla con otro flag: hay que pedir IAM (Token Creator sobre esa SA).</p>
+
+<h3>3.3 El warning que vas a ver siempre (es normal)</h3>
+<div class="caja">WARNING: This command is using service account impersonation.
+All API calls will be executed as
+[genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com].</div>
+<p>Significa: el comando salió bien encaminado. <b>No es un error.</b></p>
+
+<h3>3.4 El flag no se escribe igual en gcloud y en bq</h3>
+<table>
+  <tr><th>Herramienta</th><th>Flag (cópialo tal cual)</th></tr>
+  <tr><td><code>gcloud</code></td><td><code>--impersonate-service-account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com</code></td></tr>
+  <tr><td><code>bq</code></td><td><code>--impersonate_service_account=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com</code></td></tr>
+</table>
+<div class="nota">
+<b>Guiones vs guion bajo.</b> <code>gcloud</code> usa <b>guiones</b> (<code>impersonate-service-account</code>). <code>bq</code> usa <b>guion bajo</b> (<code>impersonate_service_account</code>). Si los mezclas, el comando ni siquiera arranca.
+</div>
+
+<p>Para no escribirlo 20 veces, al empezar la sesión:</p>
+<div class="caja">export SA=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+export PROJECT=prd-utpbi-data-operation</div>
+
+<h3>3.5 Qué impersonate y qué no</h3>
+<table>
+  <tr><th>Acción</th><th>¿Impersonate?</th><th>Por qué</th></tr>
+  <tr><td>Correr / listar Workflow</td><td>Sí (<code>gcloud</code>)</td><td>El Workflow y sus ejecuciones viven como la SA.</td></tr>
+  <tr><td>Deploy del YAML del Workflow</td><td>Sí</td><td>La SA queda como service-account del workflow.</td></tr>
+  <tr><td>Desplegar SP / vista / CALL</td><td>Sí (<code>bq</code>)</td><td>Los jobs de BQ del pipeline los crea esa SA (mismas tablas, mismos labels).</td></tr>
+  <tr><td><code>cd</code>, <code>ls</code>, <code>git clone</code>, <code>nano</code></td><td>No</td><td>Son comandos de Linux, no hablan con GCP.</td></tr>
+  <tr><td><code>gcloud config set project</code></td><td>No hace falta impersonate</td><td>Solo elige el proyecto de tu sesión.</td></tr>
+</table>
+
+<h3>3.6 Dos flags que se parecen (no los confundas)</h3>
+<table>
+  <tr><th>Flag</th><th>Qué hace</th></tr>
+  <tr><td><code>--impersonate-service-account=…</code></td><td>Tú lanzas el <b>comando</b> como si fueras la SA.</td></tr>
+  <tr><td><code>--service-account=…</code> (en <code>workflows deploy</code>)</td><td>El Workflow, cuando <b>corra solo</b> (Scheduler), usará esa SA. Es la identidad permanente del workflow, no de tu sesión.</td></tr>
+</table>
+<p>En el deploy de QueeSmart van <b>los dos</b>:</p>
+<div class="caja">gcloud workflows deploy queuesmart-daily-pipeline \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --source=daily_pipeline.yaml \
+  --service-account=$SA \
+  --impersonate-service-account=$SA</div>
+<p><code>--service-account</code> = “este workflow <i>es</i> genesys”. <code>--impersonate</code> = “este deploy lo estoy haciendo yo, actuando como genesys”.</p>
+
+<h2>4. Abrir Cloud Shell y dejar el repo</h2>
+<div class="paso">
+<ol>
+  <li>Entra a <b>https://console.cloud.google.com</b> y elige el proyecto <code>prd-utpbi-data-operation</code>.</li>
+  <li>Clic en el icono <b>&gt;_</b> (Activate Cloud Shell). Espera a que aparezca el prompt <code>usuario@cloudshell:~$</code>.</li>
+  <li>Primera vez (o si no está el repo):</li>
+</ol>
+</div>
+<div class="caja">gcloud config set project prd-utpbi-data-operation
+
+# Clonar (ajusta la URL si usas otro remoto)
+git clone https://github.com/dtovareext-rgb/monorep-utp-funcionts-runs.git
+cd monorep-utp-funcionts-runs
+
+export SA=genesys-audio-processor@prd-utpbi-data-operation.iam.gserviceaccount.com
+export PROJECT=prd-utpbi-data-operation</div>
+<p>Si ya clonaste otro día: <code>cd monorep-utp-funcionts-runs</code> y <code>git pull</code>.</p>
+<p>Para subir un archivo suelto desde tu PC: icono de tres puntos del Cloud Shell → <b>Upload</b>.</p>
+
+<h2>5. Comandos que más se usan</h2>
+
+<h3>5.1 Correr QueeSmart un día (Workflow completo)</h3>
+<p>Ingesta S3 + consolidate + STT + Gemini. Tarda bastante (el 16 tardó ~1 h 40 min hasta Gemini).</p>
+<div class="caja">gcloud workflows run queuesmart-daily-pipeline \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --impersonate-service-account=$SA \
+  --data='{
+    "process_date": "2026-10-16",
+    "project_id": "prd-utpbi-data-operation",
+    "job_name": "prd-utpbi-s3-to-gcs-micro-batch",
+    "gcs_bucket": "prd-utp-stg-queuesmart",
+    "invoke_downstream_sps": true
+  }'</div>
+<p>Cambia <code>process_date</code> al día de los audios. Sin fecha, el YAML usa ayer Lima.</p>
+
+<h3>5.2 Ver si terminó y el error</h3>
+<div class="caja">gcloud workflows executions list queuesmart-daily-pipeline \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --limit=5 \
+  --impersonate-service-account=$SA</div>
+<p>Para el detalle de una ejecución (pega el ID que salió en list o en el run):</p>
+<div class="caja">gcloud workflows executions describe ID-DE-LA-EJECUCION \
+  --workflow=queuesmart-daily-pipeline \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --impersonate-service-account=$SA</div>
+
+<h3>5.3 Solo Gemini (si STT del día ya OK)</h3>
+<p>Si falló <code>call_sp3</code> con <code>backendError</code>, <b>no</b> relances el workflow. Llama el SP:</p>
+<div class="caja">bq query --use_legacy_sql=false --location=US \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  "CALL \`prd-utpbi-data-operation.adf_speech_analytics.sp_queuesmart_audio_analisis_ia\`(DATE '2026-10-16', NULL);"</div>
+<p>El SP borra el hist de análisis de esa fecha y lo regenera. Las transcripciones no se tocan.</p>
+
+<h3>5.4 Desplegar SPs QueeSmart (cuando cambió el SQL en Git)</h3>
+<p>Location <b>US</b>. Desde la raíz del monorepo:</p>
+<div class="caja">bq query --use_legacy_sql=false --location=US \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; queuesmart/bigquery/procedures/sp_queuesmart_mp3_consolidate_A1.sql
+
+bq query --use_legacy_sql=false --location=US \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_A2.sql
+
+bq query --use_legacy_sql=false --location=US \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; queuesmart/bigquery/procedures/sp_queuesmart_audio_analisis_ia_A2.sql</div>
+<p>El <code>&lt;</code> significa “toma el contenido de este archivo y mándalo a BigQuery”. En Cloud Shell es Linux; no uses la barra invertida de Windows.</p>
+<p>En BQ los SPs se llaman <b>sin</b> <code>_A1</code>/<code>_A2</code>. Esos sufijos son solo el archivo en Git.</p>
+
+<h3>5.5 Desplegar vistas CRM (location us-central1)</h3>
+<div class="caja">bq query --use_legacy_sql=false --location=us-central1 \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; queuesmart/bigquery/views/v_queuesmart_counter_crm_lead.sql
+
+bq query --use_legacy_sql=false --location=us-central1 \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; onemarketer/bigquery/views/v_onemarketer_caso_crm_lead.sql
+
+bq query --use_legacy_sql=false --location=us-central1 \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; onemarketer/bigquery/views/v_onemarketer_lead_conversaciones.sql</div>
+<p><code>v_queuesmart_lead_conversaciones</code> no hace falta redeployar si ya existe: solo lee la vista Counter.</p>
+
+<h3>5.6 OneMarketer — workflow</h3>
+<div class="caja">gcloud workflows run onemarketer-daily-pipeline \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --impersonate-service-account=$SA \
+  --data='{
+    "process_date": "2026-10-16",
+    "project_id": "prd-utpbi-data-operation",
+    "invoke_downstream_sps": true,
+    "skip_etl": false
+  }'</div>
+<p>Si el ETL (chats/MP3) de ese día ya corrió:</p>
+<div class="caja">gcloud workflows run onemarketer-daily-pipeline \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --impersonate-service-account=$SA \
+  --data='{
+    "process_date": "2026-10-16",
+    "skip_etl": true,
+    "invoke_downstream_sps": true
+  }'</div>
+
+<h3>5.7 Desplegar SPs OneMarketer</h3>
+<div class="caja">bq query --use_legacy_sql=false --location=US \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; onemarketer/bigquery/procedures/sp_onemarketer_whatsapp_gen_ia_24.sql
+
+bq query --use_legacy_sql=false --location=US \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  &lt; onemarketer/bigquery/procedures/sp_onemarketer_caso_conversacion_ia_23.sql</div>
+
+<h3>5.8 Genesys — un día</h3>
+<div class="caja">gcloud workflows run genesys-admision-daily \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --impersonate-service-account=$SA \
+  --data='{"process_date":"2026-10-16","batch_size":20}'</div>
+
+<h3>5.9 Deploy del YAML del Workflow (solo si cambió daily_pipeline.yaml)</h3>
+<div class="caja">cd queuesmart/workflows
+
+gcloud workflows deploy queuesmart-daily-pipeline \
+  --project=$PROJECT \
+  --location=us-central1 \
+  --source=daily_pipeline.yaml \
+  --service-account=$SA \
+  --impersonate-service-account=$SA</div>
+<p>Después del deploy, <code>revisionId</code> debe subir (000014, 000015, …).</p>
+
+<h2>6. Los pipelines (qué llama cada comando)</h2>
+<table>
+  <tr><th>Producto</th><th>Workflow</th><th>Orden interno</th></tr>
+  <tr><td>QueeSmart</td><td><code>queuesmart-daily-pipeline</code></td><td>Job S3→GCS (prepare/worker) → consolidate → STT (<code>call_sp2</code>) → Gemini (<code>call_sp3</code>)</td></tr>
+  <tr><td>OneMarketer</td><td><code>onemarketer-daily-pipeline</code></td><td>CF ETL → STT lotes → Gemini caso → backfill atenciones</td></tr>
+  <tr><td>Genesys</td><td><code>genesys-admision-daily</code></td><td>end_processing → lotes Gemini</td></tr>
+</table>
+<p>Si el describe dice <code>step: call_sp3</code>, STT ya terminó. Reintenta solo el CALL de análisis (sección 5.3).</p>
+
+<h2>7. Errores frecuentes</h2>
+<table>
+  <tr><th>Qué ves</th><th>Significado</th><th>Qué hacer</th></tr>
+  <tr><td>WARNING impersonation … executed as [genesys-…]</td><td>Bien. El comando va como la SA.</td><td>Nada.</td></tr>
+  <tr><td>Unable to impersonate / getAccessToken denied</td><td>Tu usuario no tiene Token Creator sobre la SA.</td><td>Pedir IAM. No sirve quitar el flag.</td></tr>
+  <tr><td><code>unrecognized arguments: --impersonate_service_account</code> en gcloud</td><td>Usaste guion bajo en gcloud.</td><td>Cambia a <code>--impersonate-service-account</code>.</td></tr>
+  <tr><td><code>FATAL Flags parsing error: Unknown argument: --impersonate-service-account</code> en bq</td><td>Usaste guiones en bq.</td><td>Cambia a <code>--impersonate_service_account</code>.</td></tr>
+  <tr><td><code>max_output_tokens … 32768</code></td><td>SP viejo en BQ.</td><td>Redeploy <code>_A2.sql</code> (5.4) y re-CALL.</td></tr>
+  <tr><td><code>backendError</code> / Retrying may solve</td><td>Corte interno de BQ (el del 16 en call_sp3).</td><td>Esperar 1–2 min y repetir solo el CALL de Gemini.</td></tr>
+  <tr><td>Not found: dataset … en US / us-central1</td><td>Location mal.</td><td>SPs Gen IA: <b>US</b>. Vistas raw_*: <b>us-central1</b>.</td></tr>
+</table>
+
+<h2>8. Chequear que el día quedó</h2>
+<div class="caja">bq query --use_legacy_sql=false --location=US \
+  --project_id=$PROJECT \
+  --impersonate_service_account=$SA \
+  "SELECT process_date, COUNT(*) AS n
+   FROM \`prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_audio_analisis_ia_process_data_prd\`
+   WHERE process_date = DATE '2026-10-16'
+   GROUP BY 1"</div>
+
+<h2>9. Mapa corto del repo</h2>
+<table>
+  <tr><th>Carpeta</th><th>Qué tocas en Cloud Shell</th></tr>
+  <tr><td><code>queuesmart/workflows/daily_pipeline.yaml</code></td><td>Deploy del orquestador QS</td></tr>
+  <tr><td><code>queuesmart/bigquery/procedures/*_A2.sql</code></td><td>STT y Gemini QS</td></tr>
+  <tr><td><code>onemarketer/bigquery/procedures/*_24.sql</code> y <code>*_23.sql</code></td><td>STT y Gemini OM</td></tr>
+  <tr><td><code>*/bigquery/views/v_*crm_lead.sql</code></td><td>Vistas CRM (us-central1)</td></tr>
+  <tr><td><code>qs_s3_to_gcs/</code></td><td>Código del Job; no lo lanzas a mano si usas el Workflow</td></tr>
+</table>
+
+<div class="ok">
+<b>Resumen.</b> Abres Cloud Shell como tú. Exportas <code>SA</code> y <code>PROJECT</code>. Todo <code>gcloud</code> lleva <code>--impersonate-service-account=$SA</code>. Todo <code>bq</code> lleva <code>--impersonate_service_account=$SA</code>. El warning de impersonation es la confirmación de que estás operando como el robot del pipeline.
+</div>
+
+</body>
+</html>

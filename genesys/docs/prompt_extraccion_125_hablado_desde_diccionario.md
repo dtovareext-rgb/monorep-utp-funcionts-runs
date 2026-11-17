@@ -1,0 +1,597 @@
+# Prompt extracción Speech Analytics — canal hablado Genesys (A–L + N)
+
+Fuente: Diccionario_Campos_Speech_Analytics.xlsx (Paul).
+Entrada: transcripción serialized_level_1 (Asesor/Cliente).
+Salida: UN solo JSON plano. Sin markdown. Sin texto fuera del JSON.
+Fuera de alcance de este prompt: bloque P (prospección colegios) y metadata Bloque 0 (CRM/Genesys por join).
+
+## Rol
+Eres un extractor analítico de llamadas comerciales UTP (Perú). Lees la transcripción y completas los campos del diccionario con evidencia de lo dicho. No inventes datos que no estén en el audio/transcripción. Si no hay evidencia, usa null o "NA" según el tipo del campo.
+
+## Reglas generales
+1. Idioma de valores textuales: español (Perú), salvo IDs/códigos del catálogo.
+2. No copies tipificación CRM: la tipificación IA es independiente (campo tipificacion_ia).
+3. Enums: solo valores permitidos del campo; si no calza, null.
+4. Arrays: lista vacía [] si no hay hallazgos; no uses null en arrays.
+5. No evalúes pauta de calidad score 0/1 salvo campos N explícitos del diccionario.
+6. Distingue lo DECLARADO en llamada vs lo que vendría de CRM (CRM no está en este prompt).
+7. Si la transcripción es pobre/ininteligible, calidad_transcripcion debe reflejarlo y el resto puede ir mayormente null/NA.
+8. Respuesta = únicamente el objeto JSON con las keys listadas abajo (todas deben existir).
+
+## Placeholders
+- `{{transcripcion}}` — texto serialized_level_1
+- `{{info_carreras}}` — opcional, catálogo/contexto carreras UTP si se inyecta
+
+## Campos a extraer (por bloque)
+
+### Bloque A — A. Control del dato y contexto de la interacción
+
+- calidad_transcripcion (A01) — Calidad de la transcripción
+  - Tipo: enum
+  - Valores: VALIDA / VACIA / SIN_CONVERSACION / BUCLE_REPETICIONES / TRUNCADA
+  - Regla: VACIA: sin texto. SIN_CONVERSACION: solo buzón, IVR, timbrado o un solo hablante sin respuesta. BUCLE: la misma frase repetida ≥5 veces (error del modelo). TRUNCADA: se corta a mitad de una intervención. Si no es VALIDA, el resto de campos IA van en 'NA'.
+  - Descripción: Estado técnico del texto recibido; define si el resto de campos se puede evaluar.
+- contacto_efectivo (A02) — Contacto efectivo
+  - Tipo: boolean
+  - Valores: SI / NO
+  - Regla: SI si al menos el interlocutor responde e intercambia información. NO si es número equivocado, contesta un desconocido que no conoce al lead, o cuelgan tras el saludo.
+  - Descripción: Hubo conversación real con el prospecto o un familiar/tercero relacionado.
+- interlocutor (A03) — Rol del interlocutor
+  - Tipo: enum
+  - Valores: POSTULANTE / PADRE_MADRE / PAREJA / OTRO_FAMILIAR / TERCERO / NO_IDENTIFICABLE
+  - Regla: Buscar autoidentificación ('soy su mamá', 'es para mi hijo') o tratamiento ('tu hija'). Si habla el postulante y luego pasa al padre, registrar el que conversa la mayor parte y marcar el cambio en el resumen.
+  - Descripción: Quién conversa con el asesor.
+- tipo_contacto (A04) — Primer contacto / seguimiento
+  - Tipo: enum
+  - Valores: PRIMER_CONTACTO / SEGUIMIENTO
+  - Regla: SEGUIMIENTO solo con evidencia explícita ('como conversamos ayer', 'quedamos en…'). Intentos previos sin respuesta siguen siendo PRIMER_CONTACTO. Reutilizar la regla del prompt 01_Canal_Admision_Clasificacion.
+  - Descripción: Si la interacción es el primer contacto o retoma una conversación previa.
+- motivo_contacto (A05) — Motivo / gestión principal de la interacción
+  - Tipo: enum
+  - Valores: VENTA_INSCRIPCION / CONSULTA_INFORMACION / DOCUMENTOS_REGULAR / DOCUMENTOS_CONVALIDACION / PAGO_MATRICULA / RECORDATORIO_EXAMEN / RECLAMO / RETENCION / OTRO
+  - Regla: Elegir un solo valor: el tema al que se dedica la mayor parte de la conversación.
+  - Descripción: Tema predominante de la interacción. En Admisión reutiliza gestion_principal; en ventas identifica si es venta, consulta o postventa.
+- resumen_interaccion (A06) — Resumen de la interacción
+  - Tipo: text (≤40 palabras)
+  - Valores: Texto
+  - Regla: Tercera persona, sin juicios sobre el asesor. Incluir carrera, barrera principal y resultado.
+  - Descripción: Resumen neutral de 1–2 frases: qué buscaba el prospecto, qué se ofreció y cómo terminó.
+- consistencia_tipificacion (A07) — Consistencia tipificación CRM vs. IA
+  - Tipo: enum (derivado)
+  - Valores: COINCIDE / NO_COINCIDE / SIN_TIPIFICACION
+  - Regla: No lo calcula el LLM: se calcula en Power BI/SQL con una tabla de equivalencias CRM ↔ catálogo IA.
+  - Descripción: Compara la tipificación del asesor (M15A) con la detectada por IA (D03).
+
+### Bloque B — B. Perfil del prospecto
+
+- residencia_departamento (B01) — Departamento de residencia declarado
+  - Tipo: string (catálogo INEI)
+  - Valores: Lista INEI · 'No se menciona'
+  - Regla: Tomar solo lo declarado en la conversación. Normalizar a nombre INEI (ej. 'Lima', 'La Libertad'). Si menciona solo el distrito y es inequívoco (ej. 'vivo en Comas'), inferir departamento y provincia.
+  - Descripción: Departamento donde el prospecto dice vivir hoy (no el del DNI ni el de la sede deseada).
+- residencia_provincia (B02) — Provincia de residencia declarada
+  - Tipo: string (INEI)
+  - Valores: Lista INEI · 'No se menciona'
+  - Regla: Igual que B01.
+  - Descripción: Provincia declarada.
+- residencia_distrito (B03) — Distrito de residencia declarado
+  - Tipo: string (ubigeo)
+  - Valores: Ubigeo · 'No se menciona'
+  - Regla: Igual que B01. Útil para medir distancia al campus.
+  - Descripción: Distrito declarado.
+- residencia_coincide_crm (B04) — Residencia declarada coincide con CRM
+  - Tipo: enum (derivado)
+  - Valores: COINCIDE / NO_COINCIDE / SIN_DATO_LLAMADA / SIN_DATO_CRM
+  - Regla: Se calcula comparando B01–B03 con M13A–M13C (no lo hace el LLM).
+  - Descripción: Control de calidad del dato geográfico del CRM.
+- situacion_academica (B05) — Situación académica / momento de vida
+  - Tipo: enum
+  - Valores: ESCOLAR_1_4_SEC / ESCOLAR_5_SEC / EGRESADO_COLEGIO_RECIENTE / EGRESADO_COLEGIO_2MAS_ANIOS / ESTUDIA_OTRA_INSTITUCION / ESTUDIOS_TRUNCOS / TITULADO_TECNICO / TITULADO_UNIVERSITARIO / 'No se menciona'
+  - Regla: Reciente = terminó colegio hace <2 años. Si dejó una carrera a medias → ESTUDIOS_TRUNCOS. Si terminó instituto → TITULADO_TECNICO. Completar institución en B12 y carrera previa en B13.
+  - Descripción: Situación académica actual del prospecto.
+- situacion_laboral (B06) — Situación laboral
+  - Tipo: enum
+  - Valores: TIEMPO_COMPLETO / MEDIO_TIEMPO / TRABAJA_SIN_DETALLE / NO_TRABAJA / 'No se menciona'
+  - Regla: Usar respuesta al sondeo '¿actualmente trabajas?' o menciones espontáneas ('salgo del trabajo a las 6').
+  - Descripción: Si trabaja y con qué dedicación.
+- tipo_trabajo (B07) — Tipo de trabajo
+  - Tipo: enum
+  - Valores: DEPENDIENTE / INDEPENDIENTE / AMBOS / NO_TRABAJA / 'No se menciona'
+  - Regla: Negocio propio, taxi, freelance, oficio → INDEPENDIENTE. Planilla, 'en una empresa' → DEPENDIENTE.
+  - Descripción: Dependiente (planilla/contrato) o independiente; formalidad si se menciona.
+- cargo_declarado (B08) — Cargo / ocupación (literal y homologado)
+  - Tipo: text + enum
+  - Valores: Literal · Homologado: OPERATIVO / TECNICO_ASISTENTE / ANALISTA / SUPERVISION_JEFATURA / GERENCIA / OFICIO / NEGOCIO_PROPIO / PROFESIONAL_INDEPENDIENTE
+  - Regla: Paso 1: copiar literal. Paso 2 (puede ser otro prompt o regla): homologar al nivel.
+  - Descripción: Ocupación tal como la dice el prospecto y su nivel homologado en un segundo paso.
+- rubro_laboral (B09) — Rubro laboral
+  - Tipo: enum
+  - Valores: SALUD / COMERCIO_RETAIL / INDUSTRIA / CONSTRUCCION / MINERIA / TRANSPORTE_LOGISTICA / EDUCACION / SECTOR_PUBLICO / TECNOLOGIA / SERVICIOS / FFAA_POLICIA / OTRO / 'No se menciona'
+  - Regla: Inferir del nombre de la empresa o de la actividad descrita.
+  - Descripción: Sector de la empresa o negocio.
+- empresa_empleadora (B10) — Empresa donde trabaja
+  - Tipo: string homologado
+  - Valores: Nombre de empresa · 'No se menciona'
+  - Regla: Normalizar nombre comercial (Plaza Vea, Interbank, Ransa…). Si es del grupo Intercorp, marcar B11.
+  - Descripción: Empresa que menciona el prospecto (o su padre/madre si aplica a convenio).
+- convenio_aplicable (B11) — Convenio o beneficio corporativo aplicable
+  - Tipo: enum (multi)
+  - Valores: INTERCORP / FFAA_POLICIA / EMPRESA_CONVENIO / NINGUNO / 'No se menciona'
+  - Regla: Basarse en el sondeo del asesor ('¿tu papá trabaja en Intercorp?', '¿perteneces a las fuerzas armadas?') o menciones espontáneas.
+  - Descripción: Si el prospecto (o su familiar) pertenece a una organización con beneficio: grupo Intercorp, FFAA/Policía, empresa en convenio.
+- institucion_procedencia (B12) — Institución de procedencia
+  - Tipo: enum (catálogo de instituciones)
+  - Valores: Código de la hoja Cat_Instituciones (UCV, SENATI, CARRION…) · 'No se menciona'
+  - Regla: Poblar siempre que se mencione, aunque no sea motivo de rechazo. Usar siglas del catálogo (SENATI, UCV, UPN, UNMSM…).
+  - Descripción: Universidad o instituto donde estudia o estudió (traslado, convalidación, segunda carrera).
+- carrera_previa (B13) — Carrera previa (terminada o trunca)
+  - Tipo: string
+  - Valores: Texto homologado · 'No se menciona'
+  - Regla: Registrar carrera y estado: 'Computación e Informática – titulado'.
+  - Descripción: Carrera técnica o universitaria que terminó o dejó, útil para rutas de convalidación.
+- anio_malla_origen (B18) — Año de la malla de origen
+  - Tipo: int / texto
+  - Valores: Año (ej. 2019) · 'No se menciona'
+  - Regla: Registrar el año que declara el postulante ('mi malla era la 2018', 'entré en 2017'). Si solo da el año de ingreso, registrarlo e indicarlo en el resumen.
+  - Descripción: Año (versión) de la malla curricular que cursó el postulante en su institución de origen. La pauta de Convalidación exige sondearlo; define qué cursos se convalidan.
+- edad_declarada (B14) — Edad declarada
+  - Tipo: int
+  - Valores: Años · null
+  - Regla: Solo si se dice explícitamente ('tengo 26') o el año de nacimiento.
+  - Descripción: Edad que menciona el prospecto; completa leads 'Sin edad' del CRM.
+- decisor_financiador (B15) — Decisor y financiador
+  - Tipo: objeto
+  - Valores: decisor: POSTULANTE / PADRES / PAREJA / OTRO_FAMILIAR / EMPLEADOR / 'No se menciona' · financiador: mismo catálogo · decisor_presente: SI / NO / 'No se menciona'
+  - Regla: Buscar frases de dependencia ('lo tengo que ver con mi esposo', 'mis papás me pagan'). Distinto de A03 (quién habla).
+  - Descripción: Quién toma la decisión final y quién paga, y si estuvo presente en la llamada.
+- motivacion_estudiar (B16) — Motivación principal para estudiar
+  - Tipo: enum + evidencia
+  - Valores: TRABAJO_EMPLEABILIDAD / PRESTIGIO_CRECIMIENTO_PROFESIONAL / STATUS_CALIDAD_VIDA / AUTORREALIZACION_SUPERACION / CONTRIBUCION_SOCIEDAD / EMPRENDIMIENTO / CAMBIO_DE_CARRERA / EXIGENCIA_FAMILIAR / 'No se menciona'
+  - Regla: Elegir la predominante. Los 5 primeros valores equivalen a los del prompt vigente (trabajo, prestigio, status, autorrealización, contribución) para mantener compatibilidad.
+  - Descripción: Razón de fondo por la que quiere estudiar. Unifica el catálogo de la pauta TLMK (ya en prompts) con los aportes de MKR, MKD y Ventas.
+- vinculo_previo_utp (B17) — Vínculo previo con la UTP
+  - Tipo: enum (multi)
+  - Valores: FAMILIAR_ALUMNO_EGRESADO / REFERIDO / EXALUMNO / YA_POSTULANTE / NINGUNO / 'No se menciona'
+  - Regla: Solo con mención explícita.
+  - Descripción: Familiar alumno/egresado, referido, exalumno o ya postulante.
+
+### Bloque C — C. Producto buscado
+
+- carreras_interes (C01) — Carrera(s) de interés
+  - Tipo: array (catálogo carreras)
+  - Valores: Códigos de {{info_carreras}} (ej. ingenieria_sistemas_informatica) · []
+  - Regla: Usar la lista oficial de carreras ya empleada por los prompts ({{info_carreras}}). Ordenar por interés (la primera = principal).
+  - Descripción: Carreras UTP por las que pregunta o muestra interés el prospecto.
+- carrera_no_ofrecida (C02) — Carrera solicitada no disponible
+  - Tipo: objeto
+  - Valores: carrera: texto homologado · tipo: NO_EXISTE_UTP / NO_EN_SU_SEDE / NO_EN_MODALIDAD · acepta_alternativa: SI / NO / 'No se menciona'
+  - Regla: Registrar aunque el asesor la redirija a otra carrera; indicar si el prospecto aceptó la alternativa.
+  - Descripción: Carrera que busca y la UTP no ofrece, o no dicta en su sede/modalidad.
+- indecision_carrera (C03) — Indecisión de carrera
+  - Tipo: objeto
+  - Valores: indeciso: SI / NO · carreras_en_duda: array
+  - Regla: SI cuando duda entre ≥2 o no sabe qué estudiar.
+  - Descripción: Si no tiene definida la carrera y entre cuáles duda.
+- modalidad_interes (C04) — Modalidad de interés
+  - Tipo: array enum
+  - Valores: PRESENCIAL / SEMIPRESENCIAL / VIRTUAL · []
+  - Regla: Mapear '50-50', '80-20', 'a distancia', 'CGT' a los tres valores según la tabla de equivalencias.
+  - Descripción: Modalidad declarada.
+- restriccion_modalidad (C05) — Restricción que explica la modalidad
+  - Tipo: enum (multi)
+  - Valores: TRABAJO / HIJOS_FAMILIA / DISTANCIA / PRESUPUESTO / SALUD / NINGUNA / 'No se menciona'
+  - Regla: Solo razones explícitas.
+  - Descripción: Qué condiciona la modalidad/turno que pide.
+- zona_interes (C06) — Zona de interés
+  - Tipo: enum (catálogo de zonas)
+  - Valores: 01 UTP Lima Centro, 02 UTP Lima Norte, 03 UTP SJL, 04 UTP Arequipa, 05 UTP Chiclayo, 06 UTP Lima Este, 07 UTP Lima Sur, 08 UTP Huancayo, 09 UTP Piura, 10 UTP Ica, 11 UTP Chimbote, 12 UTP Trujillo, 14 UTP Iquitos, 15 UTP …
+  - Regla: Convertir la mención a la zona del catálogo: 'Ate' / 'Lima Este' → 06 UTP Lima Este; 'la del Centro' → 01 UTP Lima Centro; 'Cusco' → 17 UTP Cusco. Zonas 17 a 29 no tienen campus (solo virtual): si el prospecto pide presencial ahí, registrar también el motivo NO_CAMPUS. Si solo dice 'virtual' sin ciudad → 'No se mencion…
+  - Descripción: Zona (campus o ciudad) donde el prospecto quiere estudiar según la conversación, homologada al catálogo de 28 zonas.
+- horario_deseado (C07) — Horario / turno deseado
+  - Tipo: enum (multi)
+  - Valores: MANANA / TARDE / NOCHE / FIN_DE_SEMANA / MIXTO / 'No se menciona'
+  - Regla: Poblar siempre que se hable de horarios (~57% de llamadas).
+  - Descripción: Franja en la que puede estudiar.
+- periodo_ingreso (C08) — Periodo de ingreso / urgencia
+  - Tipo: enum
+  - Valores: PERIODO_EN_CURSO / PROXIMO_SEMESTRE / PROXIMO_ANIO / INDEFINIDO / 'No se menciona'
+  - Regla: El periodo en curso es el de la campaña vigente, no el año calendario: en septiembre 2026 la campaña es para el ciclo 2027-MARZO, así que 'empezar en marzo' = PERIODO_EN_CURSO; 'en agosto del próximo año' = PROXIMO_SEMESTRE; '2028' o 'el otro año' sin mes, si se refiere a después de marzo 2027 = PROXIMO_ANIO. Si es amb…
+  - Descripción: Cuándo piensa empezar y qué tan urgente es.
+- modalidad_ingreso (C09) — Modalidad de ingreso
+  - Tipo: enum
+  - Valores: EXAMEN_ADMISION / TERCIO_SUPERIOR / BUEN_RENDIMIENTO / PRUEBA_NIVELES / INGRESO_DIRECTO_GRADO / CONVALIDACION / 'No se menciona'
+  - Regla: Tomar la modalidad acordada al cierre o la más discutida.
+  - Descripción: Vía de ingreso conversada/elegida.
+- brecha_oferta (C10) — Brecha de oferta
+  - Tipo: enum (derivado)
+  - Valores: SIN_BRECHA / CARRERA_NO_DICTADA / SIN_SEDE_EN_CIUDAD / MODALIDAD_NO_DISPONIBLE / TURNO_NO_DISPONIBLE
+  - Regla: Se deriva de C02 + motivos NO_CAMPUS / NO_MODALIDAD / HORARIO (E01). No requiere pregunta adicional al LLM.
+  - Descripción: Lo que buscó y la UTP no ofrece en su ciudad.
+
+### Bloque D — D. Estado y resultado
+
+- estado_lead (D01) — Estado del lead al cierre
+  - Tipo: enum
+  - Valores: SI (se inscribe/inscrito) / RA (revisando alternativas) / DS (descalificado) / CDE (dejó de escribir – solo escrito) / SIN_CONTACTO
+  - Regla: Prioridad: SI > DS > CDE > RA. SI solo con promesa clara de pago/inscripción. Reutilizar reglas del bloque TIPIFICACION de los prompts vigentes.
+  - Descripción: Familia de resultado. Define qué bloques se evalúan (E para RA/DS, F para RA, G para RA/SI).
+- resultado_real (D02) — Resultado real de la llamada
+  - Tipo: enum
+  - Valores: PAGO_REALIZADO / FICHA_SIN_PAGO / COMPROMISO_CON_FECHA / POSTERGA / NO_INTERESADO / NO_APLICA
+  - Regla: Más granular que D01. 'Compromiso con fecha' exige fecha/hora concreta (ver D04).
+  - Descripción: Qué ocurrió realmente al cierre.
+- tipificacion_ia (D03) — Tipificación detectada por IA
+  - Tipo: enum
+  - Valores: Mismo catálogo que usa el asesor en su canal: canal hablado = etiquetas de firstagentwrapup (42 valores, ej. 'RA: Conversará con sus padres', 'Descalificado: ya eligió otra institución'); canal escrito = tipificacion_det…
+  - Regla: Debe ser coherente con D01 (el prefijo coincide con la familia). Nunca vacío.
+  - Descripción: Código específico de tipificación según catálogo cerrado (RA_*, DS_*, SI, CDE) para validar la del asesor.
+- compromisos (D04) — Compromisos / próxima acción
+  - Tipo: array objeto
+  - Valores: tipo: PAGO / DOCUMENTOS / RECONTACTO / EXAMEN / VISITA_CAMPUS · fecha: aaaa-mm-dd o franja (HOY / ESTA_SEMANA / FIN_DE_MES) · responsable: PROSPECTO / ASESOR · accion_requerida: texto corto (qué documento o acción queda …
+  - Regla: Convertir fechas relativas usando fecha_hora_interaccion ('el viernes' → fecha exacta). Si no hay fecha, usar la franja. En Admisión la pauta exige agendar el segundo contacto con fecha, hora y acción requerida: registrar la acción (ej. 'subir sílabos', 'pagar matrícula'). Plazos informados por el asesor (7 / 14 días p…
+  - Descripción: Acuerdos con fecha: pago, envío de documentos, recontacto, examen, visita.
+- responsabilidad_no_venta (D05) — Causa raíz de la no venta
+  - Tipo: enum + submotivo
+  - Valores: AGENTE / CLIENTE / PROCESO / NA (hubo venta) · submotivo según catálogo vigente
+  - Regla: Reutilizar exactamente MOTIVO_NO_VENTA y SUBMOTIVO_NO_VENTA de los prompts vigentes (regla: evaluar primero al agente).
+  - Descripción: Origen principal de la no venta: agente, cliente o proceso.
+
+### Bloque E — E. Motivos de rechazo o indecisión (barreras)
+
+- motivos_rechazo (E01) — Motivos de rechazo o indecisión (multi)
+  - Tipo: array objeto
+  - Valores: [{codigo, evidencia (cita ≤30 palabras), detalle}] · códigos: ver catálogo
+  - Regla: 1) Leer toda la llamada. 2) Marcar cada motivo con evidencia textual del prospecto. 3) Solo preguntar precio NO es motivo económico. 4) Motivos operativos (YA_ALUMNO, POSTGRADO, CURSO_CORTO) tienen prelación y anulan los demás. 5) 'Lo voy a pensar' sin barrera → NO_ESPECIFICA. 6) Completar 'detalle' cuando el catálogo …
+  - Descripción: Todas las barreras reales que frenan la inscripción. Catálogo único de 27 motivos (hoja Cat_Motivos_Rechazo). Una llamada puede tener varios.
+- motivo_rechazo_principal (E02) — Barrera principal
+  - Tipo: enum
+  - Valores: Código del catálogo de rechazo
+  - Regla: El que el prospecto repite más o el que cierra la conversación.
+  - Descripción: El motivo de mayor peso (uno solo) entre los de E01.
+- grupo_friccion (E03) — Grupo de fricción
+  - Tipo: enum (derivado)
+  - Valores: ECONOMICA / TIEMPO_HORARIO / GEOGRAFICA / ACADEMICA / DECISION_COMPARTIDA / TIMING / COMPETENCIA / OFERTA_UTP / OPERATIVO
+  - Regla: Se deriva con la columna 'Grupo' del catálogo de rechazo. No lo calcula el LLM.
+  - Descripción: Agrupación de E02 en familias (vista ejecutiva).
+- objeciones_textuales (E04) — Objeciones textuales y rebate
+  - Tipo: array objeto (máx. 3)
+  - Valores: [{objecion_texto, tipo_objecion (VOY_A_PENSARLO / OTRAS_INSTITUCIONES / CONSULTAR_TERCEROS / ES_CARO / OTRA), rebate_texto, resuelta: SI/NO}]
+  - Regla: Tipos alineados a la sección OBJECIONES de la pauta TLMK. 'resuelta' = el prospecto acepta el argumento o avanza.
+  - Descripción: Hasta 3 objeciones literales del prospecto y la respuesta del asesor a cada una.
+- momento_objecion (E05) — Momento de la objeción
+  - Tipo: enum
+  - Valores: PRE_PRECIO / POST_PRECIO / EN_CIERRE / SIN_OBJECION
+  - Regla: Requiere transcripción segmentada cronológicamente (modelo mejorado). En modelo preliminar → 'NA'.
+  - Descripción: En qué fase aparece la primera fricción respecto al precio.
+- senal_abandono (E06) — Señal / momento de abandono
+  - Tipo: enum
+  - Valores: ABANDONO_TEMPRANO (<3 min) / POST_PRECIO / POST_OBJECION / EN_CIERRE / ELECCION_EXTERNA / DESINTERES_DECLARADO / NO_ABANDONA
+  - Regla: Requiere tiempos por turno. Combinar con duración (M09A) y con los timestamps de cada turno.
+  - Descripción: Cómo y cuándo se pierde al prospecto.
+
+### Bloque F — F. Seguimiento del RA
+
+- consulta_con_terceros (F01) — Consultará con terceros
+  - Tipo: objeto
+  - Valores: flag: 1/0 · con_quien: PADRES / PAREJA / OTRO_FAMILIAR / EMPLEADOR / OTRO / 'No se menciona' · evidencia
+  - Regla: Marcar 1 con frases tipo 'lo converso con…', 'le pregunto a…'.
+  - Descripción: El prospecto dice que debe consultarlo con otra persona. No es una barrera en sí (la barrera va en E01).
+- recontacto_solicitado (F02) — Recontacto solicitado
+  - Tipo: boolean
+  - Valores: 1 / 0
+  - Regla: La fecha va en D04 (tipo RECONTACTO).
+  - Descripción: Pide que lo vuelvan a llamar/escribir o queda a la espera de información.
+- informacion_solicitada (F03) — Información solicitada / pendiente
+  - Tipo: array enum
+  - Valores: PRECIOS / BECAS_DESCUENTOS / CONVALIDACION / MALLA / HORARIOS / SEDE / PROCESO_ADMISION / OTRO
+  - Regla: Solo lo que pide explícitamente que se le envíe o explique después.
+  - Descripción: Qué información espera recibir para decidir.
+- visitara_counter (F04) — Visitará counter / campus
+  - Tipo: objeto
+  - Valores: flag: 1/0 · sede: zona con campus (01–12, 14–16 del catálogo de zonas) · 'No se menciona'
+  - Regla: Solo zonas con campus. No completar con el CRM.
+  - Descripción: Dice que irá al campus o counter antes de decidir.
+- canal_preferido (F05) — Canal de contacto preferido
+  - Tipo: objeto
+  - Valores: canal: WHATSAPP / LLAMADA / CORREO / PRESENCIAL / 'No se menciona' · asesor_acepta: SI / NO / 'No se menciona'
+  - Regla: asesor_acepta=NO si el asesor insiste en llamar pese a la solicitud.
+  - Descripción: Medio por el que pide ser contactado y si se le respeta.
+
+### Bloque G — G. Motivos de preferencia (drivers)
+
+- motivos_preferencia (G01) — Motivos de preferencia (multi)
+  - Tipo: array objeto
+  - Valores: [{codigo, evidencia, detalle}]
+  - Regla: Registrar solo lo que dice/valida el PROSPECTO, no lo que argumenta el asesor. PERCEPCION_GENERAL solo si no hay otro motivo.
+  - Descripción: Atributos de la UTP que el prospecto valora o que lo acercan a inscribirse. Catálogo único de 23 motivos alineado al estudio Matriculados (hoja Cat_Motivos_Preferencia).
+- gatillador_principal (G02) — Gatillador de conversión
+  - Tipo: enum
+  - Valores: Código del catálogo de preferencia · NINGUNO
+  - Regla: El beneficio tras el cual el prospecto cambia de postura o acepta avanzar.
+  - Descripción: Argumento o beneficio que destraba la decisión (uno).
+- atributo_argumentado (G03) — Atributo argumentado por el asesor
+  - Tipo: enum
+  - Valores: EDUCACION_ACTUALIZADA / EDUCACION_CALIDAD / EMPLEABILIDAD / FLEXIBILIDAD_ACOMPANAMIENTO / VIDA_UNIVERSITARIA / NINGUNO
+  - Regla: Reutilizar el bloque ATRIBUTO de los prompts vigentes. Cruzar con G01 para ver si el argumento calza con lo que valora el prospecto.
+  - Descripción: Principal atributo de valor usado por el asesor (complementario de pautas).
+- beneficio_economico (G04) — Beneficio económico valorado / solicitado
+  - Tipo: enum (multi)
+  - Valores: BECA_SOCIOECONOMICA / BECA_RENDIMIENTO / BECA_ESTATAL (Beca 18, etc.) / DESCUENTO_CONVENIO / DESCUENTO_PRONTO_PAGO / CREDITO_EDUCATIVO / FACILIDAD_PAGO / 'No se menciona'
+  - Regla: Incluye interés explícito en financiamiento aunque no lo valore aún.
+  - Descripción: Tipo de beneficio económico que valora o consulta (financiamiento, becas).
+- quien_recomienda (G05) — Quién recomendó la UTP
+  - Tipo: enum
+  - Valores: FAMILIAR / AMIGO / COLEGIO_DOCENTE / TRABAJO / ALUMNO_EGRESADO_UTP / OTRO / 'No se menciona'
+  - Regla: —
+  - Descripción: Fuente de la recomendación (boca a boca).
+
+### Bloque H — H. Competencia
+
+- competidores (H01) — Competencia mencionada
+  - Tipo: array objeto
+  - Valores: [{institucion (código de la hoja Cat_Instituciones), relacion: EVALUANDO / POSTULO / INGRESO / YA_ESTUDIA / ESTUDIO_ANTES, atributo_preferido (catálogo preferencia), precio_mencionado (S/), carrera, percepcion: POSITIVA …
+  - Regla: Un objeto por institución. Normalizar nombre con el catálogo (UCV, UPN, USIL, UNMSM, SENATI, UPC, UC, UTP otros…). Si el prospecto no da el nombre → 'NO_ESPECIFICA'. El precio solo si se cita un monto.
+  - Descripción: Instituciones que menciona el prospecto, con su relación, atributo, precio y percepción. Unifica los campos de REF, MKD, MKR e IM.
+- menciona_competencia (H02) — Menciona competencia (flag)
+  - Tipo: boolean (derivado)
+  - Valores: 1 / 0
+  - Regla: Derivado de H01.
+  - Descripción: 1 si H01 no está vacío.
+- sondeo_competencia (H03) — Asesor sondeó competencia
+  - Tipo: objeto
+  - Valores: flag: 1/0 · motivo_si_0: NO_PREGUNTO / CLIENTE_MENCIONO_Y_NO_EXPLORO
+  - Regla: Pregunta tipo '¿Qué otras universidades estás evaluando?' (speech TLMK).
+  - Descripción: Si el asesor preguntó activamente por otras instituciones (denominador del share of mention).
+- percepcion_precio_utp (H04) — Percepción del precio UTP
+  - Tipo: enum
+  - Valores: CARA / SIMILAR / ACCESIBLE / 'No se menciona'
+  - Regla: Solo valoraciones explícitas.
+  - Descripción: Si percibe la pensión como cara, accesible o similar al mercado.
+
+### Bloque I — I. Consultas, dudas y mercado
+
+- temas_consultados (I01) — Temas consultados
+  - Tipo: array enum
+  - Valores: PENSION_COSTOS / BECAS_DESCUENTOS / HORARIOS / DURACION / SEDE_UBICACION / MODALIDAD / CONVALIDACION / EXAMEN_ADMISION / REQUISITOS_DOCUMENTOS / ACREDITACION_LICENCIAMIENTO / EMPLEABILIDAD_PRACTICAS / MALLA / CONVENIOS_I…
+  - Regla: Una pregunta = un tema. Registrar todos.
+  - Descripción: Temas por los que pregunta el prospecto, aunque no sean motivo.
+- consulta_principal (I02) — Consulta / duda principal
+  - Tipo: text (≤20 palabras)
+  - Valores: Texto
+  - Regla: —
+  - Descripción: Pregunta más relevante o repetida del prospecto, en sus palabras (resumida).
+- dudas_no_resueltas (I03) — Dudas no resueltas
+  - Tipo: array objeto
+  - Valores: [{tema (catálogo I01), texto}]
+  - Regla: Duda sin respuesta, respuesta evasiva o 'te averiguo' sin cierre. Complementa el atributo ACLARA DUDA de las pautas.
+  - Descripción: Preguntas del prospecto que no recibieron respuesta clara.
+- comentario_mercado (I04) — Comentario de mercado / tendencia
+  - Tipo: text + tag
+  - Valores: tag: CARRERA_EMERGENTE / DEMANDA_LABORAL / SATURACION_ZONA / OTRO · texto
+  - Regla: Solo comentarios del prospecto.
+  - Descripción: Menciones sobre demanda laboral, carreras emergentes o saturación de oferta en su zona.
+- palabras_clave_cliente (I05) — Palabras clave del cliente
+  - Tipo: array (derivado NLP)
+  - Valores: [{palabra, frecuencia}]
+  - Regla: Calcular con conteo de tokens sin stopwords sobre los turnos del cliente (más barato y exacto que un LLM).
+  - Descripción: Top términos del cliente y su frecuencia.
+
+### Bloque J — J. Experiencia y sentimiento
+
+- sentimiento_cliente (J01) — Sentimiento del cliente
+  - Tipo: enum + score
+  - Valores: POSITIVO / NEUTRO / NEGATIVO · score -1 a 1
+  - Regla: Evaluar al prospecto, no al asesor. Considerar el cierre de la llamada con más peso.
+  - Descripción: Tono general del prospecto.
+- nivel_frustracion (J02) — Nivel de frustración
+  - Tipo: enum
+  - Valores: BAJO / MEDIO / ALTO
+  - Regla: ALTO: reclamos, pide no ser llamado, levanta la voz, amenaza con quejarse.
+  - Descripción: Molestia o frustración detectada.
+- percepcion_proceso (J03) — Percepción de la atención y del proceso
+  - Tipo: enum (multi)
+  - Valores: SATISFECHO_ATENCION / PROCESO_SIMPLE / PROCESO_COMPLEJO / RESPUESTA_RAPIDA / RESPUESTA_LENTA / INSATISFECHO / 'No se menciona'
+  - Regla: Solo expresiones explícitas.
+  - Descripción: Comentarios del prospecto sobre la atención y la facilidad del proceso.
+- riesgo_desercion (J04) — Riesgo de desistimiento (postventa)
+  - Tipo: enum + evidencia
+  - Valores: ALTO / MEDIO / BAJO / NA
+  - Regla: Señales: problemas económicos nuevos, insatisfacción con el proceso, evalúa otra institución, no puede conseguir documentos.
+  - Descripción: Señales de que un postulante ya inscrito puede abandonar el proceso.
+
+### Bloque K — K. Journey y fuente
+
+- fuente_declarada (K01) — Cómo conoció la UTP (declarado)
+  - Tipo: enum
+  - Valores: REDES_SOCIALES / GOOGLE / CHARLA_COLEGIO / DIA_UTP / FERIA / RECOMENDACION / COUNTER / TV_RADIO / OTRO / 'No se menciona'
+  - Regla: Casi no se pregunta (~1%).
+  - Descripción: Fuente que declara el prospecto (vs. fuente CRM).
+- participacion_evento_utp (K02) — Participó en evento UTP
+  - Tipo: enum
+  - Valores: CHARLA / DIA_UTP / FERIA / VISITA_CAMPUS / NINGUNO / 'No se menciona'
+  - Regla: —
+  - Descripción: Si menciona charla, Día UTP, feria o visita previa.
+
+### Bloque L — L. Dinámica de la conversación y oferta
+
+- oferta_cotizada (L01) — Oferta y monto cotizado
+  - Tipo: objeto
+  - Valores: monto_cotizado (S/) · concepto: DERECHO_POSTULACION / MATRICULA / PENSION · descuentos_ofrecidos: array (DESCUENTO_50_PAGO_HOY / EXONERACION_MATRICULA_MEDICINA / BECA / CONVENIO / OTRO) · n_opciones: int
+  - Regla: Registrar el primer monto cotizado sin descuento (la pauta de Admisión pide mencionar el monto regular de matrícula) y los descuentos mencionados: 50% pagando hoy / en 90 min, beca, convenio. En Medicina: exoneración de matrícula si paga la primera cuota dentro de los 10 días posteriores al resultado del examen.
+  - Descripción: Monto de pensión/derecho cotizado, beneficios ofrecidos y n° de opciones.
+- tiempo_hasta_precio_seg (L02) — Tiempo hasta mención de precio
+  - Tipo: int + enum
+  - Valores: segundos · TEMPRANO (<2 min) / MEDIO (2–5) / TARDIO (>5) / SIN_PRECIO
+  - Regla: Requiere marcas de tiempo por turno. Si no hay timestamps → NA.
+  - Descripción: Segundos hasta que se habla de costos y su clasificación.
+- silencios_seg (L03) — Tiempo en silencio / espera
+  - Tipo: int
+  - Valores: segundos
+  - Regla: Mejor calcularlo desde el audio o Genesys (hold time) que con el LLM. Complementa GESTIÓN DE TIEMPOS de la pauta.
+  - Descripción: Tiempo muerto total y esperas injustificadas.
+- secuencia_engagement (L04) — Secuencia de engagement y momentos críticos
+  - Tipo: objeto
+  - Valores: secuencia: IDEAL / INTERRUMPIDA · quiebre_positivo_turno: int · quiebre_negativo_turno: int
+  - Regla: Fase exploratoria; validar con muestra antes de escalar.
+  - Descripción: Si la conversación sigue Exploración → Evaluación → Negociación → Cierre, y en qué turno sube o cae el interés.
+
+### Bloque N — N. Complementarios de pautas de calidad (no propuestos por las áreas)
+
+- documentos_pendientes (N01) — Documentos pendientes
+  - Tipo: array enum
+  - Valores: DOCUMENTO_IDENTIDAD (DNI / CE / PASAPORTE) / CERTIFICADO_ESTUDIOS / SILABOS / RECORD_NOTAS / CONSTANCIA_EGRESADO / GRADO_TITULO / SEGURO / OTRO
+  - Regla: Tomar de la validación de documentos del asesor o de lo que declara el postulante. En la modalidad Q solo se exige el documento de identidad (DNI, CE o pasaporte). En Examen, el certificado de estudios puede entregarse hasta el final del ciclo 1: registrarlo como pendiente pero no como barrera.
+  - Descripción: Documentos que el postulante aún no entrega (Admisión).
+- dificultad_documentos (N02) — Dificultad para conseguir documentos
+  - Tipo: enum + evidencia
+  - Valores: INSTITUCION_NO_ENTREGA / NO_SELLADOS_FIRMADOS / COSTO_TRAMITE / TIEMPO / OTRO / NINGUNA
+  - Regla: Se alinea al rebate esperado en la pauta (documentos simples o capturas del portal).
+  - Descripción: Barrera documental declarada.
+- estado_examen (N03) — Estado del examen de admisión
+  - Tipo: enum
+  - Valores: RINDIO / PROGRAMADO / NO_PROGRAMADO / NA
+  - Regla: Condición clave de la pauta: el cierre solo se exige si ya rindió.
+  - Descripción: Si el postulante ya rindió, tiene programado o no ha agendado el examen.
+- medio_pago (N04) — Medio de pago mencionado
+  - Tipo: enum
+  - Valores: YAPE_PLIN / BANCA_MOVIL / QR / TARJETA / PAGO_EN_LINEA / AGENTE_VENTANILLA / 'No se menciona'
+  - Regla: La pauta de Admisión pide guiar el pago en línea priorizando banca móvil o QR; registrar el medio acordado o usado.
+  - Descripción: Medio con el que pagará o pagó.
+- segundo_numero_obtenido (N05) — Segundo número de contacto
+  - Tipo: boolean
+  - Valores: SI / NO / NA
+  - Regla: No almacenar el número en el panel.
+  - Descripción: Si se obtuvo un segundo número (no se guarda el número, solo el flag).
+- intentos_cierre (N06) — Intentos de cierre y reacción
+  - Tipo: objeto
+  - Valores: n_intentos: int · reaccion_ultimo: ACEPTA / POSTERGA / RECHAZA / SIN_OPORTUNIDAD
+  - Regla: Cuenta cada pedido explícito de cierre ('¿iniciamos tu inscripción?', 'bríndame tu DNI para reservar tu vacante'). No cuenta la información de precios sin pedido de acción.
+  - Descripción: Cuántas veces el asesor pidió concretar (inscripción, pago o compromiso) y cómo respondió el prospecto. La pauta exige 2 cierres y 2 rebates; como dato permite ver cuántos intentos necesita una venta.
+- argumentos_urgencia (N07) — Argumentos de urgencia usados
+  - Tipo: array enum
+  - Valores: DESCUENTO_TEMPORAL (ej. 50% por 90 min) / VACANTES_LIMITADAS / CIERRE_INSCRIPCIONES / PERDIDA_BENEFICIO (talleres, cursos) / INICIO_CLASES_PROXIMO / NINGUNO
+  - Regla: Registrar todos los argumentos que menciona el asesor. Cruzar con D02 para ver efectividad.
+  - Descripción: Qué recursos de urgencia usó el asesor. Permite medir cuáles funcionan, no solo si se aplicaron.
+- informacion_complementaria_brindada (N08) — Información complementaria brindada
+  - Tipo: array enum
+  - Valores: SEGURO_ESTUDIANTIL / PLAZO_DOCUMENTOS / PLAZO_PAGO_MATRICULA / BUSES / CLASES_GRABADAS / TALLERES_CULTURALES / EVENTOS / NINGUNA
+  - Regla: Solo si el asesor lo informa de forma explícita.
+  - Descripción: Qué información de soporte entregó el asesor (seguro, plazos, beneficios). Se cruza con dudas no resueltas y con reclamos posteriores.
+- finalizacion_interaccion (N09) — Cómo termina la interacción
+  - Tipo: enum
+  - Valores: CIERRE_ACORDADO / CLIENTE_CORTA / ASESOR_CORTA / CAIDA_TECNICA / CLIENTE_DEJA_DE_RESPONDER / NO_IDENTIFICABLE
+  - Regla: CIERRE_ACORDADO si hay despedida de ambas partes. CAIDA_TECNICA si se corta a mitad de frase sin despedida y hay señales ('¿aló? ¿me escuchas?').
+  - Descripción: Quién o qué finaliza la conversación. Distingue abandono del cliente, corte del asesor y caída técnica.
+- correccion_datos_ficha (N10) — Corrección de datos de la ficha
+  - Tipo: array enum
+  - Valores: CARRERA / SEDE / MODALIDAD / HORARIO / TIPO_INGRESO / NOMBRE_DNI / NINGUNA
+  - Regla: Marcar solo cuando el asesor lee un dato y el prospecto lo cambia.
+  - Descripción: Si durante la validación de datos el prospecto corrige lo registrado en CRM (carrera, sede, modalidad, horario, tipo de ingreso). Mide calidad del dato de origen.
+- situacion_convalidacion (N11) — Situación de convalidación
+  - Tipo: enum
+  - Valores: CON_TABLA / SIN_TABLA / CONVALIDARA_DESPUES (2do ciclo) / EN_EVALUACION / NO_APLICA
+  - Regla: CONVALIDARA_DESPUES cuando el postulante pide iniciar y convalidar más adelante (caso que hoy la IA no detecta según la pauta).
+  - Descripción: Estado del trámite de convalidación del postulante (Admisión).
+- tiempos_atencion (N12) — Tiempos de atención
+  - Tipo: int (derivado)
+  - Valores: segundos
+  - Regla: Calcular desde las marcas de tiempo del chat o del ticket, no con el LLM.
+  - Descripción: Tiempo de primera respuesta en chat y tiempo de espera en counter (ticket).
+- carga_documento_llamada (N13) — Carga de documento durante la llamada
+  - Tipo: enum
+  - Valores: YA_ESTABA_CARGADO / CARGADO_GUIADO / CARGADO_POR_ASESOR_AUTORIZADO / NO_CARGADO_COMPROMISO / NO_CARGADO_SIN_COMPROMISO / NA
+  - Regla: CARGADO_* solo si el asesor confirma que el documento quedó registrado. NO_CARGADO_COMPROMISO si queda fecha para subirlo (registrar también en D04).
+  - Descripción: Qué pasó con el documento requerido en la llamada. La pauta de Admisión pide que, si no está cargado, se cargue en la misma llamada guiando al postulante o con gestión autorizada.
+- uso_preparados (N14) — Uso de Preparados
+  - Tipo: enum
+  - Valores: YA_LO_USA / INVITADO_ACEPTA / INVITADO_SIN_RESPUESTA / NO_INVITADO / NA
+  - Regla: La pauta de Examen pide invitar al postulante a Preparados antes de terminar el contacto.
+  - Descripción: Si el postulante a examen fue invitado o ya usa Preparados (herramienta de preparación para el examen).
+
+## Catálogos de apoyo (resumen Excel)
+
+### Motivos de rechazo (hoja Cat_Motivos_Rechazo) — primeras filas
+- Catálogo único de motivos de rechazo o indecisión (E01 / E02)
+- Base: 26 motivos de IM + 'Desconfianza' (MKR/MKD). 'Grupo' alimenta E03. 'Reporte': los operativos van a la página de calidad del dato, no al % de rechazo.
+- Código | Motivo | Definición (regla para la IA) | Grupo de fricción | Dónde se reporta | Tipificación CRM equivalente | Detalle a completar | Áreas que lo mencionan
+- ECONOMICO | Económico | Costo/pensión/presupuesto declarado como obstáculo actual. Solo preguntar precios NO cuenta. | ECONOMICA | % rechazo | RA/DS/Desiste: Motivos económicos | — | IM, MKR, MKD, REF, TLMK
+- DISTANCIA | Distancia | El campus le queda lejos existiendo campus en su departamento. | GEOGRAFICA | % rechazo | DS: Por distancias; RA: Distancia | Usa residencia (B01–B03) | IM, MKD
+- NO_CAMPUS | Sin campus en su ciudad | No hay campus UTP en su departamento y quiere presencial/semipresencial. | GEOGRAFICA | % rechazo | — (el CRM no lo separa de distancia) | Usa residencia (B01–B03) | IM, MKR
+- COMPETENCIA | Competencia | Considera, eligió o ya estudia en otra institución. | COMPETENCIA | % rechazo | DS: ya eligió otra institución; RA: Evalúa otras instituciones; DS: Postulará a la Nacional | Completar H01 (institución, relación, atributo, precio) | IM, MKR, MKD, REF
+- GRADO | Grado escolar | Está entre primaria y 4° de secundaria (5° sí es captable). | OPERATIVO | Calidad del dato | DS: 4to de Secundaria | — | IM, PRM
+- DURACION | Duración de la carrera | La duración de la carrera es el obstáculo. | ACADEMICA | % rechazo | — | — | IM
+- MALLA | Malla curricular | Desacuerdo o duda con la malla que frena la decisión. | ACADEMICA | % rechazo | — | — | IM, MKD
+- BECA | Beca | Problemas con el trámite o falta de información de beca; incluye irse con beca estatal. | ECONOMICA | % rechazo | DS: Beca 18 | Tipo de beca (Beca 18, Amazónica, BCP, otra) | IM, PRM
+- NO_CARRERA | Carrera no disponible | La carrera no existe en UTP o no se dicta en su campus. | OFERTA_UTP | % rechazo | DS: no hay carrera de interés; DS: Consultas carreras de Salud | Completar C02 (carrera solicitada) | IM, MKR, MKD, PRM
+- HORARIO | Horario incompatible | El horario disponible no es compatible y lo declara como motivo. | TIEMPO_HORARIO | % rechazo | DS: No hay horarios; RA: Horarios (trabajo/familia/otros estudios) | Usa C07 horario deseado | IM, MKD, MKR
+- INFRAESTRUCTURA | Infraestructura | Insatisfacción con locales/campus. | OFERTA_UTP | % rechazo | — | — | IM
+- PRESTIGIO | Prestigio | Cuestiona el prestigio o reputación de UTP. | OFERTA_UTP | % rechazo | — | — | IM, REF
+- CONVALIDACION | Convalidación | La convalidación es el obstáculo (convalidan poco, trámite, plazo). | ACADEMICA | % rechazo | RA: Evalúa convalidación; DS: No acepta plazo de convalidación | Completar B12 y B13 | IM, PRM, ADM
+- PROXIMO_PROCESO | Próximo proceso | Intención clara de postular en un proceso futuro definido. | TIMING | % rechazo | DS: próximo proceso; Próximo examen de admisión/tramo | Tipo de proceso esperado (virtual, salud, otro) | IM, MKR, MKD
+- RECOMENDACION_NEGATIVA | Recomendación negativa | Terceros le recomendaron no estudiar en UTP. | OFERTA_UTP | % rechazo | — | Quién lo desaconsejó | IM
+- DESCONFIANZA_PROCESO | Desconfianza | Desconfía del proceso, del pago telefónico o de la información recibida. | DECISION_COMPARTIDA | % rechazo | — | — | MKR, MKD
+- NO_HAY_VACANTES | Sin vacantes | El asesor indica que no hay vacantes para su carrera/campus/periodo. | OFERTA_UTP | % rechazo | — | — | IM
+- NO_HAY_MODALIDAD | Modalidad no disponible | Pide una modalidad que UTP no ofrece para su carrera/campus. | OFERTA_UTP | % rechazo | DS: Consultas Modalidad Virtual | — | IM, MKR
+- INDECISO_CARRERA | Indeciso de carrera | No tiene definida la carrera y eso frena la decisión. | ACADEMICA | % rechazo | RA: Aún no decide la carrera | Completar C03 | IM, MKD
+- POSTGRADO | Busca posgrado | Busca posgrado, no pregrado (prelación: anula los demás). | OPERATIVO | Calidad del dato | DS: Consulta carreras de postgrado | — | IM, PRM
+- CURSO_CORTO | Curso corto / gratuito | Buscaba curso corto, gratuito o taller (prelación). | OPERATIVO | Calidad del dato | DS: Curso Gratis | — | IM, PRM
+- NO_DESEA_CONTACTO | No desea que lo llamen | Pide no ser contactado o muestra molestia. | OPERATIVO | Calidad del dato | DS: no desea que lo llamen | Motivo real si se detecta | IM, PRM
+
+### Motivos de preferencia (hoja Cat_Motivos_Preferencia) — primeras filas
+- Catálogo único de motivos de preferencia (G01 / G02)
+- Base: 22 motivos de IM (estudio Matriculados P42/P36) + 'Acompañamiento' (PRO/TLMK). Los drivers de MKD y los gatilladores de MKR quedan mapeados aquí.
+- Código | Motivo | Definición (regla para la IA) | Detalle a completar | Áreas que lo mencionan
+- METODOLOGIA_DOCENTES | Metodología y profesores | Valora la metodología práctica o a los docentes. | — | IM, MKD, TLMK
+- INFRAESTRUCTURA_TECNOLOGIA | Infraestructura y tecnología | Valora campus, laboratorios, tecnología. | — | IM, MKD, TLMK
+- RESPALDO_INTERCORP | Respaldo Intercorp | Valora el respaldo del grupo Intercorp o su convenio. | — | IM, MKR
+- CERCANIA | Cercanía / ubicación | UTP le queda cerca o bien ubicada. | Usa B01–B03 | IM, MKR, MKD
+- HORARIOS_FLEXIBLES | Horarios flexibles | Los horarios se ajustan a su tiempo o trabajo. | Usa C07 | IM, MKR, TLMK
+- PRESTIGIO_LICENCIAMIENTO | Prestigio / licenciamiento | Valora prestigio, reconocimiento, acreditación o licenciamiento. | — | IM, MKD, MKR
+- EMPLEABILIDAD_CONVENIOS_LABORALES | Empleabilidad y convenios laborales | Valora salida laboral, prácticas, bolsa de trabajo. | Usa B10 / B08 | IM, MKD, MKR, TLMK
+- MODALIDAD | Modalidad de estudio | La modalidad virtual/semipresencial se ajusta a él. | Usa C04 | IM, MKR, MKD
+- CONVENIOS_INTERNACIONALES | Convenios internacionales | Valora intercambios y convenios internacionales. | — | IM, MKR, PRO
+- MALLA | Malla curricular | Le gusta la malla curricular. | — | IM, MKD
+- PRECIO_BECAS_DESCUENTOS | Precio, becas o descuentos | Precio accesible, descuentos, becas, financiamiento. | Completar G04 (tipo de beneficio) | IM, MKD, MKR, REF
+- CONVALIDACION | Convalidación | UTP le convalida sus estudios previos. | Completar B12 / B13 | IM
+- CARRERA_BUSCADA | Ofrecen la carrera que buscaba | UTP ofrece la carrera que buscaba. | Usa C01 | IM
+- RANKING | Posición en rankings | Valora el N°1 en preferencia o rankings. | — | IM, PRO
+- RECOMENDACION | Recomendación de terceros | Le recomendaron UTP. | Completar G05 | IM, REF
+- FACILIDAD_INGRESO | Facilidad / rapidez de ingreso | Ingreso fácil o rápido, sin examen, inicio pronto de clases. | Tipo: no ingresó a otra / sin examen / inicio pronto / proceso rápido | IM, MKD
+- BENEFICIOS_GENERICO | Beneficios (genérico) | Menciona 'beneficios' o 'facilidades' sin especificar. | — | IM
+
+### Instituciones (hoja Cat_Instituciones) — primeras filas
+- Catálogo de universidades e institutos (H01 competidores · B12 institución de procedencia) – PROPUESTA a validar
+- Armado con la base muestra (25,985 conversaciones): incluye las formas en que la gente las menciona y los errores de transcripción detectados, con el n° de menciones. Se reemplazará o completará con el listado oficial de Gerencia Comercial.
+- Código | Nombre oficial | Tipo | Región principal | Cómo lo dicen | Errores de transcripción detectados | Menciones en la muestra | Regla / ambigüedad
+- UCV | Universidad César Vallejo | Universidad privada | Nacional | César Vallejo · la César · la Vallejo · Vallejo | UCB (144 menciones: la transcripción casi nunca escribe 'UCV') · UCD · Cesar Vallejo | 694 + 144 'UCB' | 'UCB' = UCV. 'Vallejo' solo = UCV salvo que sea el nombre de una persona o calle.
+- UPN | Universidad Privada del Norte | Universidad privada | Lima, Trujillo, Cajamarca | UPN · Privada del Norte · la del Norte | UPM (11) | 422 | 'la Privada' sola (56) es ambigua: usar UPN solo si el contexto lo confirma.
+- USIL | Universidad San Ignacio de Loyola | Universidad privada | Lima | San Ignacio · la San Ignacio · Usil | U SIL | 87 | No confundir con ISIL (instituto del mismo grupo).
+- UPC | Universidad Peruana de Ciencias Aplicadas | Universidad privada | Lima | UPC · Ciencias Aplicadas | — | 317 | 
+- UC | Universidad Continental | Universidad privada | Huancayo, Arequipa, Lima, Cusco | la Continental · Continental | — | 1,415 (incluye banco) | AMBIGUO: 'Continental' también es el banco BBVA Continental. Si se habla de bancos, pagos o apps de pago, NO es la universidad.
+- USMP | Universidad de San Martín de Porres | Universidad privada | Lima, Chiclayo, Arequipa | San Martín de Porres · la San Martín · USMP | — | 108 | 'San Martín' solo puede ser la región (zona 26 UTP San Martin) o la UNSM.
+- UA | Universidad Autónoma del Perú | Universidad privada | Lima Sur | la Autónoma · Universidad Autónoma | — | 95 | Si se dice 'Autónoma de Ica' → UAI.
+- UAI | Universidad Autónoma de Ica | Universidad privada | Ica | Autónoma de Ica | — | 11 | 
+- UCSUR | Universidad Científica del Sur | Universidad privada | Lima | la Científica · Científica del Sur | — | 69 | No confundir con la Universidad Científica del Perú (UCP, Iquitos).
+- UCP | Universidad Científica del Perú | Universidad privada | Iquitos | Científica del Perú · la Científica (en Iquitos) | — | 4 | En zona 14 UTP Iquitos, 'la Científica' = UCP.
+- ULIMA | Universidad de Lima | Universidad privada | Lima | la de Lima · la U de Lima · Ulima | — | 255 ('la de Lima') | AMBIGUO: 'la de Lima' suele ser la SEDE de la UTP (la de Lima Centro, la de Lima Norte). Solo es ULIMA si se habla de otra universidad.
+- UP | Universidad del Pacífico | Universidad privada | Lima | la Pacífico · del Pacífico | — | 19 | 
+- PUCP | Pontificia Universidad Católica del Perú | Universidad privada | Lima | la Católica · la PUCP · Pontificia | — | 146 | 'la Católica' en regiones puede ser UCSM (Arequipa), USAT (Chiclayo), UCSP (Arequipa) o ULADECH (Chimbote): resolver por zona.
+- UPCH | Universidad Peruana Cayetano Heredia | Universidad privada | Lima | Cayetano · la Cayetano | — | 123 | 
+- URP | Universidad Ricardo Palma | Universidad privada | Lima | la Ricardo Palma | — | 45 | 
+- UIGV | Universidad Inca Garcilaso de la Vega | Universidad privada | Lima | la Garcilaso · la Inca | — | 36 | 
+- UPNW | Universidad Privada Norbert Wiener | Universidad privada | Lima | la Wiener · Norbert Wiener | Winner (27) | 71 | 
+
+## Formato de salida
+Devuelve SOLO un JSON con exactamente estas keys (orden libre, todas presentes):
+
+```json
+{"calidad_transcripcion":null,"contacto_efectivo":null,"interlocutor":null,"tipo_contacto":null,"motivo_contacto":null,"resumen_interaccion":null,"consistencia_tipificacion":null,"residencia_departamento":null,"residencia_provincia":null,"residencia_distrito":null,"residencia_coincide_crm":null,"situacion_academica":null,"situacion_laboral":null,"tipo_trabajo":null,"cargo_declarado":null,"rubro_laboral":null,"empresa_empleadora":null,"convenio_aplicable":null,"institucion_procedencia":null,"carrera_previa":null,"anio_malla_origen":null,"edad_declarada":null,"decisor_financiador":null,"motivacion_estudiar":null,"vinculo_previo_utp":null,"carreras_interes":null,"carrera_no_ofrecida":null,"indecision_carrera":null,"modalidad_interes":null,"restriccion_modalidad":null,"zona_interes":null,"horario_deseado":null,"periodo_ingreso":null,"modalidad_ingreso":null,"brecha_oferta":null,"estado_lead":null,"resultado_real":null,"tipificacion_ia":null,"compromisos":null,"responsabilidad_no_venta":null,"motivos_rechazo":null,"motivo_rechazo_principal":null,"grupo_friccion":null,"objeciones_textuales":null,"momento_objecion":null,"senal_abandono":null,"consulta_con_terceros":null,"recontacto_solicitado":null,"informacion_solicitada":null,"visitara_counter":null,"canal_preferido":null,"motivos_preferencia":null,"gatillador_principal":null,"atributo_argumentado":null,"beneficio_economico":null,"quien_recomienda":null,"competidores":null,"menciona_competencia":null,"sondeo_competencia":null,"percepcion_precio_utp":null,"temas_consultados":null,"consulta_principal":null,"dudas_no_resueltas":null,"comentario_mercado":null,"palabras_clave_cliente":null,"sentimiento_cliente":null,"nivel_frustracion":null,"percepcion_proceso":null,"riesgo_desercion":null,"fuente_declarada":null,"participacion_evento_utp":null,"oferta_cotizada":null,"tiempo_hasta_precio_seg":null,"silencios_seg":null,"secuencia_engagement":null,"documentos_pendientes":null,"dificultad_documentos":null,"estado_examen":null,"medio_pago":null,"segundo_numero_obtenido":null,"intentos_cierre":null,"argumentos_urgencia":null,"informacion_complementaria_brindada":null,"finalizacion_interaccion":null,"correccion_datos_ficha":null,"situacion_convalidacion":null,"tiempos_atencion":null,"carga_documento_llamada":null,"uso_preparados":null}
+```
+
+## Transcripción a analizar
+
+{{info_carreras}}
+
+--- TRANSCRIPCION ---
+{{transcripcion}}
+--- FIN TRANSCRIPCION ---

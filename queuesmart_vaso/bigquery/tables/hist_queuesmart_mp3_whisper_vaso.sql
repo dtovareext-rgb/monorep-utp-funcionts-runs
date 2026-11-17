@@ -1,6 +1,7 @@
 -- =============================================================================
--- Tablas VASO (shadow) — Whisper QueueSmart
+-- Tablas VASO (shadow) — STT QueueSmart (nombre histórico *_whisper_*)
 -- Misma estructura que hist_queuesmart_mp3_gen_ia_process_data_raw / _prd
+-- Productor actual: qsmart_transcribe (Speech-to-Text v2 Chirp 3).
 -- NO son las tablas productivas de Chirp STT.
 --
 -- Lectura de audios/tickets: queuesmart_mp3_enriched_vaso / hist_queesmart_mp3_catalog_vaso
@@ -54,7 +55,7 @@ CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.adf_speech_analytics.hist_q
 )
 PARTITION BY process_date
 OPTIONS (
-  description = 'VASO Whisper QueueSmart — espejo de hist_*_gen_ia_process_data_raw (no prod Chirp)'
+  description = 'VASO STT QueueSmart (Chirp via qsmart_transcribe) — espejo hist_*_gen_ia raw (no prod)'
 );
 
 CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.adf_speech_analytics.hist_queuesmart_mp3_whisper_vaso_prd` (
@@ -92,5 +93,5 @@ CREATE TABLE IF NOT EXISTS `prd-utpbi-data-operation.adf_speech_analytics.hist_q
 )
 PARTITION BY process_date
 OPTIONS (
-  description = 'VASO Whisper QueueSmart — espejo de hist_*_gen_ia_process_data_prd (no prod Chirp)'
+  description = 'VASO STT QueueSmart (Chirp via qsmart_transcribe) — espejo hist_*_gen_ia prd (no prod)'
 );
