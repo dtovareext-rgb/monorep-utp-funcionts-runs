@@ -64,6 +64,14 @@ AS r"""
   function fixText(s) {
     if (typeof s !== "string") return s;
     let t = s;
+    // URL-encoding residual (%C3%A1, +)
+    for (let i = 0; i < 2; i++) {
+      if (!/%[0-9A-Fa-f]{2}/.test(t)) break;
+      try { t = decodeURIComponent(t.replace(/\+/g, " ")); } catch (e) { break; }
+    }
+    t = t.replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      try { return String.fromCharCode(parseInt(h, 16)); } catch (e) { return _; }
+    });
     t = t.replace(/&#(\d+);/g, (_, n) => {
       try { return String.fromCharCode(parseInt(n, 10)); } catch (e) { return _; }
     });
@@ -71,7 +79,8 @@ AS r"""
       const map = {
         aacute:"á", eacute:"é", iacute:"í", oacute:"ó", uacute:"ú", ntilde:"ñ",
         Aacute:"Á", Eacute:"É", Iacute:"Í", Oacute:"Ó", Uacute:"Ú", Ntilde:"Ñ",
-        iacute:"í", quot:'"', amp:"&", lt:"<", gt:">", nbsp:" "
+        uuml:"ü", Uuml:"Ü", quot:'"', amp:"&", lt:"<", gt:">", nbsp:" ",
+        apos:"'", rsquo:"'", lsquo:"'", rdquo:'"', ldquo:'"'
       };
       return map[name] != null ? map[name] : _;
     });

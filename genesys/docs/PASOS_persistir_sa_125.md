@@ -52,11 +52,11 @@ gcloud workflows deploy genesys-sa125-daily \
 gcloud workflows run genesys-sa125-daily --location=us-central1 \
   --data='{"process_date":"2026-11-02","batch_size":5}'
 
-# Scheduler 09:00 Lima → procesa ayer (después de serialize)
+# Scheduler 04:00 Lima → procesa ayer (después de serialize)
 gcloud scheduler jobs create http prd-sch-genesys-sa125-daily \
   --project=prd-utpbi-data-operation \
   --location=us-central1 \
-  --schedule="0 9 * * *" \
+  --schedule="0 4 * * *" \
   --time-zone="America/Lima" \
   --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/genesys-sa125-daily/executions" \
   --http-method=POST \

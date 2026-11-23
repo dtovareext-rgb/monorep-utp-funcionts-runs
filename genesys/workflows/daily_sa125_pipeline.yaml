@@ -30,11 +30,11 @@
 # Reanudar si falló el lote offset=40:
 #   {"process_date":"2026-11-02","start_offset":40,"skip_init":true}
 #
-# Scheduler (después de serialize; ej. 09:00 America/Lima → procesa ayer):
+# Scheduler (después de serialize; 04:00 America/Lima → procesa ayer):
 #   gcloud scheduler jobs create http prd-sch-genesys-sa125-daily \
 #     --project=prd-utpbi-data-operation \
 #     --location=us-central1 \
-#     --schedule="0 9 * * *" \
+#     --schedule="0 4 * * *" \
 #     --time-zone="America/Lima" \
 #     --uri="https://workflowexecutions.googleapis.com/v1/projects/prd-utpbi-data-operation/locations/us-central1/workflows/genesys-sa125-daily/executions" \
 #     --http-method=POST \

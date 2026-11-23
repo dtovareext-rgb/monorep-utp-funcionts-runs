@@ -777,7 +777,9 @@ def extract_data_with_access_key(fecha_inicio: str, table_type: str, config: Dic
     timeout = api_config.get('timeout', 30)
 
     # Construir URL con parámetros
-    url = f"{base_url}?type={table_type}&day={fecha_inicio}&id_context={context}&gmt=GMT-03"
+    # GMT-05 = America/Lima (GMT-03 desplazaba +2h)
+    gmt = str(api_config.get("gmt") or "GMT-05").strip() or "GMT-05"
+    url = f"{base_url}?type={table_type}&day={fecha_inicio}&id_context={context}&gmt={gmt}"
 
     # Obtener access_key fresco para cada llamada
     access_key = get_access_key()
@@ -1140,7 +1142,12 @@ def main(request, context=None):
         # Validar formato de fecha
         try:
             if current_date.upper() == 'TODAY':
-                current_date = datetime.now().strftime('%Y-%m-%d')
+                # Día de negocio America/Lima
+                try:
+                    import pytz
+                    current_date = datetime.now(pytz.timezone("America/Lima")).strftime("%Y-%m-%d")
+                except Exception:
+                    current_date = datetime.now().strftime("%Y-%m-%d")
             else:
                 datetime.strptime(current_date, '%Y-%m-%d')
         except ValueError:

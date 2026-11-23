@@ -3,6 +3,8 @@
 Usa DML (query) en lugar de insert_rows_json para no dejar filas en el
 streaming buffer — ese buffer bloquea DELETE/UPDATE posteriores (paralelismo
 o reintentos del Job).
+
+RAW y PRD no comparten el mismo schema: se insertan columnas distintas.
 """
 
 from __future__ import annotations
@@ -12,11 +14,11 @@ from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from google.cloud import bigquery
 from google.api_core import exceptions as gax_exceptions
+from google.cloud import bigquery
 
-
-_INSERT_COLS = (
+# Alineado a hist_queuesmart_mp3_gen_ia_process_data_raw
+_RAW_COLS: tuple[str, ...] = (
     "process_date",
     "gcs_uri",
     "file_name",
@@ -47,7 +49,6 @@ _INSERT_COLS = (
     "full_response",
     "status",
     "transcripcion",
-    "transcripcion_con_hablantes",
     "resumen",
     "intencion",
     "idioma",
@@ -56,6 +57,100 @@ _INSERT_COLS = (
     "observaciones",
     "load_date",
 )
+
+# Alineado a hist_queuesmart_mp3_gen_ia_process_data_prd (sin gcs_path / sync / json…)
+_PRD_COLS: tuple[str, ...] = (
+    "process_date",
+    "gcs_uri",
+    "file_name",
+    "source_file_name",
+    "audio",
+    "recordid",
+    "rowid",
+    "codagencia",
+    "campus_code",
+    "type_code",
+    "correlative",
+    "file_size_bytes",
+    "duration_seconds",
+    "match_status",
+    "asesornombre",
+    "asesorusuario",
+    "asesorcodigo",
+    "ndoc",
+    "nombresusuario",
+    "numcelular",
+    "clientetipo",
+    "database",
+    "transcripcion",
+    "resumen",
+    "intencion",
+    "idioma",
+    "tono",
+    "entidades",
+    "observaciones",
+    "load_date",
+)
+
+# Límite práctico para INSERT DML vía jobs API (evita HTTP 413 Request Entity Too Large).
+_MAX_JSON_CHARS = 400_000
+
+
+def _json_for_bq(payload: Any, *, gcs_uri: str) -> str:
+    raw = json.dumps(payload or {}, ensure_ascii=False, default=str)
+    if len(raw) <= _MAX_JSON_CHARS:
+        return raw
+    stub = {
+        "_truncated": True,
+        "_original_chars": len(raw),
+        "_gcs_uri": gcs_uri,
+        "note": "Respuesta Chirp omitida (payload > límite BQ jobs); ver columna transcripcion",
+    }
+    print(
+        f"[bq_writer] full_response truncado chars={len(raw)} gcs_uri={gcs_uri}"
+    )
+    return json.dumps(stub, ensure_ascii=False)
+
+
+_PARAM_TYPES: dict[str, str] = {
+    "process_date": "DATE",
+    "gcs_uri": "STRING",
+    "file_name": "STRING",
+    "source_file_name": "STRING",
+    "audio": "STRING",
+    "recordid": "STRING",
+    "rowid": "INT64",
+    "codagencia": "STRING",
+    "gcs_path": "STRING",
+    "campus_code": "STRING",
+    "type_code": "STRING",
+    "correlative": "STRING",
+    "file_size_bytes": "INT64",
+    "duration_seconds": "FLOAT64",
+    "sync_mode": "STRING",
+    "convert_method": "STRING",
+    "s3_uri": "STRING",
+    "match_status": "STRING",
+    "asesornombre": "STRING",
+    "asesorusuario": "STRING",
+    "asesorcodigo": "STRING",
+    "ndoc": "STRING",
+    "nombresusuario": "STRING",
+    "numcelular": "STRING",
+    "clientetipo": "STRING",
+    "database": "STRING",
+    "json_text": "STRING",
+    "full_response": "STRING",
+    "status": "STRING",
+    "transcripcion": "STRING",
+    "resumen": "STRING",
+    "intencion": "STRING",
+    "idioma": "STRING",
+    "tono": "STRING",
+    "entidades": "STRING",
+    "observaciones": "STRING",
+    "load_date": "DATETIME",
+}
 
 
 def _parse_process_date(value: Any) -> date | None:
@@ -82,61 +177,25 @@ def _delete_by_gcs_uri(client: bigquery.Client, table: str, gcs_uri: str) -> Non
         msg = str(exc)
         if "streaming buffer" not in msg.lower():
             raise
-        # Filas de corridas previas con insert_rows_json aún en buffer.
-        # Seguimos con INSERT (puede quedar duplicado hasta que limpie el buffer).
         print(
             f"[bq_writer] DELETE omitido (streaming buffer) table={table} "
             f"gcs_uri={gcs_uri}"
         )
 
 
-def _insert_row_dml(client: bigquery.Client, table: str, row: dict[str, Any]) -> None:
-    cols = ", ".join(_INSERT_COLS)
-    params_sql = ", ".join(f"@{c}" for c in _INSERT_COLS)
+def _insert_row_dml(
+    client: bigquery.Client,
+    table: str,
+    row: dict[str, Any],
+    cols: tuple[str, ...],
+) -> None:
+    col_sql = ", ".join(f"`{c}`" if c == "database" else c for c in cols)
+    params_sql = ", ".join(f"@{c}" for c in cols)
     query_parameters = [
-        bigquery.ScalarQueryParameter("process_date", "DATE", row["process_date"]),
-        bigquery.ScalarQueryParameter("gcs_uri", "STRING", row["gcs_uri"]),
-        bigquery.ScalarQueryParameter("file_name", "STRING", row["file_name"]),
-        bigquery.ScalarQueryParameter("source_file_name", "STRING", row["source_file_name"]),
-        bigquery.ScalarQueryParameter("audio", "STRING", row["audio"]),
-        bigquery.ScalarQueryParameter("recordid", "STRING", row["recordid"]),
-        bigquery.ScalarQueryParameter("rowid", "STRING", row["rowid"]),
-        bigquery.ScalarQueryParameter("codagencia", "STRING", row["codagencia"]),
-        bigquery.ScalarQueryParameter("gcs_path", "STRING", row["gcs_path"]),
-        bigquery.ScalarQueryParameter("campus_code", "STRING", row["campus_code"]),
-        bigquery.ScalarQueryParameter("type_code", "STRING", row["type_code"]),
-        bigquery.ScalarQueryParameter("correlative", "STRING", row["correlative"]),
-        bigquery.ScalarQueryParameter("file_size_bytes", "INT64", row["file_size_bytes"]),
-        bigquery.ScalarQueryParameter("duration_seconds", "FLOAT64", row["duration_seconds"]),
-        bigquery.ScalarQueryParameter("sync_mode", "STRING", row["sync_mode"]),
-        bigquery.ScalarQueryParameter("convert_method", "STRING", row["convert_method"]),
-        bigquery.ScalarQueryParameter("s3_uri", "STRING", row["s3_uri"]),
-        bigquery.ScalarQueryParameter("match_status", "STRING", row["match_status"]),
-        bigquery.ScalarQueryParameter("asesornombre", "STRING", row["asesornombre"]),
-        bigquery.ScalarQueryParameter("asesorusuario", "STRING", row["asesorusuario"]),
-        bigquery.ScalarQueryParameter("asesorcodigo", "STRING", row["asesorcodigo"]),
-        bigquery.ScalarQueryParameter("ndoc", "STRING", row["ndoc"]),
-        bigquery.ScalarQueryParameter("nombresusuario", "STRING", row["nombresusuario"]),
-        bigquery.ScalarQueryParameter("numcelular", "STRING", row["numcelular"]),
-        bigquery.ScalarQueryParameter("clientetipo", "STRING", row["clientetipo"]),
-        bigquery.ScalarQueryParameter("database", "STRING", row["database"]),
-        bigquery.ScalarQueryParameter("json_text", "STRING", row["json_text"]),
-        bigquery.ScalarQueryParameter("full_response", "STRING", row["full_response"]),
-        bigquery.ScalarQueryParameter("status", "STRING", row["status"]),
-        bigquery.ScalarQueryParameter("transcripcion", "STRING", row["transcripcion"]),
-        bigquery.ScalarQueryParameter(
-            "transcripcion_con_hablantes", "STRING", row["transcripcion_con_hablantes"]
-        ),
-        bigquery.ScalarQueryParameter("resumen", "STRING", row["resumen"]),
-        bigquery.ScalarQueryParameter("intencion", "STRING", row["intencion"]),
-        bigquery.ScalarQueryParameter("idioma", "STRING", row["idioma"]),
-        bigquery.ScalarQueryParameter("tono", "STRING", row["tono"]),
-        bigquery.ScalarQueryParameter("entidades", "STRING", row["entidades"]),
-        bigquery.ScalarQueryParameter("observaciones", "STRING", row["observaciones"]),
-        bigquery.ScalarQueryParameter("load_date", "DATETIME", row["load_date"]),
+        bigquery.ScalarQueryParameter(c, _PARAM_TYPES[c], row.get(c)) for c in cols
     ]
     client.query(
-        f"INSERT INTO `{table}` ({cols}) VALUES ({params_sql})",
+        f"INSERT INTO `{table}` ({col_sql}) VALUES ({params_sql})",
         job_config=bigquery.QueryJobConfig(query_parameters=query_parameters),
     ).result()
 
@@ -166,14 +225,20 @@ def upsert_transcription(
             return None
         return float(value)
 
+    json_payload = _json_for_bq(stt.get("full_response"), gcs_uri=gcs_uri)
+
     row = {
         "process_date": _parse_process_date(item.get("process_date")),
         "gcs_uri": gcs_uri,
         "file_name": item.get("file_name"),
         "source_file_name": item.get("source_file_name"),
         "audio": item.get("audio"),
-        "recordid": item.get("recordid"),
-        "rowid": item.get("rowid"),
+        "recordid": (
+            None
+            if item.get("recordid") is None or item.get("recordid") == ""
+            else str(item.get("recordid"))
+        ),
+        "rowid": _as_int(item.get("rowid")),
         "codagencia": item.get("codagencia"),
         "gcs_path": item.get("gcs_path"),
         "campus_code": item.get("campus_code"),
@@ -193,11 +258,10 @@ def upsert_transcription(
         "numcelular": item.get("numcelular"),
         "clientetipo": item.get("clientetipo"),
         "database": item.get("database"),
-        "json_text": json.dumps(stt.get("full_response") or {}, ensure_ascii=False, default=str),
-        "full_response": json.dumps(stt.get("full_response") or {}, ensure_ascii=False, default=str),
+        "json_text": json_payload,
+        "full_response": json_payload,
         "status": stt.get("status") or "ERROR",
         "transcripcion": stt.get("transcripcion") or None,
-        "transcripcion_con_hablantes": stt.get("transcripcion_con_hablantes"),
         "resumen": None,
         "intencion": None,
         "idioma": None,
@@ -207,6 +271,8 @@ def upsert_transcription(
         "load_date": load_date,
     }
 
-    for table in (raw_table, prd_table):
-        _delete_by_gcs_uri(client, table, gcs_uri)
-        _insert_row_dml(client, table, row)
+    _delete_by_gcs_uri(client, raw_table, gcs_uri)
+    _insert_row_dml(client, raw_table, row, _RAW_COLS)
+
+    _delete_by_gcs_uri(client, prd_table, gcs_uri)
+    _insert_row_dml(client, prd_table, row, _PRD_COLS)

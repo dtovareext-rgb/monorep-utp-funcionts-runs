@@ -111,10 +111,16 @@ BEGIN
         ON d.conclusion_codigos = t.conclusion_id
     WHERE d.fecha_descarga = p_fecha_descarga
       AND d.cola_id IN (
-        'ab0ae2ce-fa4b-413a-a45c-890c944fd143|e8c46f19-b9cb-4481-8a9a-e832c4fcf55e',
-        '670c24d1-8145-48df-a691-2cc58383f43b',
-        'ab0ae2ce-fa4b-413a-a45c-890c944fd143',
-        'c02c8cea-daf9-4198-81fa-c8cc97aeb023'
+        -- Ya estaban
+        'ab0ae2ce-fa4b-413a-a45c-890c944fd143|e8c46f19-b9cb-4481-8a9a-e832c4fcf55e',  -- ADA_CENTRAL|IN_CENTRAL (compuesta)
+        '670c24d1-8145-48df-a691-2cc58383f43b',  -- ADA_CENTRAL
+        'ab0ae2ce-fa4b-413a-a45c-890c944fd143',  -- ADA_CENTRAL_ID_SALIENTE
+        'c02c8cea-daf9-4198-81fa-c8cc97aeb023',  -- ADA_MATRICULA
+        -- Altas 2026-11 (volumen en genesys_audios_descarga_admision_raw)
+        '13b6658f-6152-4310-a810-cdaa2f4d3a75',  -- ADA_CENTRAL_EXAMEN
+        'c22a3757-44f7-494e-9cf5-bd2ef3dceb5a',  -- ADA_CENTRAL_EXAMEN_SALIENTE
+        '5fa39d89-8a30-423b-b146-bf69b4767248',  -- ADA_CENTRAL_CONVALIDACION
+        'c74c8e42-4596-418b-9e44-4dde730c0270'   -- ADA_CENTRAL_CONVALIDACION_SALIENTE
       );
 
   INSERT INTO `prd-utpbi-data-operation.raw_genesys_audios.genesys_audios_admision_descarga_crm_raw`(
