@@ -66,7 +66,16 @@
 --   < queuesmart/bigquery/procedures/sp_queuesmart_audio_analisis_ia.sql
 --
 -- bq query --use_legacy_sql=false --location=US \
---   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia.sql
+--   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_init.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_batch.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_prd.sql
+--
+-- bq query --use_legacy_sql=false --location=US \
+--   < queuesmart/bigquery/procedures/sp_queuesmart_mp3_gen_ia_A2.sql
 --
 -- -- 4) Resumen final por asesor
 -- bq query --use_legacy_sql=false --location=US \

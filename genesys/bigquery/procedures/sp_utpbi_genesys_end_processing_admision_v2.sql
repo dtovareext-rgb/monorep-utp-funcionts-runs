@@ -120,7 +120,14 @@ BEGIN
         '13b6658f-6152-4310-a810-cdaa2f4d3a75',  -- ADA_CENTRAL_EXAMEN
         'c22a3757-44f7-494e-9cf5-bd2ef3dceb5a',  -- ADA_CENTRAL_EXAMEN_SALIENTE
         '5fa39d89-8a30-423b-b146-bf69b4767248',  -- ADA_CENTRAL_CONVALIDACION
-        'c74c8e42-4596-418b-9e44-4dde730c0270'   -- ADA_CENTRAL_CONVALIDACION_SALIENTE
+        'c74c8e42-4596-418b-9e44-4dde730c0270',  -- ADA_CENTRAL_CONVALIDACION_SALIENTE
+        -- Altas mail Speech (2026-11-24) — UUIDs desde queues_raw
+        'a54d2f9f-818e-45fb-91ea-02822b1360db',  -- ADA_NACIONAL
+        '807f46d9-c0bd-481a-8c6d-5875d3c2d81d',  -- ADA_CENTRAL_MEDICINA
+        '43981e28-4b8a-4956-8ea8-ddebe0d89bb1',  -- ADA_EVENTOS
+        '26121bce-f286-4714-ab75-d35a0d9749f3',  -- ADA_EVENTOS_CENTRAL
+        '16c5973e-16b7-40d8-a87e-3320fc1fe3a3',  -- ADA_EVENTOS_CONVALIDACION
+        'bbe6a18b-d9c9-418d-823c-f7ccce8b5057'   -- ADA_EVENTOS_EXAMEN
       );
 
   INSERT INTO `prd-utpbi-data-operation.raw_genesys_audios.genesys_audios_admision_descarga_crm_raw`(

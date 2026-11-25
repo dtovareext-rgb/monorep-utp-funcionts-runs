@@ -1,5 +1,5 @@
 -- =============================================================================
--- SP: Speech Analytics 125 — día completo (init + lotes + parse)
+-- SP: Speech Analytics 125 — día completo (init + lotes + parse + flatten)
 --
 -- Preferible en prod: Cloud Workflow genesys/workflows/daily_sa125_pipeline.yaml
 -- (un job BQ por lote; si falla el lote 4, 1–3 ya están guardados).
@@ -55,6 +55,7 @@ BEGIN
   END WHILE;
 
   CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_speech_analytics_125_parse`(v_process_date);
+  CALL `prd-utpbi-data-operation.adf_speech_analytics.sp_speech_analytics_125_flatten`(v_process_date);
 
   SELECT FORMAT('sa125 run_day OK fecha=%t candidatos=%d', v_process_date, v_count);
 END;

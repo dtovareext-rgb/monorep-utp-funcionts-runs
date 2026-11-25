@@ -3,14 +3,19 @@
 # =============================================================================
 #
 # Orquesta:
-#   1) Job S3→GCS (prepare + worker)
-#   2) SP consolidate
-#   3) SP backfill tickets tardíos (database NULL — quitar cuando el proveedor entregue al día)
-#   4) SP gen_ia (ML.TRANSCRIBE por lotes de 25 — anti-timeout)
-#   5) SP analisis Gemini
-#   6) SP resumen final por asesor → counter_resumen_final
+#   1) Job S3→GCS (prepare + worker)          [omitible: skip_ingest=true]
+#   2) SP consolidate + backfill tickets
+#   3) STT: init → loop batch(offset) → prd   [checkpoint por tiempo como SA125]
+#   4) SP analisis Gemini
+#   5) SP resumen final por asesor
 #
-# invoke_downstream_sps: true (default) → consolidate + gen_ia + analisis + resumen
+# Args opcionales:
+#   process_date, skip_ingest, skip_init, start_offset, batch_size
+#   max_runtime_seconds (default 10800), batch_time_budget_seconds (default 1800)
+#   invoke_downstream_sps (default true)
+#
+# Reanudar STT tras backendError (ej. 2026-11-17):
+#   {"process_date":"2026-11-17","skip_ingest":true,"skip_init":true,"start_offset":NNN}
 #
 # Despliegue / run / scheduler: ver queuesmart/docs/guia-workflow-otra-pc.txt
 # =============================================================================
@@ -22,6 +27,8 @@ main:
         assign:
           - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
           - location: ${default(map.get(args, "location"), "us-central1")}
+          - workflow_location: ${default(map.get(args, "workflow_location"), "us-central1")}
+          - workflow_id: ${default(map.get(args, "workflow_id"), "queuesmart-daily-pipeline")}
           - bq_location: ${default(map.get(args, "bq_location"), "US")}
           - job_name: ${default(map.get(args, "job_name"), "prd-utpbi-s3-to-gcs-micro-batch")}
           - gcs_bucket: ${default(map.get(args, "gcs_bucket"), "prd-utp-stg-queuesmart")}
@@ -31,9 +38,20 @@ main:
           - max_failed_tasks: ${default(map.get(args, "max_failed_tasks"), -1)}
           # true = consolidate + gen_ia + analisis
           - invoke_downstream_sps: ${default(map.get(args, "invoke_downstream_sps"), true)}
+          - skip_ingest: ${default(map.get(args, "skip_ingest"), false)}
+          - skip_init: ${default(map.get(args, "skip_init"), false)}
+          - start_offset: ${int(default(map.get(args, "start_offset"), 0))}
+          - batch_size: ${int(default(map.get(args, "batch_size"), 25))}
+          - max_runtime_seconds: ${int(default(map.get(args, "max_runtime_seconds"), 10800))}
+          - batch_time_budget_seconds: ${int(default(map.get(args, "batch_time_budget_seconds"), 1800))}
           - process_date: ${default(map.get(args, "process_date"), null)}
           - started_at: ${sys.now()}
           - pipeline_ok: true
+          - batches_ok: 0
+          - continued: false
+          - continue_execution_name: null
+          - ia_count: 0
+          - offset: 0
           - ingest_summary: {}
           - sp_results: {}
 
@@ -54,7 +72,14 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"queuesmart pipeline START process_date=" + process_date + " job=" + job_name}'
+          text: '${"queuesmart pipeline START process_date=" + process_date + " job=" + job_name + " skip_ingest=" + string(skip_ingest) + " start_offset=" + string(start_offset) + " max_runtime_s=" + string(max_runtime_seconds)}'
+
+    - maybe_skip_ingest:
+        switch:
+          - condition: ${skip_ingest == true}
+            next: maybe_downstream
+          - condition: true
+            next: run_prepare_job
 
     # -------------------------------------------------------------------------
     # 1) PREPARE: 1 task genera manifiesto del día en GCS
@@ -438,82 +463,330 @@ main:
             next: sp_transcribe
 
     # -------------------------------------------------------------------------
-    # 5) SP gen_ia — STT (ML.TRANSCRIBE por lotes de 25)
+    # 5) STT — init → loop batch → prd (checkpoint por tiempo = SA125)
     # -------------------------------------------------------------------------
     - sp_transcribe:
+        next: stt_maybe_init
+
+    - stt_maybe_init:
+        switch:
+          - condition: ${skip_init == true}
+            steps:
+              - call_init_skip_delete:
+                  call: googleapis.bigquery.v2.jobs.insert
+                  args:
+                    projectId: ${project_id}
+                    body:
+                      labels:
+                        producto: queuesmart
+                        etapa: stt
+                        sp: gen_ia_init
+                        pipeline: queuesmart-daily
+                      configuration:
+                        query:
+                          query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_mp3_gen_ia_init`(DATE ''" + process_date + "'', TRUE);"}'
+                          useLegacySql: false
+                          priority: INTERACTIVE
+                      jobReference:
+                        location: ${bq_location}
+                    connector_params:
+                      timeout: 600
+                  result: stt_init_job
+              - goto_poll_init_skip:
+                  next: wait_stt_init
+          - condition: true
+            steps:
+              - log_stt_init:
+                  call: sys.log
+                  args:
+                    severity: INFO
+                    text: '${"SP start: sp_queuesmart_mp3_gen_ia_init(" + process_date + ", skip_delete=false)"}'
+              - call_init_full:
+                  call: googleapis.bigquery.v2.jobs.insert
+                  args:
+                    projectId: ${project_id}
+                    body:
+                      labels:
+                        producto: queuesmart
+                        etapa: stt
+                        sp: gen_ia_init
+                        pipeline: queuesmart-daily
+                      configuration:
+                        query:
+                          query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_mp3_gen_ia_init`(DATE ''" + process_date + "'', FALSE);"}'
+                          useLegacySql: false
+                          priority: INTERACTIVE
+                      jobReference:
+                        location: ${bq_location}
+                    connector_params:
+                      timeout: 600
+                  result: stt_init_job
+              - goto_poll_init:
+                  next: wait_stt_init
+
+    - wait_stt_init:
+        call: sys.sleep
+        args:
+          seconds: 3
+
+    - poll_stt_init:
+        call: googleapis.bigquery.v2.jobs.get
+        args:
+          projectId: ${project_id}
+          jobId: ${stt_init_job.jobReference.jobId}
+          location: ${bq_location}
+        result: stt_init_status
+
+    - check_stt_init:
+        switch:
+          - condition: ${stt_init_status.status.state == "DONE"}
+            next: stt_init_done
+          - condition: true
+            steps:
+              - sleep_stt_init:
+                  call: sys.sleep
+                  args:
+                    seconds: 5
+              - loop_stt_init:
+                  next: poll_stt_init
+
+    - stt_init_done:
+        switch:
+          - condition: ${"errorResult" in stt_init_status.status}
+            steps:
+              - raise_stt_init:
+                  raise:
+                    message: "sp_queuesmart_mp3_gen_ia_init falló"
+                    error: ${stt_init_status.status.errorResult}
+          - condition: true
+            next: count_stt
+
+    - count_stt:
+        call: googleapis.bigquery.v2.jobs.query
+        args:
+          projectId: ${project_id}
+          body:
+            query: '${"SELECT COUNT(*) AS n FROM `" + project_id + ".adf_speech_analytics.stg_queuesmart_mp3_stt_candidates` WHERE process_date = DATE ''" + process_date + "''"}'
+            useLegacySql: false
+            location: ${bq_location}
+            timeoutMs: 60000
+            labels:
+              producto: queuesmart
+              etapa: stt
+              sp: count
+        result: count_stt_job
+
+    - parse_stt_count:
+        assign:
+          - ia_count: ${int(count_stt_job.rows[0].f[0].v)}
+          - offset: ${start_offset}
+
+    - log_stt_count:
+        call: sys.log
+        args:
+          severity: INFO
+          text: '${"STT candidatos=" + string(ia_count) + " start_offset=" + string(offset) + " batch_size=" + string(batch_size)}'
+
+    - maybe_skip_stt:
+        switch:
+          - condition: ${ia_count == 0}
+            steps:
+              - mark_stt_empty:
+                  assign:
+                    - sp_results["gen_ia"]: "skipped_empty"
+              - skip_stt_to_gemini:
+                  next: sp_gemini
+          - condition: true
+            next: loop_stt_batches
+
+    - loop_stt_batches:
+        switch:
+          - condition: ${offset < ia_count}
+            next: maybe_stt_checkpoint
+          - condition: true
+            next: stt_prd
+
+    - maybe_stt_checkpoint:
+        switch:
+          - condition: ${sys.now() - started_at >= max_runtime_seconds - batch_time_budget_seconds}
+            next: stt_checkpoint_continue
+          - condition: true
+            next: stt_batch
+
+    - stt_checkpoint_continue:
         steps:
-          - log_sp2_start:
+          - log_stt_checkpoint:
+              call: sys.log
+              args:
+                severity: WARNING
+                text: '${"QueeSmart STT checkpoint: elapsed_s=" + string(sys.now() - started_at) + " offset=" + string(offset) + "/" + string(ia_count)}'
+          - build_stt_continue_args:
+              assign:
+                - continue_args:
+                    process_date: ${process_date}
+                    skip_ingest: true
+                    skip_init: true
+                    start_offset: ${offset}
+                    batch_size: ${batch_size}
+                    max_runtime_seconds: ${max_runtime_seconds}
+                    batch_time_budget_seconds: ${batch_time_budget_seconds}
+                    invoke_downstream_sps: true
+                    project_id: ${project_id}
+                    bq_location: ${bq_location}
+          - spawn_stt_continue:
+              call: googleapis.workflowexecutions.v1.projects.locations.workflows.executions.create
+              args:
+                parent: ${"projects/" + project_id + "/locations/" + workflow_location + "/workflows/" + workflow_id}
+                body:
+                  argument: ${json.encode_to_string(continue_args)}
+              result: continue_exec
+          - mark_stt_continued:
+              assign:
+                - continued: true
+                - continue_execution_name: ${continue_exec.name}
+                - sp_results["gen_ia"]: "continued"
+                - sp_results["continued_at_offset"]: ${offset}
+                - sp_results["continue_execution"]: ${continue_exec.name}
+          - end_stt_for_continue:
+              next: finalize
+
+    - stt_batch:
+        steps:
+          - log_stt_batch:
               call: sys.log
               args:
                 severity: INFO
-                text: '${"SP start: sp_queuesmart_mp3_gen_ia(" + process_date + ")"}'
-          - call_sp2:
+                text: '${"STT batch offset=" + string(offset) + " size=" + string(batch_size) + " of " + string(ia_count)}'
+          - call_stt_batch:
               call: googleapis.bigquery.v2.jobs.insert
               args:
                 projectId: ${project_id}
                 body:
-                  configuration:
-                    query:
-                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_mp3_gen_ia`(DATE ''" + process_date + "'');"}'
-                      useLegacySql: false
-                      priority: INTERACTIVE
                   labels:
                     producto: queuesmart
                     etapa: stt
-                    servicio: chirp
+                    sp: gen_ia_batch
                     pipeline: queuesmart-daily
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_mp3_gen_ia_batch`(DATE ''" + process_date + "'', " + string(offset) + ", " + string(batch_size) + ");"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
                   jobReference:
                     location: ${bq_location}
-                # STT por lotes (~200 audios) puede pasar de 30 min; default conector = 1800s
                 connector_params:
-                  timeout: 14400
-              result: sp2_job
-          - wait_sp2:
+                  timeout: 7200
+              result: stt_batch_job
+          - wait_stt_batch:
               call: sys.sleep
               args:
                 seconds: 5
-          - poll_sp2:
+          - poll_stt_batch:
               call: googleapis.bigquery.v2.jobs.get
               args:
                 projectId: ${project_id}
-                jobId: ${sp2_job.jobReference.jobId}
+                jobId: ${stt_batch_job.jobReference.jobId}
                 location: ${bq_location}
-              result: sp2_status
-          - check_sp2:
+              result: stt_batch_status
+          - check_stt_batch:
               switch:
-                - condition: ${sp2_status.status.state == "DONE"}
-                  next: sp2_done_check
+                - condition: ${stt_batch_status.status.state == "DONE"}
+                  next: stt_batch_done
                 - condition: true
                   steps:
-                    - sleep_sp2:
+                    - sleep_stt_batch:
                         call: sys.sleep
                         args:
                           seconds: 15
-                    - loop_sp2:
-                        next: poll_sp2
-          - sp2_done_check:
+                    - loop_poll_stt_batch:
+                        next: poll_stt_batch
+          - stt_batch_done:
               switch:
-                - condition: ${"errorResult" in sp2_status.status}
+                - condition: ${"errorResult" in stt_batch_status.status}
                   steps:
-                    - log_sp2_err:
+                    - log_stt_batch_err:
                         call: sys.log
                         args:
                           severity: ERROR
-                          text: '${"SP gen_ia FAILED: " + string(default(map.get(map.get(sp2_status, "status"), "errorResult"), "unknown"))}'
-                    - raise_sp2:
+                          text: '${"STT batch FAILED offset=" + string(offset) + " — reanudar skip_ingest+skip_init start_offset=" + string(offset)}'
+                    - raise_stt_batch:
                         raise:
-                          message: "sp_queuesmart_mp3_gen_ia falló"
-                          error: ${sp2_status.status.errorResult}
+                          message: "sp_queuesmart_mp3_gen_ia_batch falló"
+                          offset: ${offset}
+                          error: ${stt_batch_status.status.errorResult}
                 - condition: true
                   steps:
-                    - log_sp2_ok:
-                        call: sys.log
+                    - bump_stt_offset:
+                        assign:
+                          - offset: ${offset + batch_size}
+                          - batches_ok: ${batches_ok + 1}
+                    - next_stt_batch:
+                        next: loop_stt_batches
+
+    - stt_prd:
+        steps:
+          - log_stt_prd:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_queuesmart_mp3_gen_ia_prd(" + process_date + ")"}'
+          - call_stt_prd:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    producto: queuesmart
+                    etapa: stt
+                    sp: gen_ia_prd
+                    pipeline: queuesmart-daily
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_queuesmart_mp3_gen_ia_prd`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 3600
+              result: stt_prd_job
+          - wait_stt_prd:
+              call: sys.sleep
+              args:
+                seconds: 5
+          - poll_stt_prd:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${stt_prd_job.jobReference.jobId}
+                location: ${bq_location}
+              result: stt_prd_status
+          - check_stt_prd:
+              switch:
+                - condition: ${stt_prd_status.status.state == "DONE"}
+                  next: stt_prd_done
+                - condition: true
+                  steps:
+                    - sleep_stt_prd:
+                        call: sys.sleep
                         args:
-                          severity: INFO
-                          text: "SP gen_ia (STT por lotes) OK"
-                    - mark_sp2:
+                          seconds: 10
+                    - loop_stt_prd:
+                        next: poll_stt_prd
+          - stt_prd_done:
+              switch:
+                - condition: ${"errorResult" in stt_prd_status.status}
+                  steps:
+                    - raise_stt_prd:
+                        raise:
+                          message: "sp_queuesmart_mp3_gen_ia_prd falló"
+                          error: ${stt_prd_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - mark_stt_ok:
                         assign:
                           - sp_results["gen_ia"]: "ok"
+                          - sp_results["stt_batches_ok"]: ${batches_ok}
 
     # -------------------------------------------------------------------------
     # 6) SP analisis Gemini
@@ -681,13 +954,18 @@ main:
               ingest: ${ingest_summary}
               sps: ${sp_results}
               invoke_downstream_sps: ${invoke_downstream_sps}
+              stt_count: ${ia_count}
+              stt_batches_ok: ${batches_ok}
+              continued: ${continued}
+              continue_execution: ${continue_execution_name}
+              next_offset: ${offset}
               elapsed_seconds: ${elapsed_seconds}
 
     - log_summary:
         call: sys.log
         args:
           severity: INFO
-          text: '${"queuesmart pipeline OK process_date=" + string(process_date) + " elapsed_s=" + string(elapsed_seconds)}'
+          text: '${"queuesmart pipeline END process_date=" + string(process_date) + " continued=" + string(continued) + " next_offset=" + string(offset) + " elapsed_s=" + string(elapsed_seconds)}'
 
     - return_summary:
         return: ${summary}

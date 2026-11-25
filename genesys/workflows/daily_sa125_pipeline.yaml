@@ -8,12 +8,19 @@
 # 2) init: DELETE RAW del día
 # 3) loop: batch(offset, batch_size) — AI.GENERATE_TABLE → RAW
 # 4) parse: RAW → PRD
+# 5) flatten: PRD → hist_speech_analytics_125_flat_prd (+ CRM/tipif)
 #
 # Args opcionales:
-#   process_date     YYYY-MM-DD (default: ayer America/Lima)
-#   batch_size       default 20
-#   start_offset     default 0 (reproceso desde un lote)
-#   skip_init        true = no borrar RAW del día (reanudar)
+#   process_date              YYYY-MM-DD (default: ayer America/Lima)
+#   batch_size                default 20
+#   start_offset              default 0 (reproceso desde un lote)
+#   skip_init                 true = no borrar RAW del día (reanudar)
+#   max_runtime_seconds       default 10800 (3h) — presupuesto de esta ejecución
+#   batch_time_budget_seconds default 1800 — no arranca otro batch si queda menos
+#
+# Checkpoint por tiempo: antes de cada batch, si
+#   elapsed >= max_runtime - batch_budget, lanza un workflow hijo con
+#   start_offset=offset, skip_init=true y termina OK (sin matar un batch a medias).
 #
 # Deploy:
 #   gcloud workflows deploy genesys-sa125-daily \
@@ -48,13 +55,20 @@ main:
     - init:
         assign:
           - project_id: ${default(map.get(args, "project_id"), "prd-utpbi-data-operation")}
+          - workflow_location: ${default(map.get(args, "workflow_location"), "us-central1")}
+          - workflow_id: ${default(map.get(args, "workflow_id"), "genesys-sa125-daily")}
           - bq_location: ${default(map.get(args, "bq_location"), "US")}
           - batch_size: ${int(default(map.get(args, "batch_size"), 20))}
           - start_offset: ${int(default(map.get(args, "start_offset"), 0))}
           - skip_init: ${default(map.get(args, "skip_init"), false)}
           - process_date: ${default(map.get(args, "process_date"), null)}
+          # Presupuesto de esta ejecución; deja margen para 1 batch Gemini (~30m)
+          - max_runtime_seconds: ${int(default(map.get(args, "max_runtime_seconds"), 10800))}
+          - batch_time_budget_seconds: ${int(default(map.get(args, "batch_time_budget_seconds"), 1800))}
           - started_at: ${sys.now()}
           - batches_ok: 0
+          - continued: false
+          - continue_execution_name: null
           - sp_results: {}
 
     - resolve_process_date:
@@ -72,7 +86,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"genesys sa125 START process_date=" + process_date + " batch_size=" + string(batch_size) + " start_offset=" + string(start_offset)}'
+          text: '${"genesys sa125 START process_date=" + process_date + " batch_size=" + string(batch_size) + " start_offset=" + string(start_offset) + " max_runtime_s=" + string(max_runtime_seconds) + " batch_budget_s=" + string(batch_time_budget_seconds)}'
 
     - count_ia:
         call: googleapis.bigquery.v2.jobs.query
@@ -191,9 +205,57 @@ main:
     - loop_batches:
         switch:
           - condition: ${offset < ia_count}
-            next: sp_batch
+            next: maybe_checkpoint
           - condition: true
             next: sp_parse
+
+    # Si queda poco tiempo para un batch Gemini, no arranca: spawnea continuación.
+    - maybe_checkpoint:
+        switch:
+          - condition: ${sys.now() - started_at >= max_runtime_seconds - batch_time_budget_seconds}
+            next: checkpoint_continue
+          - condition: true
+            next: sp_batch
+
+    - checkpoint_continue:
+        steps:
+          - log_checkpoint:
+              call: sys.log
+              args:
+                severity: WARNING
+                text: '${"SA125 checkpoint por tiempo: elapsed_s=" + string(sys.now() - started_at) + " offset=" + string(offset) + "/" + string(ia_count) + " — spawneando continuación skip_init"}'
+          # Workflows no permite {"k": v} dentro de ${}; armar map en assign.
+          - build_continue_args:
+              assign:
+                - continue_args:
+                    process_date: ${process_date}
+                    batch_size: ${batch_size}
+                    start_offset: ${offset}
+                    skip_init: true
+                    max_runtime_seconds: ${max_runtime_seconds}
+                    batch_time_budget_seconds: ${batch_time_budget_seconds}
+                    project_id: ${project_id}
+                    bq_location: ${bq_location}
+          - spawn_continue:
+              call: googleapis.workflowexecutions.v1.projects.locations.workflows.executions.create
+              args:
+                parent: ${"projects/" + project_id + "/locations/" + workflow_location + "/workflows/" + workflow_id}
+                body:
+                  argument: ${json.encode_to_string(continue_args)}
+              result: continue_exec
+          - mark_continued:
+              assign:
+                - continued: true
+                - continue_execution_name: ${continue_exec.name}
+                - sp_results["continued_at_offset"]: ${offset}
+                - sp_results["continue_execution"]: ${continue_exec.name}
+          - log_spawned:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SA125 continuación lanzada: " + string(continue_exec.name) + " start_offset=" + string(offset)}'
+          - end_for_continue:
+              next: finalize
 
     - sp_batch:
         steps:
@@ -328,6 +390,73 @@ main:
                     - mark_parse:
                         assign:
                           - sp_results["parse"]: "ok"
+                    - goto_flatten:
+                        next: sp_flatten
+
+    # -------------------------------------------------------------------------
+    # 5) Flatten PRD → hist_speech_analytics_125_flat_prd
+    # -------------------------------------------------------------------------
+    - sp_flatten:
+        steps:
+          - log_flatten:
+              call: sys.log
+              args:
+                severity: INFO
+                text: '${"SP start: sp_speech_analytics_125_flatten(" + process_date + ")"}'
+          - call_flatten:
+              call: googleapis.bigquery.v2.jobs.insert
+              args:
+                projectId: ${project_id}
+                body:
+                  labels:
+                    pipeline: genesys_sa125
+                    sp: sa125_flatten
+                  configuration:
+                    query:
+                      query: '${"CALL `" + project_id + ".adf_speech_analytics.sp_speech_analytics_125_flatten`(DATE ''" + process_date + "'');"}'
+                      useLegacySql: false
+                      priority: INTERACTIVE
+                  jobReference:
+                    location: ${bq_location}
+                connector_params:
+                  timeout: 1800
+              result: flatten_job
+          - wait_flatten:
+              call: sys.sleep
+              args:
+                seconds: 3
+          - poll_flatten:
+              call: googleapis.bigquery.v2.jobs.get
+              args:
+                projectId: ${project_id}
+                jobId: ${flatten_job.jobReference.jobId}
+                location: ${bq_location}
+              result: flatten_status
+          - check_flatten:
+              switch:
+                - condition: ${flatten_status.status.state == "DONE"}
+                  next: flatten_done
+                - condition: true
+                  steps:
+                    - sleep_flatten:
+                        call: sys.sleep
+                        args:
+                          seconds: 8
+                    - loop_flatten:
+                        next: poll_flatten
+          - flatten_done:
+              switch:
+                - condition: ${"errorResult" in flatten_status.status}
+                  steps:
+                    - raise_flatten:
+                        raise:
+                          message: "sp_speech_analytics_125_flatten falló"
+                          error: ${flatten_status.status.errorResult}
+                - condition: true
+                  steps:
+                    - mark_flatten:
+                        assign:
+                          - sp_results["flatten"]: "ok"
 
     - finalize:
         assign:
@@ -338,6 +467,9 @@ main:
               ia_count: ${default(ia_count, 0)}
               batch_size: ${batch_size}
               batches_ok: ${batches_ok}
+              continued: ${continued}
+              continue_execution: ${continue_execution_name}
+              next_offset: ${default(offset, start_offset)}
               sps: ${sp_results}
               elapsed_seconds: ${elapsed_seconds}
 
@@ -345,7 +477,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: '${"genesys sa125 OK process_date=" + string(process_date) + " ia_count=" + string(default(ia_count, 0)) + " batches_ok=" + string(batches_ok) + " elapsed_s=" + string(elapsed_seconds)}'
+          text: '${"genesys sa125 END process_date=" + string(process_date) + " ia_count=" + string(default(ia_count, 0)) + " batches_ok=" + string(batches_ok) + " continued=" + string(continued) + " elapsed_s=" + string(elapsed_seconds)}'
 
     - return_summary:
         return: ${summary}
